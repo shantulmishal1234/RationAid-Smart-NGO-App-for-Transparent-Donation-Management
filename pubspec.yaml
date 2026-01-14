@@ -1,0 +1,65 @@
+name: ration_aid
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.4
+  google_fonts: ^6.3.2
+
+  fluttertoast: ^9.0.0
+  shared_preferences: ^2.2.2
+  http: ^1.2.0
+  image_picker: ^1.1.0
+  url_launcher: ^6.3.2
+  intl: ^0.18.1 
+  path_provider: ^2.1.1
+  permission_handler: ^11.0.1
+  # Removed universal_html - only needed for web, reduces APK size
+  firebase_messaging: ^15.1.3
+  flutter_local_notifications: ^17.2.1+2
+
+   
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_native_splash: ^2.4.1
+  flutter_launcher_icons: ^0.14.1
+
+# -------- NATIVE SPLASH CONFIG --------
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/images/app_logo.png
+  android: true
+  ios: true
+  android_12:
+    image: assets/images/Native_logo.png
+    icon_background_color: "#FFFFFF"
+
+# -------- APP ICON CONFIG (OPTIONAL) --------
+flutter_launcher_icons:
+  image_path: assets/images/app_logo.png
+  android: true
+  ios: true
+  min_sdk_android: 21
+
+# -------- FLUTTER SECTION --------
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/app_logo.png
+    - assets/images/
+
