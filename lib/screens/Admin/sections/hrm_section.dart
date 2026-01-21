@@ -8,7 +8,6 @@ import 'package:ration_aid/screens/Admin/widgets/filters/hrm_role_filter.dart';
 import 'package:ration_aid/screens/Admin/components/member_tile.dart';
 import 'package:ration_aid/screens/Admin/HRM(members)/add_edit_member_screen.dart';
 import 'package:ration_aid/screens/Admin/Reports&Analytics/hrm_report_screen.dart';
-import 'package:ration_aid/theme/app_colors.dart';
 
 /// HRM section for managing staff members
 /// Optimized: Debounced search to reduce rebuilds
@@ -57,15 +56,18 @@ class _HrmSectionState extends State<HrmSection> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       key: const ValueKey('hrm'),
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
-          colors: [Color(0xFFF7FAFF), Color(0xFFF3F7FF)],
+          colors: isDark
+              ? [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor]
+              : [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor],
         ),
       ),
       child: Column(
@@ -80,7 +82,7 @@ class _HrmSectionState extends State<HrmSection> {
                 textAlign: TextAlign.center,
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
+                  color: theme.colorScheme.onSurface,
                   letterSpacing: 0.1,
                 ),
               ),
@@ -89,7 +91,7 @@ class _HrmSectionState extends State<HrmSection> {
                 'Create and manage purchaser and distributor accounts, view donor accounts, assign roles and hierarchy.',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
                 ),
               ),
             ],
@@ -154,12 +156,12 @@ class _HrmSectionState extends State<HrmSection> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.95),
+              color: theme.cardColor.withOpacity(0.95),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: cs.outline.withOpacity(0.08)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
+                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
                   blurRadius: 14,
                   offset: const Offset(0, 8),
                 ),
@@ -175,11 +177,11 @@ class _HrmSectionState extends State<HrmSection> {
           // Search bar
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: theme.cardColor,
               borderRadius: BorderRadius.circular(999),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
+                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
                   blurRadius: 10,
                   offset: const Offset(0, 6),
                 ),
@@ -188,13 +190,14 @@ class _HrmSectionState extends State<HrmSection> {
             ),
             child: TextField(
               controller: _searchController,
+              style: TextStyle(color: theme.colorScheme.onSurface),
               decoration: InputDecoration(
                 hintText: 'Search members by name or email...',
                 hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary.withOpacity(0.7),
+                  color: theme.colorScheme.onSurface.withOpacity(0.5),
                 ),
                 prefixIcon: const Icon(Icons.search, size: 20),
-                prefixIconColor: AppColors.textSecondary,
+                prefixIconColor: theme.colorScheme.onSurface.withOpacity(0.6),
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -210,11 +213,11 @@ class _HrmSectionState extends State<HrmSection> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.96),
+                color: theme.cardColor.withOpacity(0.96),
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
                     blurRadius: 18,
                     offset: const Offset(0, 10),
                   ),
@@ -231,7 +234,7 @@ class _HrmSectionState extends State<HrmSection> {
                     return Center(
                       child: Text(
                         'Failed to load members',
-                        style: TextStyle(color: Colors.red[400]),
+                        style: TextStyle(color: theme.colorScheme.error),
                       ),
                     );
                   }
@@ -257,7 +260,9 @@ class _HrmSectionState extends State<HrmSection> {
                     return Center(
                       child: Text(
                         'No members found for this filter.',
-                        style: TextStyle(color: Colors.grey[600]),
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        ),
                       ),
                     );
                   }
@@ -347,7 +352,7 @@ class _HrmSectionState extends State<HrmSection> {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(result),
-                                      backgroundColor: Colors.green[600],
+                                      backgroundColor: Colors.green,
                                     ),
                                   );
                                 }
@@ -375,12 +380,14 @@ class _HrmSectionState extends State<HrmSection> {
     required Color color,
   }) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: color.withOpacity(0.08),
         borderRadius: BorderRadius.circular(999),
+        border: isDark ? Border.all(color: color.withOpacity(0.3)) : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -394,7 +401,7 @@ class _HrmSectionState extends State<HrmSection> {
           Text(
             '$label:',
             style: theme.textTheme.labelSmall?.copyWith(
-              color: AppColors.textSecondary,
+              color: theme.colorScheme.onSurface.withOpacity(0.7),
             ),
           ),
           const SizedBox(width: 4),

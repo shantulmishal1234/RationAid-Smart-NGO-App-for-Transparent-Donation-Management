@@ -263,7 +263,7 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,
@@ -289,7 +289,9 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
             return Center(
               child: Text(
                 'No HR data available.',
-                style: TextStyle(color: Colors.grey[600]),
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                ),
               ),
             );
           }
@@ -321,7 +323,7 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
                       textAlign: TextAlign.center,
                       style: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
+                        color: theme.colorScheme.onSurface,
                         letterSpacing: 0.1,
                       ),
                     ),
@@ -330,7 +332,7 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
                       'Comprehensive staff and volunteer analytics for internal audits.',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
                       ),
                     ),
                   ],
@@ -348,7 +350,7 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
                         title: 'Total staff',
                         value: totalMembers.toString(),
                         subtitle: 'All active accounts',
-                        color: Colors.blue,
+                        color: Colors.blueGrey,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -395,6 +397,7 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
                 const SizedBox(height: 12),
                 Card(
                   elevation: 2,
+                  color: theme.cardColor,
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -416,6 +419,7 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
                 const SizedBox(height: 12),
                 Card(
                   elevation: 2,
+                  color: theme.cardColor,
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -454,23 +458,28 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.blue[50],
+                    color: theme.colorScheme.primary.withOpacity(0.08),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue[200]!),
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withOpacity(0.2),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.info_outline, color: Colors.blue[700]),
+                          Icon(
+                            Icons.info_outline,
+                            color: theme.colorScheme.primary,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             'Audit notes',
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: Colors.blue[900],
+                              color: theme.colorScheme.primary,
                             ),
                           ),
                         ],
@@ -485,7 +494,7 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
                         '• Plan recruitment, training, and restructuring',
                         style: TextStyle(
                           fontSize: 13,
-                          color: Colors.grey[700],
+                          color: theme.colorScheme.onSurface.withOpacity(0.7),
                           height: 1.5,
                         ),
                       ),
@@ -501,6 +510,7 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
   }
 
   Widget _sectionTitle(String title) {
+    final theme = Theme.of(context);
     return Row(
       children: [
         Container(
@@ -514,7 +524,11 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
         const SizedBox(width: 6),
         Text(
           title,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: theme.colorScheme.onSurface,
+          ),
         ),
       ],
     );
@@ -527,8 +541,10 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
     required String subtitle,
     required Color color,
   }) {
+    final theme = Theme.of(context);
     return Card(
       elevation: 2,
+      color: theme.cardColor,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -559,12 +575,19 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
             const SizedBox(height: 4),
             Text(
               title,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
               subtitle,
-              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              style: TextStyle(
+                fontSize: 11,
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
             ),
           ],
         ),
@@ -573,6 +596,7 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
   }
 
   Widget _hierarchyRow(String label, int count, int total) {
+    final theme = Theme.of(context);
     final percentage = total > 0
         ? (count / total * 100).toStringAsFixed(1)
         : '0.0';
@@ -582,27 +606,35 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
           flex: 2,
           child: Text(
             label,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: theme.colorScheme.onSurface,
+            ),
           ),
         ),
         Expanded(
           flex: 3,
           child: LinearProgressIndicator(
             value: total > 0 ? count / total : 0,
-            backgroundColor: Colors.grey[200],
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue[400]!),
+            backgroundColor: theme.colorScheme.onSurface.withOpacity(0.1),
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryBlue),
           ),
         ),
         const SizedBox(width: 12),
         Text(
           '$count ($percentage%)',
-          style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+          style: TextStyle(
+            fontSize: 13,
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
+          ),
         ),
       ],
     );
   }
 
   Widget _activityRow(String label, int count, Color color) {
+    final theme = Theme.of(context);
     return Row(
       children: [
         Container(
@@ -611,7 +643,12 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 12),
-        Expanded(child: Text(label, style: const TextStyle(fontSize: 14))),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface),
+          ),
+        ),
         Text(
           count.toString(),
           style: TextStyle(

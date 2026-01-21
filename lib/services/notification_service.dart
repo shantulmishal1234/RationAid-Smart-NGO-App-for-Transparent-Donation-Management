@@ -248,4 +248,22 @@ class NotificationService {
         .snapshots()
         .map((snapshot) => snapshot.docs.length);
   }
+
+  // Stream notifications for donor role (uses composite index)
+  static Stream<QuerySnapshot> streamDonorNotifications(String userId) {
+    return FirebaseFirestore.instance
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
+  // Stream all notifications for a specific user (uses composite index)
+  static Stream<QuerySnapshot> streamUserNotifications(String userId) {
+    return FirebaseFirestore.instance
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
 }

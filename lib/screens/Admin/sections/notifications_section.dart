@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:ration_aid/screens/Admin/widgets/notification_card.dart';
 import 'package:ration_aid/screens/Admin/Notifications/admin_send_notification_screen.dart';
 import 'package:ration_aid/screens/Admin/Notifications/notifications_center_screen.dart';
-import 'package:ration_aid/theme/app_colors.dart';
 
 /// Notifications section for sending and viewing notifications
 class NotificationsSection extends StatelessWidget {
@@ -11,15 +10,18 @@ class NotificationsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       key: const ValueKey('notifications'),
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
-          colors: [Color(0xFFF7FAFF), Color(0xFFF3F7FF)],
+          colors: isDark
+              ? [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor]
+              : [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor],
         ),
       ),
       child: Column(
@@ -34,7 +36,7 @@ class NotificationsSection extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
+                  color: theme.colorScheme.onSurface,
                   letterSpacing: 0.1,
                 ),
               ),
@@ -43,7 +45,7 @@ class NotificationsSection extends StatelessWidget {
                 'Send and manage role-based notifications and alerts.',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
                 ),
               ),
             ],
@@ -54,11 +56,11 @@ class NotificationsSection extends StatelessWidget {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.96),
+                color: theme.cardColor.withOpacity(0.96),
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
                     blurRadius: 18,
                     offset: const Offset(0, 10),
                   ),

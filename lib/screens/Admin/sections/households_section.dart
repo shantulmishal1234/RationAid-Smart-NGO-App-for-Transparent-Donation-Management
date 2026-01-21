@@ -11,7 +11,6 @@ import 'package:ration_aid/screens/Admin/components/family_card.dart';
 import 'package:ration_aid/screens/Admin/House Hold Section/add_family_screen.dart';
 import 'package:ration_aid/screens/Admin/House Hold Section/family_details_screen.dart';
 import 'package:ration_aid/screens/Admin/House Hold Section/edit_family_screen.dart';
-import 'package:ration_aid/theme/app_colors.dart';
 
 /// Households section for managing families
 /// Optimized: Debounced search, cached overview stats
@@ -76,15 +75,18 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       key: const ValueKey('households'),
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
-          colors: [Color(0xFFF7FAFF), Color(0xFFF3F7FF)],
+          colors: isDark
+              ? [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor]
+              : [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor],
         ),
       ),
       child: Column(
@@ -99,7 +101,7 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
                 textAlign: TextAlign.center,
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
+                  color: theme.colorScheme.onSurface,
                   letterSpacing: 0.1,
                 ),
               ),
@@ -108,7 +110,7 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
                 'Review and support families by status, area, and assigned volunteers.',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
                 ),
               ),
             ],
@@ -175,12 +177,12 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.95),
+                  color: theme.cardColor.withOpacity(0.95),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: cs.outline.withOpacity(0.08)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
                       blurRadius: 14,
                       offset: const Offset(0, 8),
                     ),
@@ -241,11 +243,11 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
           // Search bar
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: theme.cardColor,
               borderRadius: BorderRadius.circular(999),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
+                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
                   blurRadius: 10,
                   offset: const Offset(0, 6),
                 ),
@@ -254,13 +256,14 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
             ),
             child: TextField(
               controller: _searchController,
+              style: TextStyle(color: theme.colorScheme.onSurface),
               decoration: InputDecoration(
                 hintText: 'Search by name, CNIC or area...',
                 hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary.withOpacity(0.7),
+                  color: theme.colorScheme.onSurface.withOpacity(0.5),
                 ),
                 prefixIcon: const Icon(Icons.search, size: 20),
-                prefixIconColor: AppColors.textSecondary,
+                prefixIconColor: theme.colorScheme.onSurface.withOpacity(0.6),
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -276,11 +279,11 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.96),
+                color: theme.cardColor.withOpacity(0.96),
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
                     blurRadius: 18,
                     offset: const Offset(0, 10),
                   ),
@@ -297,7 +300,7 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
                     return Center(
                       child: Text(
                         'Failed to load families',
-                        style: TextStyle(color: Colors.red[400]),
+                        style: TextStyle(color: theme.colorScheme.error),
                       ),
                     );
                   }
@@ -328,7 +331,9 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
                     return Center(
                       child: Text(
                         'No families found for this filter.',
-                        style: TextStyle(color: Colors.grey[600]),
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        ),
                       ),
                     );
                   }
@@ -387,15 +392,21 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
                             data: theme.copyWith(
                               dataTableTheme: DataTableThemeData(
                                 headingRowColor: WidgetStateProperty.all(
-                                  cs.surfaceContainerHighest,
+                                  isDark
+                                      ? theme.cardColor
+                                      : cs.surfaceContainerHighest,
                                 ),
                                 headingTextStyle: theme.textTheme.labelMedium
                                     ?.copyWith(
                                       fontWeight: FontWeight.w700,
-                                      color: cs.onSurfaceVariant,
+                                      color: isDark
+                                          ? theme.colorScheme.onSurface
+                                          : cs.onSurfaceVariant,
                                     ),
                                 dataTextStyle: theme.textTheme.bodySmall
-                                    ?.copyWith(color: cs.onSurface),
+                                    ?.copyWith(
+                                      color: theme.colorScheme.onSurface,
+                                    ),
                                 dividerThickness: 0.6,
                               ),
                             ),
@@ -474,8 +485,9 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
                                         style: theme.textTheme.bodySmall
                                             ?.copyWith(
                                               color: assignedName == null
-                                                  ? Colors.grey[500]
-                                                  : Colors.green[700],
+                                                  ? theme.colorScheme.onSurface
+                                                        .withOpacity(0.5)
+                                                  : Colors.green,
                                             ),
                                       ),
                                     ),
@@ -485,9 +497,11 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           IconButton(
-                                            icon: const Icon(
+                                            icon: Icon(
                                               Icons.edit_outlined,
                                               size: 18,
+                                              color: theme.colorScheme.onSurface
+                                                  .withOpacity(0.7),
                                             ),
                                             tooltip: 'Edit',
                                             onPressed: () async {
@@ -566,7 +580,7 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
           Text(
             '$label:',
             style: theme.textTheme.labelSmall?.copyWith(
-              color: AppColors.textSecondary,
+              color: theme.colorScheme.onSurface.withOpacity(0.7),
             ),
           ),
           const SizedBox(width: 4),
@@ -598,7 +612,7 @@ class _ViewModeSegment extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: cs.surface.withOpacity(0.9),
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: cs.outline.withOpacity(0.12)),
       ),
@@ -651,7 +665,7 @@ class _ViewModeSegment extends StatelessWidget {
               size: 16,
               color: isSelected
                   ? cs.onPrimaryContainer
-                  : AppColors.textSecondary,
+                  : theme.colorScheme.onSurface.withOpacity(0.6),
             ),
             const SizedBox(width: 4),
             Text(
@@ -660,7 +674,7 @@ class _ViewModeSegment extends StatelessWidget {
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 color: isSelected
                     ? cs.onPrimaryContainer
-                    : AppColors.textSecondary,
+                    : theme.colorScheme.onSurface.withOpacity(0.6),
               ),
             ),
           ],

@@ -5,7 +5,6 @@ import 'package:ration_aid/screens/Admin/utils/admin_queries.dart';
 import 'package:ration_aid/screens/Admin/widgets/filters/donation_status_filter.dart';
 import 'package:ration_aid/screens/Admin/components/donation_card.dart';
 import 'package:ration_aid/screens/Admin/Donation Section/donation_detail_screen.dart';
-import 'package:ration_aid/theme/app_colors.dart';
 
 /// Donations section for managing donor payments
 class DonationsSection extends StatelessWidget {
@@ -22,15 +21,18 @@ class DonationsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       key: const ValueKey('donations'),
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
-          colors: [Color(0xFFF7FAFF), Color(0xFFF3F7FF)],
+          colors: isDark
+              ? [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor]
+              : [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor],
         ),
       ),
       child: Column(
@@ -45,7 +47,7 @@ class DonationsSection extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
+                  color: theme.colorScheme.onSurface,
                   letterSpacing: 0.1,
                 ),
               ),
@@ -54,7 +56,7 @@ class DonationsSection extends StatelessWidget {
                 'Admin-only review of donor payments and impact records.',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
                 ),
               ),
             ],
@@ -65,12 +67,12 @@ class DonationsSection extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.95),
+              color: theme.cardColor.withOpacity(0.95),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: cs.outline.withOpacity(0.08)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
+                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
                   blurRadius: 14,
                   offset: const Offset(0, 8),
                 ),
@@ -87,11 +89,11 @@ class DonationsSection extends StatelessWidget {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.96),
+                color: theme.cardColor.withOpacity(0.96),
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
                     blurRadius: 18,
                     offset: const Offset(0, 10),
                   ),
@@ -108,7 +110,7 @@ class DonationsSection extends StatelessWidget {
                     return Center(
                       child: Text(
                         'Failed to load donations',
-                        style: TextStyle(color: Colors.red[400]),
+                        style: TextStyle(color: theme.colorScheme.error),
                       ),
                     );
                   }
@@ -118,7 +120,9 @@ class DonationsSection extends StatelessWidget {
                     return Center(
                       child: Text(
                         'No donations for this filter.',
-                        style: TextStyle(color: Colors.grey[600]),
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        ),
                       ),
                     );
                   }

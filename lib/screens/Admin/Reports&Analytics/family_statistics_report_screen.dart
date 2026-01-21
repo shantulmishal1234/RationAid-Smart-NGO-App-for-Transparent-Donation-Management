@@ -217,7 +217,7 @@ class _FamilyStatisticsReportScreenState
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,
@@ -243,7 +243,9 @@ class _FamilyStatisticsReportScreenState
             return Center(
               child: Text(
                 'No family data available.',
-                style: TextStyle(color: Colors.grey[600]),
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                ),
               ),
             );
           }
@@ -274,7 +276,7 @@ class _FamilyStatisticsReportScreenState
                       textAlign: TextAlign.center,
                       style: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
+                        color: theme.colorScheme.onSurface,
                         letterSpacing: 0.1,
                       ),
                     ),
@@ -283,7 +285,7 @@ class _FamilyStatisticsReportScreenState
                       'Distribution and status overview of registered families.',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
                       ),
                     ),
                   ],
@@ -348,6 +350,7 @@ class _FamilyStatisticsReportScreenState
                 const SizedBox(height: 12),
                 Card(
                   elevation: 2,
+                  color: theme.cardColor,
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -392,11 +395,14 @@ class _FamilyStatisticsReportScreenState
                 if (areaDistribution.isEmpty)
                   Card(
                     elevation: 2,
+                    color: theme.cardColor,
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Text(
                         'No family data available yet.',
-                        style: TextStyle(color: Colors.grey[600]),
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        ),
                       ),
                     ),
                   )
@@ -406,6 +412,7 @@ class _FamilyStatisticsReportScreenState
                     final area = entry.value;
                     return Card(
                       elevation: 1,
+                      color: theme.cardColor,
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         leading: CircleAvatar(
@@ -420,7 +427,10 @@ class _FamilyStatisticsReportScreenState
                         ),
                         title: Text(
                           area.key,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface,
+                          ),
                         ),
                         trailing: Text(
                           '${area.value} families',
@@ -442,6 +452,7 @@ class _FamilyStatisticsReportScreenState
   }
 
   Widget _sectionTitle(String title) {
+    final theme = Theme.of(context);
     return Row(
       children: [
         Container(
@@ -455,7 +466,11 @@ class _FamilyStatisticsReportScreenState
         const SizedBox(width: 6),
         Text(
           title,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: theme.colorScheme.onSurface,
+          ),
         ),
       ],
     );
@@ -468,8 +483,10 @@ class _FamilyStatisticsReportScreenState
     required String subtitle,
     required Color color,
   }) {
+    final theme = Theme.of(context);
     return Card(
       elevation: 2,
+      color: theme.cardColor,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -495,12 +512,19 @@ class _FamilyStatisticsReportScreenState
             const SizedBox(height: 4),
             Text(
               title,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
               subtitle,
-              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              style: TextStyle(
+                fontSize: 11,
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
             ),
           ],
         ),
@@ -509,6 +533,8 @@ class _FamilyStatisticsReportScreenState
   }
 
   Widget _statusRow(String label, int count, int total, Color color) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final percentage = total > 0
         ? (count / total * 100).toStringAsFixed(1)
         : '0.0';
@@ -522,20 +548,28 @@ class _FamilyStatisticsReportScreenState
         const SizedBox(width: 12),
         Expanded(
           flex: 2,
-          child: Text(label, style: const TextStyle(fontSize: 14)),
+          child: Text(
+            label,
+            style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface),
+          ),
         ),
         Expanded(
           flex: 3,
           child: LinearProgressIndicator(
             value: total > 0 ? count / total : 0,
-            backgroundColor: Colors.grey[200],
+            backgroundColor: isDark
+                ? Colors.white.withOpacity(0.1)
+                : Colors.grey[200],
             valueColor: AlwaysStoppedAnimation<Color>(color),
           ),
         ),
         const SizedBox(width: 12),
         Text(
           '$count ($percentage%)',
-          style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+          style: TextStyle(
+            fontSize: 13,
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
+          ),
         ),
       ],
     );

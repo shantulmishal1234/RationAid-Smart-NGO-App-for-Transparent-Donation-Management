@@ -4,7 +4,6 @@ import 'package:ration_aid/screens/Admin/widgets/report_card.dart';
 import 'package:ration_aid/screens/Admin/Reports&Analytics/hrm_report_screen.dart';
 import 'package:ration_aid/screens/Admin/Reports&Analytics/donations_report_screen.dart';
 import 'package:ration_aid/screens/Admin/Reports&Analytics/family_statistics_report_screen.dart';
-import 'package:ration_aid/theme/app_colors.dart';
 
 /// Reports section showing different report types
 class ReportsSection extends StatelessWidget {
@@ -15,15 +14,18 @@ class ReportsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       key: const ValueKey('reports'),
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
-          colors: [Color(0xFFF7FAFF), Color(0xFFF3F7FF)],
+          colors: isDark
+              ? [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor]
+              : [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor],
         ),
       ),
       child: Column(
@@ -38,7 +40,7 @@ class ReportsSection extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
+                  color: theme.colorScheme.onSurface,
                   letterSpacing: 0.1,
                 ),
               ),
@@ -47,7 +49,7 @@ class ReportsSection extends StatelessWidget {
                 'Generate and export comprehensive reports for audits and decision-making.',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
                 ),
               ),
             ],
@@ -58,11 +60,11 @@ class ReportsSection extends StatelessWidget {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.96),
+                color: theme.cardColor.withOpacity(0.96),
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
                     blurRadius: 18,
                     offset: const Offset(0, 10),
                   ),

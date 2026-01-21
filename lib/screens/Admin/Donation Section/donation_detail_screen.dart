@@ -134,9 +134,10 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     );
 
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,
@@ -156,11 +157,11 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                   vertical: 18,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: theme.cardColor,
                   borderRadius: BorderRadius.circular(18),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
+                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
                       blurRadius: 18,
                       offset: const Offset(0, 8),
                     ),
@@ -193,20 +194,23 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                                 style: theme.textTheme.titleMedium?.copyWith(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
+                                  color: theme.colorScheme.onSurface,
                                 ),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 d['donorEmail'] ?? '',
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: Colors.grey[600],
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.6),
                                 ),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 '${(d['amount'] ?? 0).toDouble()} ${d['currency'] ?? 'PKR'} • ${d['method'] ?? 'cash'}',
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: Colors.grey[800],
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.8),
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
@@ -276,13 +280,23 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                     TextField(
                       controller: _remarksController,
                       maxLines: 4,
+                      style: TextStyle(color: theme.colorScheme.onSurface),
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: const Color(0xFFF9FBFF),
+                        fillColor: isDark
+                            ? theme.colorScheme.surface
+                            : theme.cardColor,
                         hintText: 'Notes about this donation...',
+                        hintStyle: TextStyle(
+                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
+                          borderSide: BorderSide(color: theme.dividerColor),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: theme.dividerColor),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -302,7 +316,9 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                             'No verification actions recorded yet.',
                             style: TextStyle(
                               fontSize: 13,
-                              color: Colors.grey[600],
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.6,
+                              ),
                             ),
                           )
                         : ListView.separated(
@@ -343,9 +359,10 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                                       children: [
                                         Text(
                                           '${_statusLabel(status)} • $when',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w600,
+                                            color: theme.colorScheme.onSurface,
                                           ),
                                         ),
                                         const SizedBox(height: 2),
@@ -354,14 +371,16 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                                             remarks,
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: Colors.grey[700],
+                                              color: theme.colorScheme.onSurface
+                                                  .withOpacity(0.7),
                                             ),
                                           ),
                                         Text(
                                           'By: $adminName',
                                           style: TextStyle(
                                             fontSize: 11,
-                                            color: Colors.grey[500],
+                                            color: theme.colorScheme.onSurface
+                                                .withOpacity(0.5),
                                           ),
                                         ),
                                       ],
@@ -381,16 +400,18 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                         vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF9FBFF),
+                        color: isDark
+                            ? theme.colorScheme.surface
+                            : theme.cardColor,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey[200]!),
+                        border: Border.all(color: theme.dividerColor),
                       ),
                       child: Row(
                         children: [
                           Icon(
                             Icons.receipt_long,
                             size: 20,
-                            color: Colors.grey[700],
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
@@ -400,7 +421,9 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                                   : 'No proof uploaded',
                               style: TextStyle(
                                 fontSize: 13,
-                                color: Colors.grey[700],
+                                color: theme.colorScheme.onSurface.withOpacity(
+                                  0.7,
+                                ),
                               ),
                             ),
                           ),
@@ -422,10 +445,10 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: theme.cardColor,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, -4),
                 ),
@@ -469,6 +492,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
   }
 
   Widget _sectionHeader(String title) {
+    final theme = Theme.of(context);
     return Row(
       children: [
         Container(
@@ -482,13 +506,18 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
         const SizedBox(width: 6),
         Text(
           title,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: theme.colorScheme.onSurface,
+          ),
         ),
       ],
     );
   }
 
   Widget _infoRow(String label, String value) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -499,13 +528,21 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[600],
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
                 fontWeight: FontWeight.w500,
               ),
             ),
           ),
           const SizedBox(width: 4),
-          Expanded(child: Text(value, style: const TextStyle(fontSize: 12))),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 12,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -541,17 +578,22 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
   Widget _statusChip(String value, String label) {
     final isSelected = _status == value;
     final color = _statusColor(value);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return ChoiceChip(
       label: Text(label),
       selected: isSelected,
       onSelected: (_) => setState(() => _status = value),
       selectedColor: color.withOpacity(0.18),
+      backgroundColor: isDark ? theme.cardColor : Colors.white,
       labelStyle: TextStyle(
-        color: isSelected ? color : Colors.grey[700],
+        color: isSelected
+            ? color
+            : theme.colorScheme.onSurface.withOpacity(0.7),
         fontWeight: FontWeight.w600,
       ),
-      side: BorderSide(color: isSelected ? color : Colors.grey[300]!),
+      side: BorderSide(color: isSelected ? color : theme.dividerColor),
     );
   }
 }

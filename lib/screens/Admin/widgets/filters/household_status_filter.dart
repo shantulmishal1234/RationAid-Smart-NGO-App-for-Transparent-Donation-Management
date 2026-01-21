@@ -14,6 +14,7 @@ class HouseholdStatusFilter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     const statuses = {
       'all': 'All',
       'pending': 'Pending',
@@ -34,12 +35,17 @@ class HouseholdStatusFilter extends StatelessWidget {
               selected: isSelected,
               onSelected: (_) => onChanged(entry.key),
               selectedColor: AdminColors.primaryBlue.withValues(alpha: 0.2),
+              backgroundColor: theme.cardColor,
               labelStyle: TextStyle(
-                color: isSelected ? AdminColors.primaryBlue : Colors.grey[700],
+                color: isSelected
+                    ? AdminColors.primaryBlue
+                    : theme.colorScheme.onSurface.withOpacity(0.7),
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
               ),
               side: BorderSide(
-                color: isSelected ? AdminColors.primaryBlue : Colors.grey[300]!,
+                color: isSelected
+                    ? AdminColors.primaryBlue
+                    : theme.dividerColor,
               ),
             ),
           );

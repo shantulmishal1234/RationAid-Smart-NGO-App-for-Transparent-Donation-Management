@@ -79,9 +79,10 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,
@@ -101,7 +102,7 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
                 'Recent activity',
                 style: theme.textTheme.labelLarge?.copyWith(
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary,
+                  color: theme.colorScheme.onSurface.withOpacity(0.7),
                 ),
               ),
             ),
@@ -109,11 +110,11 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.96),
+                  color: theme.cardColor.withOpacity(0.96),
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
+                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
                       blurRadius: 18,
                       offset: const Offset(0, 10),
                     ),
@@ -134,15 +135,19 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
                         vertical: 4,
                         horizontal: 8,
                       ),
-                      color: isRead ? Colors.white : Colors.blue[50],
+                      color: isRead
+                          ? theme.cardColor
+                          : (isDark
+                                ? AppColors.primaryBlue.withOpacity(0.15)
+                                : Colors.blue[50]),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: isRead
-                              ? Colors.grey[300]
-                              : Colors.blue,
+                              ? (isDark ? Colors.grey[700] : Colors.grey[300])
+                              : AppColors.primaryBlue,
                           child: Icon(
                             isRead
                                 ? Icons.notifications_none
@@ -158,6 +163,7 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
                                 ? FontWeight.w500
                                 : FontWeight.w700,
                             fontSize: 15,
+                            color: theme.colorScheme.onSurface,
                           ),
                         ),
                         subtitle: Column(
@@ -166,7 +172,12 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
                             const SizedBox(height: 4),
                             Text(
                               body,
-                              style: const TextStyle(fontSize: 13),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: theme.colorScheme.onSurface.withOpacity(
+                                  0.8,
+                                ),
+                              ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -176,7 +187,8 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
                                 _formatTime(createdAt),
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.grey[600],
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.5),
                                 ),
                               ),
                             ],
@@ -223,9 +235,11 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
     DateTime? createdAt,
     required bool isRead,
   }) {
+    final theme = Theme.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: theme.cardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
@@ -238,9 +252,10 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
             ),
@@ -250,12 +265,22 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(body, style: const TextStyle(fontSize: 14, height: 1.4)),
+            Text(
+              body,
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.4,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
             if (createdAt != null) ...[
               const SizedBox(height: 16),
               Text(
                 DateFormat('MMM d, yyyy · h:mm a').format(createdAt),
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                ),
               ),
             ],
           ],

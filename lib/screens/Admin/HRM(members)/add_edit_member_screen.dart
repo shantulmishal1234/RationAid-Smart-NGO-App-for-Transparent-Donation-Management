@@ -250,9 +250,10 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
   Widget build(BuildContext context) {
     final isEdit = widget.isEdit;
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,
@@ -274,11 +275,11 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
                   vertical: 18,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: theme.cardColor,
                   borderRadius: BorderRadius.circular(18),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
+                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
                       blurRadius: 18,
                       offset: const Offset(0, 8),
                     ),
@@ -316,7 +317,7 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
                                   style: theme.textTheme.titleMedium?.copyWith(
                                     fontSize: 18,
                                     fontWeight: FontWeight.w800,
-                                    color: AppColors.textPrimary,
+                                    color: theme.colorScheme.onSurface,
                                   ),
                                 ),
                               ],
@@ -340,10 +341,12 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
                           ),
                         ],
                         validator: (v) {
-                          if (v == null || v.trim().isEmpty)
+                          if (v == null || v.trim().isEmpty) {
                             return 'Name is required';
-                          if (v.trim().length < 2)
+                          }
+                          if (v.trim().length < 2) {
                             return 'Name must be at least 2 characters';
+                          }
                           return null;
                         },
                       ),
@@ -388,8 +391,9 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
                           FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
                         ],
                         validator: (v) {
-                          if (v == null || v.trim().isEmpty)
+                          if (v == null || v.trim().isEmpty) {
                             return null; // Optional field
+                          }
                           final cleaned = v.replaceAll(RegExp(r'[^0-9]'), '');
                           if (!cleaned.startsWith('03') ||
                               cleaned.length != 11) {
@@ -519,10 +523,10 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: theme.cardColor,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
                     blurRadius: 10,
                     offset: const Offset(0, -4),
                   ),
@@ -566,6 +570,7 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
   }
 
   Widget _sectionHeader(String title) {
+    final theme = Theme.of(context);
     return Row(
       children: [
         Container(
@@ -579,7 +584,11 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
         const SizedBox(width: 6),
         Text(
           title,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: theme.colorScheme.onSurface,
+          ),
         ),
       ],
     );
@@ -597,11 +606,14 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
     bool enabled = true,
     List<TextInputFormatter>? inputFormatters,
   }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FBFF),
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(color: theme.dividerColor),
       ),
       child: TextFormField(
         controller: controller,
@@ -610,14 +622,28 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
         obscureText: obscureText,
         enabled: enabled,
         inputFormatters: inputFormatters,
+        style: TextStyle(color: theme.colorScheme.onSurface),
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
           helperText: helperText,
           helperMaxLines: 2,
-          helperStyle: TextStyle(fontSize: 11, color: Colors.grey[600]),
+          helperStyle: TextStyle(
+            fontSize: 11,
+            color: theme.colorScheme.onSurface.withOpacity(0.5),
+          ),
+          labelStyle: TextStyle(
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
+          ),
+          hintStyle: TextStyle(
+            color: theme.colorScheme.onSurface.withOpacity(0.5),
+          ),
           prefixIcon: icon != null
-              ? Icon(icon, size: 18, color: Colors.grey[700])
+              ? Icon(
+                  icon,
+                  size: 18,
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                )
               : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
@@ -636,14 +662,30 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
     required List<DropdownMenuItem<T>> items,
     required ValueChanged<T?> onChanged,
   }) {
+    final theme = Theme.of(context);
     return DropdownButtonFormField<T>(
-      value: value,
+      initialValue: value,
       items: items,
       onChanged: onChanged,
+      dropdownColor: theme.cardColor,
+      style: TextStyle(color: theme.colorScheme.onSurface),
       decoration: InputDecoration(
         labelText: label,
         helperText: helperText,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        labelStyle: TextStyle(
+          color: theme.colorScheme.onSurface.withOpacity(0.7),
+        ),
+        helperStyle: TextStyle(
+          color: theme.colorScheme.onSurface.withOpacity(0.5),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: theme.dividerColor),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: theme.dividerColor),
+        ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
           vertical: 10,

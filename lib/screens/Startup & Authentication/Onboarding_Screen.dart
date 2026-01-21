@@ -61,9 +61,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF1E88E5), Color(0xFF26A69A)],
+            colors: theme.brightness == Brightness.dark
+                ? [Colors.black, Colors.black]
+                : [const Color(0xFF1E88E5), const Color(0xFF26A69A)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -130,7 +132,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.94),
+                      color: theme.brightness == Brightness.dark
+                          ? theme.cardColor
+                          : Colors.white.withOpacity(0.94),
                       borderRadius: BorderRadius.circular(28),
                       boxShadow: [
                         BoxShadow(

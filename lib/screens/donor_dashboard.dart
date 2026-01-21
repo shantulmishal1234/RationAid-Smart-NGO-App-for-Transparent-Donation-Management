@@ -1,129 +1,81 @@
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:ration_aid/screens/Startup%20&%20Authentication/auth_screen.dart';
-import 'package:ration_aid/services/auth_service.dart';
+import 'package:flutter/material.dart';
+import 'package:ration_aid/screens/Donor/models/donor_enums.dart';
+import 'package:ration_aid/screens/Donor/widgets/donor_bottom_nav.dart';
+import 'package:ration_aid/screens/Donor/widgets/donor_scaffold.dart';
 
-class DonorDashboard extends StatelessWidget {
+import 'package:ration_aid/screens/Donor/sections/donor_dashboard_section.dart';
+import 'package:ration_aid/screens/Donor/sections/explore_families_section.dart';
+import 'package:ration_aid/screens/Donor/sections/my_donations_section.dart';
+import 'package:ration_aid/screens/Donor/sections/donor_notifications_section.dart';
+import 'package:ration_aid/screens/Donor/sections/donor_profile_section.dart';
+import 'package:ration_aid/screens/Donor/donor_routes.dart';
+
+/// Donor Dashboard - Main screen for donor users
+/// Matches Admin Dashboard structure with section-based routing
+class DonorDashboard extends StatefulWidget {
   const DonorDashboard({super.key});
+
+  @override
+  State<DonorDashboard> createState() => _DonorDashboardState();
+}
+
+class _DonorDashboardState extends State<DonorDashboard> {
+  DonorSection _currentSection = DonorSection.dashboard;
+
+  /// Public method to switch sections (called from child widgets)
+  void switchSection(DonorSection section) {
+    setState(() {
+      _currentSection = section;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
 
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: const Text('Donor Dashboard'),
-        backgroundColor: const Color(0xFF4CAF50),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await AuthService().signOut();
-              if (!context.mounted) return;
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const AuthScreen()),
-              );
-            },
-            tooltip: 'Logout',
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Icon
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.volunteer_activism,
-                    size: 80,
-                    color: Color(0xFF4CAF50),
-                  ),
-                ),
-                const SizedBox(height: 32),
+    return Navigator(
+      onGenerateRoute: (settings) {
+        // Handle child routes
+        final route = DonorRoutes.generateRoute(settings);
+        if (route != null) return route;
 
-                // Welcome text
-                Text(
-                  'Welcome, ${user?.displayName ?? 'Donor'}! 👋',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Donor Dashboard',
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  user?.email ?? '',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-                ),
-                const SizedBox(height: 40),
-
-                // Coming soon card
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey[300]!),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.construction,
-                        size: 48,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Donor Features Coming Soon',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey[700],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '• Browse Verified Families\n'
-                        '• Make Donations (Cash/In-kind)\n'
-                        '• Track Donation Status\n'
-                        '• View Impact Reports',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                          height: 1.8,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+        // Default to main dashboard scaffold
+        return MaterialPageRoute(builder: (_) => _buildDashboardScaffold(user));
+      },
     );
+  }
+
+  Widget _buildDashboardScaffold(User? user) {
+    return DonorScaffold(
+      title: 'Donor Dashboard',
+      showBackButton: false,
+      bottomNavigationBar: DonorBottomNav(
+        currentSection: _currentSection,
+        onSectionChanged: (section) {
+          setState(() => _currentSection = section);
+        },
+      ),
+      body: _buildCurrentSection(),
+    );
+  }
+
+  Widget _buildCurrentSection() {
+    switch (_currentSection) {
+      case DonorSection.dashboard:
+        return const DonorDashboardSection();
+
+      case DonorSection.exploreFamilies:
+        return const ExploreFamiliesSection();
+
+      case DonorSection.myDonations:
+        return const MyDonationsSection();
+
+      case DonorSection.notifications:
+        return const DonorNotificationsSection();
+
+      case DonorSection.profile:
+        return const DonorProfileSection();
+    }
   }
 }

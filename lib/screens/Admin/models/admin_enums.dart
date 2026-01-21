@@ -9,6 +9,7 @@ enum AdminSection {
   audit,
   reports,
   notifications,
+  profile,
 }
 
 /// Enum for household view modes (cards or table)

@@ -35,6 +35,9 @@ class AuthService {
         'last_login': FieldValue.serverTimestamp(),
         'profile': {},
         'status': 'active',
+        // Profile setup fields for donor onboarding
+        'profileCompleted': role != 'donor', // Donors need to complete profile
+        'profilePhotoUrl': null,
       });
 
       await userCred.user!.sendEmailVerification();

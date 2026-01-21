@@ -28,6 +28,8 @@ dependencies:
   # Removed universal_html - only needed for web, reduces APK size
   firebase_messaging: ^15.1.3
   flutter_local_notifications: ^17.2.1+2
+  pdf: ^3.10.8
+  open_file: ^3.3.2
 
    
 

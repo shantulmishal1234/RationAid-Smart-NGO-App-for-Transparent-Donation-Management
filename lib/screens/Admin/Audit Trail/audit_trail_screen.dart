@@ -34,9 +34,10 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,
@@ -54,11 +55,11 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: theme.cardColor,
                     borderRadius: BorderRadius.circular(999),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.03),
+                        color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
                         blurRadius: 10,
                         offset: const Offset(0, 6),
                       ),
@@ -67,13 +68,17 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
                   ),
                   child: TextField(
                     controller: _searchController,
+                    style: TextStyle(color: cs.onSurface),
                     decoration: InputDecoration(
                       hintText: 'Search by action, user, or details...',
                       hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary.withOpacity(0.7),
+                        color: cs.onSurface.withOpacity(0.5),
                       ),
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      prefixIconColor: AppColors.textSecondary,
+                      prefixIcon: Icon(
+                        Icons.search,
+                        size: 20,
+                        color: cs.onSurface.withOpacity(0.6),
+                      ),
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -126,7 +131,10 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
                   const SizedBox(height: 4),
                   Text(
                     '${snapshot.error}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.onSurface.withOpacity(0.6),
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -164,13 +172,20 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.history, size: 64, color: Colors.grey[400]),
+                  Icon(
+                    Icons.history,
+                    size: 64,
+                    color: cs.onSurface.withOpacity(0.3),
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     _selectedEntityType == 'all'
                         ? 'No audit logs found'
                         : 'No $_selectedEntityType logs found',
-                    style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: cs.onSurface.withOpacity(0.6),
+                    ),
                   ),
                   if (_selectedEntityType != 'all') ...[
                     const SizedBox(height: 8),
@@ -189,11 +204,11 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
           return Container(
             margin: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.96),
+              color: theme.cardColor.withOpacity(isDark ? 0.5 : 0.96),
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
                   blurRadius: 18,
                   offset: const Offset(0, 10),
                 ),
@@ -215,7 +230,11 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
   }
 
   Widget _filterChip(String value, String label) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final isSelected = _selectedEntityType == value;
+
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: ChoiceChip(
@@ -225,12 +244,15 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
           setState(() => _selectedEntityType = value);
         },
         selectedColor: AppColors.primaryBlue.withOpacity(0.16),
+        backgroundColor: isDark ? theme.colorScheme.surface : null,
         labelStyle: TextStyle(
-          color: isSelected ? AppColors.primaryBlue : Colors.grey[700],
+          color: isSelected
+              ? AppColors.primaryBlue
+              : cs.onSurface.withOpacity(0.7),
           fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
         ),
         side: BorderSide(
-          color: isSelected ? AppColors.primaryBlue : Colors.grey[300]!,
+          color: isSelected ? AppColors.primaryBlue : theme.dividerColor,
         ),
       ),
     );
@@ -275,6 +297,7 @@ class _AuditLogCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
 
     final action = data['action'] ?? 'Unknown action';
     final entityType = data['entityType'] ?? 'unknown';
@@ -297,6 +320,7 @@ class _AuditLogCard extends StatelessWidget {
 
     return Card(
       elevation: 1,
+      color: theme.cardColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -324,9 +348,10 @@ class _AuditLogCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           action,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
+                            color: cs.onSurface,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -359,7 +384,7 @@ class _AuditLogCard extends StatelessWidget {
                       entityName,
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w500,
-                        color: Colors.grey[800],
+                        color: cs.onSurface.withOpacity(0.8),
                       ),
                     ),
                   ],
@@ -367,7 +392,10 @@ class _AuditLogCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       details,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurface.withOpacity(0.6),
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -375,14 +403,18 @@ class _AuditLogCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      Icon(Icons.person, size: 12, color: Colors.grey[500]),
+                      Icon(
+                        Icons.person,
+                        size: 12,
+                        color: cs.onSurface.withOpacity(0.5),
+                      ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           performedBy,
                           style: TextStyle(
                             fontSize: 11,
-                            color: Colors.grey[500],
+                            color: cs.onSurface.withOpacity(0.5),
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -395,12 +427,15 @@ class _AuditLogCard extends StatelessWidget {
                       Icon(
                         Icons.access_time,
                         size: 12,
-                        color: Colors.grey[500],
+                        color: cs.onSurface.withOpacity(0.5),
                       ),
                       const SizedBox(width: 4),
                       Text(
                         timeStr,
-                        style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurface.withOpacity(0.5),
+                        ),
                       ),
                     ],
                   ),

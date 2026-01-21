@@ -53,34 +53,39 @@ class DonationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.cardColor,
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.02),
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
               blurRadius: 6,
               offset: const Offset(0, 3),
             ),
           ],
-          border: Border.all(color: Colors.grey[200]!),
+          border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             CircleAvatar(
               radius: 20,
-              backgroundColor: Colors.blueGrey[50],
+              backgroundColor: isDark
+                  ? Colors.blueGrey[800]
+                  : Colors.blueGrey[50],
               child: Text(
                 amount.toInt().toString(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w600,
-                  color: Colors.black87,
+                  color: isDark ? Colors.white : Colors.black87,
                   fontSize: 12,
                 ),
               ),
@@ -92,9 +97,9 @@ class DonationCard extends StatelessWidget {
                 children: [
                   Text(
                     donorName,
-                    style: const TextStyle(
-                      fontSize: 15,
+                    style: theme.textTheme.bodyLarge?.copyWith(
                       fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -102,12 +107,16 @@ class DonationCard extends StatelessWidget {
                     donorEmail,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     '$amount $currency • $method',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withOpacity(0.5),
+                    ),
                   ),
                 ],
               ),

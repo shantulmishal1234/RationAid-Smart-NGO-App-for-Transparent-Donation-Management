@@ -24,6 +24,7 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
   final _childrenController = TextEditingController(text: '0');
 
   // Location & Contact Controllers
+  final _cityController = TextEditingController();
   final _areaController = TextEditingController();
   final _addressController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -48,6 +49,7 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
     _cnicController.dispose();
     _adultsController.dispose();
     _childrenController.dispose();
+    _cityController.dispose();
     _areaController.dispose();
     _addressController.dispose();
     _phoneController.dispose();
@@ -156,6 +158,7 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
         'adults': int.tryParse(_adultsController.text) ?? 0,
         'children': int.tryParse(_childrenController.text) ?? 0,
         'familySize': _totalFamilySize,
+        'city': _cityController.text.trim(),
         'area': _areaController.text.trim(),
         'address': _addressController.text.trim(),
         'phone': _phoneController.text.trim(),
@@ -196,22 +199,31 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,
         flexibleSpace: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [
-                AppColors.primaryBlue,
-                AppColors.accentGreen.withOpacity(0.85),
-              ],
+              colors: isDark
+                  ? [
+                      theme.scaffoldBackgroundColor,
+                      theme.scaffoldBackgroundColor,
+                    ]
+                  : [
+                      AppColors.primaryBlue,
+                      AppColors.accentGreen.withOpacity(0.85),
+                    ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
+            border: isDark
+                ? Border(bottom: BorderSide(color: theme.dividerColor))
+                : null,
           ),
         ),
         title: const Text(
@@ -221,10 +233,15 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
       ),
       body: Container(
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFFEFF7FF), Color(0xFFF8FBFF)],
+            colors: isDark
+                ? [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor]
+                : [
+                    theme.scaffoldBackgroundColor,
+                    theme.scaffoldBackgroundColor,
+                  ],
           ),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
@@ -270,13 +287,14 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                                 style: theme.textTheme.titleMedium?.copyWith(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w800,
-                                  color: AppColors.textPrimary,
+                                  color: theme.colorScheme.onSurface,
                                 ),
                               ),
                               Text(
                                 'Capture household details for transparent support.',
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: AppColors.textSecondary,
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.6),
                                 ),
                               ),
                             ],
@@ -299,10 +317,12 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                           ),
                         ],
                         validator: (value) {
-                          if (value == null || value.trim().isEmpty)
+                          if (value == null || value.trim().isEmpty) {
                             return 'Family name is required';
-                          if (value.trim().length < 2)
+                          }
+                          if (value.trim().length < 2) {
                             return 'Name must be at least 2 characters';
+                          }
                           return null;
                         },
                       ),
@@ -317,8 +337,9 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                           FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
                         ],
                         validator: (value) {
-                          if (value == null || value.trim().isEmpty)
+                          if (value == null || value.trim().isEmpty) {
                             return null; // Optional
+                          }
                           final cleaned = value.replaceAll(
                             RegExp(r'[^0-9]'),
                             '',
@@ -335,16 +356,18 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                       Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: AppColors.cardBackground,
+                          color: theme.cardColor,
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.03),
+                              color: Colors.black.withOpacity(
+                                isDark ? 0.2 : 0.03,
+                              ),
                               blurRadius: 10,
                               offset: const Offset(0, 6),
                             ),
                           ],
-                          border: Border.all(color: Colors.grey[200]!),
+                          border: Border.all(color: theme.dividerColor),
                         ),
                         child: Row(
                           children: [
@@ -354,11 +377,12 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                               size: 22,
                             ),
                             const SizedBox(width: 10),
-                            const Text(
+                            Text(
                               'Total family size',
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.onSurface,
                               ),
                             ),
                             const Spacer(),
@@ -411,10 +435,21 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                       _buildSectionHeader('Location & contact'),
                       const SizedBox(height: 12),
                       _buildTextField(
-                        controller: _areaController,
-                        label: 'Area / city',
-                        hint: 'Enter area or city',
+                        controller: _cityController,
+                        label: 'City',
+                        hint: 'Enter city (e.g. Lahore)',
                         icon: Icons.location_city,
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                            ? 'City is required'
+                            : null,
+                      ),
+                      const SizedBox(height: 12),
+                      _buildTextField(
+                        controller: _areaController,
+                        label: 'Area / Neighborhood',
+                        hint: 'Enter area (e.g. Johar Town)',
+                        icon: Icons.map,
                         validator: (value) =>
                             value == null || value.trim().isEmpty
                             ? 'Area is required'
@@ -475,8 +510,9 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                           FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
                         ],
                         validator: (value) {
-                          if (value == null || value.trim().isEmpty)
+                          if (value == null || value.trim().isEmpty) {
                             return null; // Optional
+                          }
                           final cleaned = value.replaceAll(
                             RegExp(r'[^0-9]'),
                             '',
@@ -516,10 +552,10 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.cardBackground,
+                  color: theme.cardColor,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
                       blurRadius: 8,
                       offset: const Offset(0, -2),
                     ),
@@ -565,6 +601,7 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
   }
 
   Widget _buildSectionHeader(String title) {
+    final theme = Theme.of(context);
     return Row(
       children: [
         Container(
@@ -578,7 +615,11 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
         const SizedBox(width: 8),
         Text(
           title,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: theme.colorScheme.onSurface,
+          ),
         ),
       ],
     );
@@ -594,14 +635,17 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
     int maxLines = 1,
     List<TextInputFormatter>? inputFormatters,
   }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.cardBackground,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(color: theme.dividerColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.02),
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),
@@ -613,13 +657,23 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
         keyboardType: keyboardType,
         maxLines: maxLines,
         inputFormatters: inputFormatters,
+        style: TextStyle(color: theme.colorScheme.onSurface),
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
-          hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
-          labelStyle: TextStyle(color: Colors.grey[700]),
+          hintStyle: TextStyle(
+            color: theme.colorScheme.onSurface.withOpacity(0.4),
+            fontSize: 14,
+          ),
+          labelStyle: TextStyle(
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
+          ),
           prefixIcon: icon != null
-              ? Icon(icon, color: Colors.grey[600], size: 20)
+              ? Icon(
+                  icon,
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  size: 20,
+                )
               : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
@@ -636,15 +690,18 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
     required String label,
     required IconData icon,
   }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       height: 96,
       decoration: BoxDecoration(
-        color: AppColors.cardBackground,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(color: theme.dividerColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.02),
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),
@@ -656,13 +713,17 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 16, color: Colors.grey[500]),
+              Icon(
+                icon,
+                size: 16,
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
+              ),
               const SizedBox(width: 4),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.grey[600],
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -677,9 +738,10 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.onSurface,
                 ),
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
@@ -696,6 +758,7 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
   }
 
   Widget _buildAssistanceCheckboxes() {
+    final theme = Theme.of(context);
     final needs = [
       ('Food', Icons.restaurant),
       ('Medicine', Icons.medical_services),
@@ -704,9 +767,9 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.cardBackground,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(color: theme.dividerColor),
       ),
       child: Column(
         children: needs.map((need) {
@@ -724,12 +787,17 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
             },
             title: Text(
               need.$1,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurface,
+              ),
             ),
             secondary: Icon(need.$2, color: AppColors.primaryBlue, size: 20),
             controlAffinity: ListTileControlAffinity.leading,
             contentPadding: const EdgeInsets.symmetric(horizontal: 4),
             activeColor: AppColors.primaryBlue,
+            checkColor: Colors.white,
           );
         }).toList(),
       ),
@@ -737,16 +805,18 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
   }
 
   Widget _buildNotesField() {
+    final theme = Theme.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.cardBackground,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(color: theme.dividerColor),
       ),
       child: TextFormField(
         controller: _notesController,
         maxLines: 4,
         maxLength: 500,
+        style: TextStyle(color: theme.colorScheme.onSurface),
         buildCounter:
             (context, {required currentLength, required isFocused, maxLength}) {
               return Padding(
@@ -755,7 +825,9 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                   '$currentLength/500 characters',
                   style: TextStyle(
                     fontSize: 11,
-                    color: currentLength > 500 ? Colors.red : Colors.grey[500],
+                    color: currentLength > 500
+                        ? Colors.red
+                        : theme.colorScheme.onSurface.withOpacity(0.5),
                   ),
                 ),
               );
@@ -763,8 +835,13 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
         decoration: InputDecoration(
           labelText: 'Additional notes (optional)',
           hintText: 'Any special circumstances or additional information...',
-          hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
-          labelStyle: TextStyle(color: Colors.grey[700]),
+          hintStyle: TextStyle(
+            color: theme.colorScheme.onSurface.withOpacity(0.4),
+            fontSize: 13,
+          ),
+          labelStyle: TextStyle(
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
+          ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.all(14),
         ),
@@ -773,52 +850,83 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
   }
 
   Widget _buildDocumentUpload() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.cardBackground,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(color: theme.dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.upload_file, color: Colors.grey[700], size: 20),
+              Icon(
+                Icons.upload_file,
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
+                size: 20,
+              ),
               const SizedBox(width: 8),
-              const Text(
+              Text(
                 'Upload verification documents',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             'ID, proof of income, utility bills, etc.',
-            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            style: TextStyle(
+              fontSize: 12,
+              color: theme.colorScheme.onSurface.withOpacity(0.6),
+            ),
           ),
           const SizedBox(height: 12),
           if (_uploadedFileName != null) ...[
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.green[50],
+                color: isDark
+                    ? Colors.green.withOpacity(0.1)
+                    : Colors.green[50],
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green[200]!),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.green.withOpacity(0.5)
+                      : Colors.green[200]!,
+                ),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.check_circle, color: Colors.green[700], size: 18),
+                  Icon(
+                    Icons.check_circle,
+                    color: isDark ? Colors.green[300] : Colors.green[700],
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       _uploadedFileName!,
-                      style: TextStyle(fontSize: 12, color: Colors.green[900]),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.green[100] : Colors.green[900],
+                      ),
                     ),
                   ),
                   IconButton(
-                    icon: Icon(Icons.close, color: Colors.green[700], size: 18),
+                    icon: Icon(
+                      Icons.close,
+                      color: isDark ? Colors.green[300] : Colors.green[700],
+                      size: 18,
+                    ),
                     onPressed: () {
                       setState(() {
                         _uploadedDocUrl = null;
@@ -843,14 +951,21 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                       height: 14,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.folder_open, size: 18),
+                  : Icon(
+                      Icons.folder_open,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
               label: Text(
                 _isUploadingDoc ? 'Uploading...' : 'Choose files',
-                style: const TextStyle(fontSize: 14),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: theme.colorScheme.primary,
+                ),
               ),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 10),
-                side: BorderSide(color: Colors.grey[300]!),
+                side: BorderSide(color: theme.dividerColor),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),

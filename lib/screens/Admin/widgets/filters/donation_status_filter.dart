@@ -30,6 +30,8 @@ class DonationStatusFilterChips extends StatelessWidget {
 
   Widget _chip(BuildContext context, DonationStatusFilter value, String label) {
     final isSelected = selected == value;
+    final theme = Theme.of(context);
+
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: ChoiceChip(
@@ -37,12 +39,15 @@ class DonationStatusFilterChips extends StatelessWidget {
         selected: isSelected,
         onSelected: (_) => onChanged(value),
         selectedColor: AdminColors.primaryBlue.withValues(alpha: 0.2),
+        backgroundColor: theme.cardColor,
         labelStyle: TextStyle(
-          color: isSelected ? AdminColors.primaryBlue : Colors.grey[700],
+          color: isSelected
+              ? AdminColors.primaryBlue
+              : theme.colorScheme.onSurface.withOpacity(0.7),
           fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
         ),
         side: BorderSide(
-          color: isSelected ? AdminColors.primaryBlue : Colors.grey[300]!,
+          color: isSelected ? AdminColors.primaryBlue : theme.dividerColor,
         ),
       ),
     );

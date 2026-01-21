@@ -40,14 +40,17 @@ class _DashboardSectionState extends State<DashboardSection> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       // Soft gradient background
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFECF7FF), Color(0xFFF9FBFF)],
+          colors: isDark
+              ? [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor]
+              : [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor],
         ),
       ),
       child: RefreshIndicator(
@@ -101,14 +104,16 @@ class _DashboardSectionState extends State<DashboardSection> {
                             style: theme.textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.2,
-                              color: AppColors.textPrimary,
+                              color: theme.colorScheme.onSurface,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Snapshot of supported families and your frontline team.',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: AppColors.textSecondary,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.6,
+                              ),
                             ),
                           ),
                         ],
@@ -234,7 +239,7 @@ class _DashboardSectionState extends State<DashboardSection> {
                       'Today’s alerts',
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                        color: theme.colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -298,7 +303,7 @@ class _DashboardSectionState extends State<DashboardSection> {
                   'Today’s tasks',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -350,19 +355,25 @@ class _FrostedPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.82),
+        color: theme.cardColor.withOpacity(isDark ? 0.6 : 0.82),
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
         ],
-        border: Border.all(color: Colors.white.withOpacity(0.7), width: 0.8),
+        border: Border.all(
+          color: theme.dividerColor.withOpacity(isDark ? 0.1 : 0.5),
+          width: 0.8,
+        ),
       ),
       child: Padding(
         padding: padding ?? const EdgeInsets.all(14),
@@ -378,10 +389,13 @@ class _SkeletonStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       height: 90,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.6),
+        color: theme.cardColor.withOpacity(isDark ? 0.3 : 0.6),
         borderRadius: BorderRadius.circular(20),
       ),
       child: const Center(child: CircularProgressIndicator(strokeWidth: 2.4)),

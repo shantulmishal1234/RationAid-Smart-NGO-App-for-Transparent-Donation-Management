@@ -241,6 +241,8 @@ class _AuthScreenState extends State<AuthScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return WillPopScope(
       onWillPop: () async {
         if (_tabController.index != 0) {
@@ -250,11 +252,13 @@ class _AuthScreenState extends State<AuthScreen>
         return true;
       },
       child: Scaffold(
-        backgroundColor: Colors.grey[50],
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [Color(0xFF1E88E5), Color(0xFF26A69A)],
+              colors: isDark
+                  ? [Colors.black, Colors.black]
+                  : [const Color(0xFF1E88E5), const Color(0xFF26A69A)],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
             ),
@@ -271,11 +275,13 @@ class _AuthScreenState extends State<AuthScreen>
                       Container(
                         padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.92),
+                          color: Theme.of(context).cardColor.withOpacity(0.95),
                           borderRadius: BorderRadius.circular(26),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
+                              color: Colors.black.withOpacity(
+                                isDark ? 0.3 : 0.08,
+                              ),
                               blurRadius: 24,
                               offset: const Offset(0, 14),
                             ),
@@ -307,7 +313,9 @@ class _AuthScreenState extends State<AuthScreen>
                               'Connecting help with need',
                               style: TextStyle(
                                 fontSize: 14,
-                                color: Colors.grey[600],
+                                color: Theme.of(
+                                  context,
+                                ).textTheme.bodyMedium?.color?.withOpacity(0.7),
                               ),
                             ),
                             const SizedBox(height: 24),
@@ -316,7 +324,9 @@ class _AuthScreenState extends State<AuthScreen>
                             Container(
                               height: 46,
                               decoration: BoxDecoration(
-                                color: Colors.grey[200],
+                                color: isDark
+                                    ? Colors.grey[800]
+                                    : Colors.grey[200],
                                 borderRadius: BorderRadius.circular(30),
                               ),
                               child: TabBar(
@@ -332,7 +342,9 @@ class _AuthScreenState extends State<AuthScreen>
                                   borderRadius: BorderRadius.circular(24),
                                 ),
                                 labelColor: Colors.white,
-                                unselectedLabelColor: Colors.grey[700],
+                                unselectedLabelColor: isDark
+                                    ? Colors.grey[400]
+                                    : Colors.grey[700],
                                 dividerColor: Colors.transparent,
                                 splashBorderRadius: BorderRadius.circular(24),
                                 tabs: const [
@@ -442,8 +454,9 @@ class _AuthScreenState extends State<AuthScreen>
             ],
             validator: (value) {
               if (value == null || value.trim().isEmpty) return 'Name required';
-              if (value.trim().length < 2)
+              if (value.trim().length < 2) {
                 return 'Name must be at least 2 characters';
+              }
               return null;
             },
           ),
@@ -589,16 +602,23 @@ class _AuthScreenState extends State<AuthScreen>
   }
 
   Widget _buildDonorInfoCard() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.green[50],
+        color: isDark ? Colors.green[900]!.withOpacity(0.3) : Colors.green[50],
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.green[200]!),
+        border: Border.all(
+          color: isDark ? Colors.green[800]! : Colors.green[200]!,
+        ),
       ),
       padding: const EdgeInsets.all(14),
       child: Row(
         children: [
-          Icon(Icons.volunteer_activism, color: Colors.green[700], size: 24),
+          Icon(
+            Icons.volunteer_activism,
+            color: isDark ? Colors.green[300] : Colors.green[700],
+            size: 24,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -609,13 +629,16 @@ class _AuthScreenState extends State<AuthScreen>
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: Colors.green[900],
+                    color: isDark ? Colors.green[100] : Colors.green[900],
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Support families in need with regular contributions.',
-                  style: TextStyle(fontSize: 13, color: Colors.green[700]),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? Colors.green[200] : Colors.green[700],
+                  ),
                 ),
               ],
             ),
@@ -692,11 +715,14 @@ class _AuthScreenState extends State<AuthScreen>
     void Function(String)? onChanged,
     List<TextInputFormatter>? inputFormatters,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).inputDecorationTheme.fillColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey[300]!),
+        border: Border.all(
+          color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+        ),
       ),
       child: TextFormField(
         controller: controller,
@@ -705,9 +731,16 @@ class _AuthScreenState extends State<AuthScreen>
         validator: validator,
         onChanged: onChanged,
         inputFormatters: inputFormatters,
+        style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color),
         decoration: InputDecoration(
           labelText: label,
-          prefixIcon: Icon(icon, color: Colors.grey[600]),
+          labelStyle: TextStyle(
+            color: isDark ? Colors.grey[400] : Colors.grey[600],
+          ),
+          prefixIcon: Icon(
+            icon,
+            color: isDark ? Colors.grey[400] : Colors.grey[600],
+          ),
           suffixIcon: suffixIcon,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(

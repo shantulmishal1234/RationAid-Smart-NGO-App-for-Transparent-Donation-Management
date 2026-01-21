@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ration_aid/screens/Admin/admin_dashboard.dart';
 import 'package:ration_aid/screens/Startup%20&%20Authentication/auth_screen.dart';
 import 'package:ration_aid/screens/donor_dashboard.dart';
+import 'package:ration_aid/screens/Donor/profile_setup_screen.dart';
 import 'package:ration_aid/screens/purchaser_dashboard.dart';
 import 'package:ration_aid/screens/volunteer_dashboard.dart';
 
@@ -66,6 +67,11 @@ class DashboardRouter extends StatelessWidget {
         // Route based on first role in array
         switch (roles.first) {
           case 'donor':
+            // Check if donor has completed profile setup
+            final profileCompleted = userData['profileCompleted'] ?? false;
+            if (!profileCompleted) {
+              return const ProfileSetupScreen();
+            }
             return const DonorDashboard();
           case 'purchaser':
             return const PurchaserDashboard();

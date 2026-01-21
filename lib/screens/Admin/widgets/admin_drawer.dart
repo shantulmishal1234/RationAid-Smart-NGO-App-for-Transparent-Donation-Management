@@ -17,21 +17,32 @@ class AdminDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Drawer(
       child: SafeArea(
         child: Column(
           children: [
             UserAccountsDrawerHeader(
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [AdminColors.primaryBlue, AdminColors.accentGreen],
+                  colors: isDark
+                      ? [
+                          theme.scaffoldBackgroundColor,
+                          theme.scaffoldBackgroundColor,
+                        ]
+                      : [AdminColors.primaryBlue, AdminColors.accentGreen],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
+                border: isDark
+                    ? Border(bottom: BorderSide(color: theme.dividerColor))
+                    : null,
               ),
-              currentAccountPicture: const CircleAvatar(
-                backgroundColor: Colors.white,
-                child: Icon(
+              currentAccountPicture: CircleAvatar(
+                backgroundColor: theme.cardColor,
+                child: const Icon(
                   Icons.admin_panel_settings,
                   color: AdminColors.primaryBlue,
                   size: 32,
@@ -39,9 +50,17 @@ class AdminDrawer extends StatelessWidget {
               ),
               accountName: Text(
                 user?.displayName ?? 'Admin',
-                style: const TextStyle(fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                ),
               ),
-              accountEmail: Text(user?.email ?? ''),
+              accountEmail: Text(
+                user?.email ?? '',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withOpacity(0.8),
+                ),
+              ),
             ),
             _buildDrawerItem(
               context: context,
@@ -88,8 +107,16 @@ class AdminDrawer extends StatelessWidget {
             const Spacer(),
             const Divider(),
             ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: const Text('About Ration Aid'),
+              leading: Icon(
+                Icons.info_outline,
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
+              ),
+              title: Text(
+                'About Ration Aid',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withOpacity(0.8),
+                ),
+              ),
               onTap: () {},
             ),
           ],
@@ -105,17 +132,22 @@ class AdminDrawer extends StatelessWidget {
     required AdminSection section,
   }) {
     final isSelected = currentSection == section;
+    final theme = Theme.of(context);
 
     return ListTile(
       leading: Icon(
         icon,
-        color: isSelected ? AdminColors.primaryBlue : Colors.grey[700],
+        color: isSelected
+            ? AdminColors.primaryBlue
+            : theme.colorScheme.onSurface.withOpacity(0.7),
       ),
       title: Text(
         label,
         style: TextStyle(
           fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-          color: isSelected ? AdminColors.primaryBlue : Colors.grey[800],
+          color: isSelected
+              ? AdminColors.primaryBlue
+              : theme.colorScheme.onSurface.withOpacity(0.9),
         ),
       ),
       selected: isSelected,

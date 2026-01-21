@@ -43,9 +43,10 @@ class _AdminSendNotificationScreenState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,
@@ -59,11 +60,11 @@ class _AdminSendNotificationScreenState
         child: Container(
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: theme.cardColor,
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
                 blurRadius: 18,
                 offset: const Offset(0, 8),
               ),
@@ -99,13 +100,15 @@ class _AdminSendNotificationScreenState
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontSize: 18,
                               fontWeight: FontWeight.w800,
-                              color: AppColors.textPrimary,
+                              color: theme.colorScheme.onSurface,
                             ),
                           ),
                           Text(
                             'Target specific roles or a single user with an in‑app notification.',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: AppColors.textSecondary,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.6,
+                              ),
                             ),
                           ),
                         ],
@@ -121,7 +124,10 @@ class _AdminSendNotificationScreenState
                   children: [
                     Expanded(
                       child: RadioListTile<String>(
-                        title: const Text('Role'),
+                        title: Text(
+                          'Role',
+                          style: TextStyle(color: theme.colorScheme.onSurface),
+                        ),
                         value: 'role',
                         groupValue: _targetType,
                         onChanged: (value) {
@@ -132,11 +138,15 @@ class _AdminSendNotificationScreenState
                         },
                         contentPadding: EdgeInsets.zero,
                         dense: true,
+                        activeColor: AppColors.primaryBlue,
                       ),
                     ),
                     Expanded(
                       child: RadioListTile<String>(
-                        title: const Text('Specific user'),
+                        title: Text(
+                          'Specific user',
+                          style: TextStyle(color: theme.colorScheme.onSurface),
+                        ),
                         value: 'user',
                         groupValue: _targetType,
                         onChanged: (value) {
@@ -146,6 +156,7 @@ class _AdminSendNotificationScreenState
                         },
                         contentPadding: EdgeInsets.zero,
                         dense: true,
+                        activeColor: AppColors.primaryBlue,
                       ),
                     ),
                   ],
@@ -155,9 +166,19 @@ class _AdminSendNotificationScreenState
                 if (_targetType == 'role')
                   DropdownButtonFormField<String>(
                     initialValue: _selectedRole,
-                    decoration: const InputDecoration(
+                    dropdownColor: theme.cardColor,
+                    style: TextStyle(color: theme.colorScheme.onSurface),
+                    decoration: InputDecoration(
                       labelText: 'Select role',
-                      border: OutlineInputBorder(),
+                      labelStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      ),
+                      border: OutlineInputBorder(
+                        borderSide: BorderSide(color: theme.dividerColor),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: theme.dividerColor),
+                      ),
                     ),
                     items: _roles.map((role) {
                       return DropdownMenuItem(
@@ -180,10 +201,22 @@ class _AdminSendNotificationScreenState
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _titleController,
-                  decoration: const InputDecoration(
+                  style: TextStyle(color: theme.colorScheme.onSurface),
+                  decoration: InputDecoration(
                     labelText: 'Notification title',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.title),
+                    labelStyle: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    ),
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide(color: theme.dividerColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: theme.dividerColor),
+                    ),
+                    prefixIcon: Icon(
+                      Icons.title,
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    ),
                   ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
@@ -196,10 +229,22 @@ class _AdminSendNotificationScreenState
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _bodyController,
-                  decoration: const InputDecoration(
+                  style: TextStyle(color: theme.colorScheme.onSurface),
+                  decoration: InputDecoration(
                     labelText: 'Notification message',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.message),
+                    labelStyle: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    ),
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide(color: theme.dividerColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: theme.dividerColor),
+                    ),
+                    prefixIcon: Icon(
+                      Icons.message,
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    ),
                     alignLabelWithHint: true,
                   ),
                   maxLines: 4,
@@ -248,14 +293,23 @@ class _AdminSendNotificationScreenState
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.blue[50],
+                    color: isDark
+                        ? Colors.blue.withOpacity(0.1)
+                        : Colors.blue[50],
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.blue[200]!),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.blue.withOpacity(0.3)
+                          : Colors.blue[200]!,
+                    ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info_outline, color: Colors.blue[700]),
+                      Icon(
+                        Icons.info_outline,
+                        color: isDark ? Colors.blue[200] : Colors.blue[700],
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -263,7 +317,7 @@ class _AdminSendNotificationScreenState
                           'require Firebase Cloud Messaging and Cloud Functions configuration.',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[700],
+                            color: isDark ? Colors.blue[100] : Colors.grey[700],
                             height: 1.4,
                           ),
                         ),
@@ -280,6 +334,7 @@ class _AdminSendNotificationScreenState
   }
 
   Widget _sectionTitle(String title) {
+    final theme = Theme.of(context);
     return Row(
       children: [
         Container(
@@ -293,13 +348,18 @@ class _AdminSendNotificationScreenState
         const SizedBox(width: 6),
         Text(
           title,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: theme.colorScheme.onSurface,
+          ),
         ),
       ],
     );
   }
 
   Widget _buildUserSelector() {
+    final theme = Theme.of(context);
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('users').snapshots(),
       builder: (context, snapshot) {
@@ -314,9 +374,19 @@ class _AdminSendNotificationScreenState
 
         return DropdownButtonFormField<String>(
           initialValue: _selectedUserId,
-          decoration: const InputDecoration(
+          dropdownColor: theme.cardColor,
+          style: TextStyle(color: theme.colorScheme.onSurface),
+          decoration: InputDecoration(
             labelText: 'Select user',
-            border: OutlineInputBorder(),
+            labelStyle: TextStyle(
+              color: theme.colorScheme.onSurface.withOpacity(0.7),
+            ),
+            border: OutlineInputBorder(
+              borderSide: BorderSide(color: theme.dividerColor),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: theme.dividerColor),
+            ),
           ),
           items: users.map((doc) {
             final data = doc.data() as Map<String, dynamic>;
@@ -331,7 +401,10 @@ class _AdminSendNotificationScreenState
                   Text(name, style: const TextStyle(fontSize: 14)),
                   Text(
                     email,
-                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    ),
                   ),
                 ],
               ),
