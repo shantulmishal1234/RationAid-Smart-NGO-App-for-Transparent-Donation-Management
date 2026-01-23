@@ -1,16 +1,22 @@
-# ration_aid
+# Ration_Aid – Flutter & Dart Application
 
-A new Flutter project.
+This repository contains my Final Year Project (FYP) developed using Flutter & Dart, following professional app architecture and best practices.
 
-## Getting Started
+## Project Status
 
-This project is a starting point for a Flutter application.
 
-A few resources to get you started if this is your first Flutter project:
+Overall Progress: 10% → 30% → 60% (ongoing)
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+Admin Module: ✅ Fully developed
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Current Work:
+
+ Donor Module (in progress)
+
+ Purchaser Module (in progress)
+
+ Continuous refinement and optimization of the Admin module
+
+Goal
+
+The aim is to build a clean, well-structured, and professional application with good performance and a simple, user-friendly interface.
