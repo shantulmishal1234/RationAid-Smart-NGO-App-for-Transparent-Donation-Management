@@ -10,6 +10,7 @@ class DonationCard extends StatelessWidget {
   final String method;
   final String status;
   final VoidCallback onTap;
+  final int? serialNumber; // NEW
 
   const DonationCard({
     super.key,
@@ -21,6 +22,7 @@ class DonationCard extends StatelessWidget {
     required this.method,
     required this.status,
     required this.onTap,
+    this.serialNumber, // NEW
   });
 
   Color _statusColor() {
@@ -82,7 +84,9 @@ class DonationCard extends StatelessWidget {
                   ? Colors.blueGrey[800]
                   : Colors.blueGrey[50],
               child: Text(
-                amount.toInt().toString(),
+                serialNumber != null
+                    ? serialNumber.toString()
+                    : amount.toInt().toString(),
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   color: isDark ? Colors.white : Colors.black87,

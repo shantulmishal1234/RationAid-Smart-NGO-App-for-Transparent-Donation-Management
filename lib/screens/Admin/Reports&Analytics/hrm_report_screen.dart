@@ -261,16 +261,21 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,
-        title: const Text(
+        title: Text(
           'HRM report',
-          style: TextStyle(fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: isDark ? AppColors.primaryBlue : Colors.white,
+          ),
         ),
+        backgroundColor: isDark ? Colors.grey[900] : AppColors.primaryBlue,
         actions: [
           IconButton(
             icon: const Icon(Icons.download),

@@ -10,7 +10,8 @@ class FamilyCard extends StatelessWidget {
   final String status;
   final VoidCallback onTap;
   final String? assignedVolunteerName;
-  final VoidCallback? onEdit; // NEW
+  final VoidCallback? onEdit;
+  final int? serialNumber; // NEW
 
   const FamilyCard({
     super.key,
@@ -22,7 +23,8 @@ class FamilyCard extends StatelessWidget {
     required this.status,
     required this.assignedVolunteerName,
     required this.onTap,
-    this.onEdit, // NEW
+    this.onEdit,
+    this.serialNumber, // NEW
   });
 
   Color _statusColor() {
@@ -84,7 +86,9 @@ class FamilyCard extends StatelessWidget {
                     ? Colors.blueGrey[800]
                     : Colors.blueGrey[50],
                 child: Text(
-                  familySize.toString(),
+                  serialNumber != null
+                      ? serialNumber.toString()
+                      : familySize.toString(),
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     color: isDark ? Colors.white : Colors.black87,

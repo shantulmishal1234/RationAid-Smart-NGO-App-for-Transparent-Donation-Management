@@ -36,7 +36,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
   bool _isAnonymous = false;
   String? _paymentProofUrl;
   bool _isUploading = false;
-  Map<String, int> _selectedItems = {}; // For in-kind donations
+  final Map<String, int> _selectedItems = {}; // For in-kind donations
   bool _isSaving = false;
 
   @override
@@ -383,7 +383,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                   ),
                 ),
               );
-            }).toList()
+            })
           else
             Center(
               child: Text(

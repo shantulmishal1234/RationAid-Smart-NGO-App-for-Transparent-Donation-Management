@@ -1111,105 +1111,104 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [const Color(0xFF121212), const Color(0xFF1E1E1E)]
-              : [const Color(0xFFE8F5E9), const Color(0xFFF1F8E9)],
-        ),
-      ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Profile header card
-            Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    // Profile photo with edit capability
-                    GestureDetector(
-                      onTap: _isUploadingPhoto ? null : _changeProfilePhoto,
-                      child: Stack(
-                        children: [
-                          CircleAvatar(
-                            radius: 50,
-                            backgroundColor: AppColors.donorGreen.withOpacity(
-                              0.2,
-                            ),
-                            backgroundImage: _profilePhotoUrl != null
-                                ? NetworkImage(_profilePhotoUrl!)
-                                : null,
-                            child: _profilePhotoUrl == null
-                                ? const Icon(
-                                    Icons.person,
-                                    size: 50,
-                                    color: AppColors.donorGreen,
-                                  )
-                                : null,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // Profile header card
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  // Profile photo with edit capability
+                  GestureDetector(
+                    onTap: _isUploadingPhoto ? null : _changeProfilePhoto,
+                    child: Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 50,
+                          backgroundColor: AppColors.donorGreen.withOpacity(
+                            0.2,
                           ),
-                          // Upload indicator
-                          if (_isUploadingPhoto)
-                            Positioned.fill(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: Colors.black.withOpacity(0.5),
-                                ),
-                                child: const Center(
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          // Edit badge
-                          if (!_isUploadingPhoto)
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
+                          backgroundImage: _profilePhotoUrl != null
+                              ? NetworkImage(_profilePhotoUrl!)
+                              : null,
+                          child: _profilePhotoUrl == null
+                              ? const Icon(
+                                  Icons.person,
+                                  size: 50,
                                   color: AppColors.donorGreen,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 2,
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.camera_alt,
-                                  size: 16,
+                                )
+                              : null,
+                        ),
+                        // Upload indicator
+                        if (_isUploadingPhoto)
+                          Positioned.fill(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.black.withOpacity(0.5),
+                              ),
+                              child: const Center(
+                                child: CircularProgressIndicator(
                                   color: Colors.white,
+                                  strokeWidth: 2,
                                 ),
                               ),
                             ),
-                        ],
-                      ),
+                          ),
+                        // Edit badge
+                        if (!_isUploadingPhoto)
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: AppColors.donorGreen,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.camera_alt,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      user?.displayName ?? 'Donor',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    user?.displayName ?? 'Donor',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    user?.email ?? '',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  ),
+                  if (user?.phoneNumber != null) ...[
                     const SizedBox(height: 4),
                     Text(
-                      user?.email ?? '',
+                      user!.phoneNumber!,
                       style: TextStyle(
                         fontSize: 14,
                         color: Theme.of(
@@ -1217,197 +1216,176 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
                         ).colorScheme.onSurface.withOpacity(0.6),
                       ),
                     ),
-                    if (user?.phoneNumber != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        user!.phoneNumber!,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withOpacity(0.6),
-                        ),
-                      ),
-                    ],
                   ],
-                ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
+          ),
+          const SizedBox(height: 16),
 
-            // Activity summary
-            Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+          // Activity summary
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Donation Activity',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 16),
+                  FutureBuilder<Map<String, int>>(
+                    future: _statsFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      if (!snapshot.hasData) {
+                        return const Text('No data available');
+                      }
+
+                      final data = snapshot.data!;
+                      return Column(
+                        children: [
+                          _ActivityRow(
+                            icon: Icons.volunteer_activism,
+                            label: 'Total Donations',
+                            value: data['total'].toString(),
+                            color: AppColors.donorGreen,
+                          ),
+                          const Divider(height: 24),
+                          _ActivityRow(
+                            icon: Icons.family_restroom,
+                            label: 'Families Supported',
+                            value: data['families'].toString(),
+                            color: AppColors.accentGreen,
+                          ),
+                          const Divider(height: 24),
+                          _ActivityRow(
+                            icon: Icons.hourglass_top,
+                            label: 'Active Donations',
+                            value: data['active'].toString(),
+                            color: Colors.orange,
+                          ),
+                          const Divider(height: 24),
+                          _ActivityRow(
+                            icon: Icons.check_circle,
+                            label: 'Completed Deliveries',
+                            value: data['completed'].toString(),
+                            color: Colors.green,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Donation Activity',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Account Settings
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Account Settings',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+                  _SettingsTile(
+                    icon: Icons.lock_outline,
+                    title: 'Change Password',
+                    subtitle: 'Update your password',
+                    onTap: _showChangePasswordDialog,
+                  ),
+                  const Divider(height: 8),
+                  _SettingsTile(
+                    icon: Icons.person_outline,
+                    title: 'Update Name',
+                    subtitle: 'Change your display name',
+                    onTap: _showUpdateNameDialog,
+                  ),
+                  const Divider(height: 8),
+                  _SettingsTile(
+                    icon: Icons.phone_outlined,
+                    title: 'Update Phone',
+                    subtitle: 'Add or update phone number',
+                    onTap: _showUpdatePhoneDialog,
+                  ),
+                  const Divider(height: 8),
+                  // Dark Mode Toggle
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.indigo.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Theme.of(context).brightness == Brightness.dark
+                            ? Icons.dark_mode
+                            : Icons.light_mode,
+                        color: Colors.indigo,
+                        size: 20,
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    FutureBuilder<Map<String, int>>(
-                      future: _statsFuture,
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-
-                        if (!snapshot.hasData) {
-                          return const Text('No data available');
-                        }
-
-                        final data = snapshot.data!;
-                        return Column(
-                          children: [
-                            _ActivityRow(
-                              icon: Icons.volunteer_activism,
-                              label: 'Total Donations',
-                              value: data['total'].toString(),
-                              color: AppColors.donorGreen,
-                            ),
-                            const Divider(height: 24),
-                            _ActivityRow(
-                              icon: Icons.family_restroom,
-                              label: 'Families Supported',
-                              value: data['families'].toString(),
-                              color: AppColors.accentGreen,
-                            ),
-                            const Divider(height: 24),
-                            _ActivityRow(
-                              icon: Icons.hourglass_top,
-                              label: 'Active Donations',
-                              value: data['active'].toString(),
-                              color: Colors.orange,
-                            ),
-                            const Divider(height: 24),
-                            _ActivityRow(
-                              icon: Icons.check_circle,
-                              label: 'Completed Deliveries',
-                              value: data['completed'].toString(),
-                              color: Colors.green,
-                            ),
-                          ],
-                        );
+                    title: const Text(
+                      'Dark Mode',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    subtitle: Text(
+                      Theme.of(context).brightness == Brightness.dark
+                          ? 'Enabled'
+                          : 'Disabled',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                    ),
+                    trailing: Switch(
+                      value: Theme.of(context).brightness == Brightness.dark,
+                      activeThumbColor: AppColors.donorGreen,
+                      onChanged: (value) {
+                        themeProvider.toggleTheme();
                       },
                     ),
-                  ],
-                ),
+                  ),
+                  const Divider(height: 8),
+                  _SettingsTile(
+                    icon: Icons.help_outline,
+                    title: 'Help & Support',
+                    subtitle: 'Contact us for assistance',
+                    onTap: _showHelpSupportDialog,
+                  ),
+                  const Divider(height: 8),
+                  _SettingsTile(
+                    icon: Icons.logout,
+                    title: 'Logout',
+                    subtitle: 'Sign out of your account',
+                    iconColor: Colors.red,
+                    onTap: _showLogoutDialog,
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-
-            // Account Settings
-            Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Account Settings',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _SettingsTile(
-                      icon: Icons.lock_outline,
-                      title: 'Change Password',
-                      subtitle: 'Update your password',
-                      onTap: _showChangePasswordDialog,
-                    ),
-                    const Divider(height: 8),
-                    _SettingsTile(
-                      icon: Icons.person_outline,
-                      title: 'Update Name',
-                      subtitle: 'Change your display name',
-                      onTap: _showUpdateNameDialog,
-                    ),
-                    const Divider(height: 8),
-                    _SettingsTile(
-                      icon: Icons.phone_outlined,
-                      title: 'Update Phone',
-                      subtitle: 'Add or update phone number',
-                      onTap: _showUpdatePhoneDialog,
-                    ),
-                    const Divider(height: 8),
-                    // Dark Mode Toggle
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.indigo.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          Theme.of(context).brightness == Brightness.dark
-                              ? Icons.dark_mode
-                              : Icons.light_mode,
-                          color: Colors.indigo,
-                          size: 20,
-                        ),
-                      ),
-                      title: const Text(
-                        'Dark Mode',
-                        style: TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                      subtitle: Text(
-                        Theme.of(context).brightness == Brightness.dark
-                            ? 'Enabled'
-                            : 'Disabled',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withOpacity(0.6),
-                        ),
-                      ),
-                      trailing: Switch(
-                        value: Theme.of(context).brightness == Brightness.dark,
-                        activeColor: AppColors.donorGreen,
-                        onChanged: (value) {
-                          themeProvider.toggleTheme();
-                        },
-                      ),
-                    ),
-                    const Divider(height: 8),
-                    _SettingsTile(
-                      icon: Icons.help_outline,
-                      title: 'Help & Support',
-                      subtitle: 'Contact us for assistance',
-                      onTap: _showHelpSupportDialog,
-                    ),
-                    const Divider(height: 8),
-                    _SettingsTile(
-                      icon: Icons.logout,
-                      title: 'Logout',
-                      subtitle: 'Sign out of your account',
-                      iconColor: Colors.red,
-                      onTap: _showLogoutDialog,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-          ],
-        ),
+          ),
+          const SizedBox(height: 100),
+        ],
       ),
     );
   }

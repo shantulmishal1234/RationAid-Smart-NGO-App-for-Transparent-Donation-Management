@@ -66,352 +66,335 @@ class _ExploreFamiliesSectionState extends State<ExploreFamiliesSection> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [const Color(0xFF121212), const Color(0xFF1E1E1E)]
-              : [const Color(0xFFE8F5E9), const Color(0xFFF1F8E9)],
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Text(
-              'Explore Families',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Text(
+            'Explore Families',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Browse families seeking support',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-              ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Browse families seeking support',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
             ),
-            const SizedBox(height: 16),
+          ),
+          const SizedBox(height: 16),
 
-            // Search Bar
-            Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: isDark
-                        ? Colors.black.withOpacity(0.3)
-                        : Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: TextField(
-                controller: _searchController,
-                onChanged: (value) {
-                  setState(() {
-                    _searchQuery = value.toLowerCase();
-                  });
-                },
-                decoration: InputDecoration(
-                  hintText: 'Search by Area (e.g. Johar Town)',
-                  hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
-                  prefixIcon: Icon(Icons.search, color: Colors.grey[400]),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, size: 20),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() {
-                              _searchQuery = '';
-                            });
-                          },
-                        )
-                      : null,
+          // Search Bar
+          Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: isDark
+                      ? Colors.black.withOpacity(0.3)
+                      : Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
                 ),
+              ],
+            ),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value.toLowerCase();
+                });
+              },
+              decoration: InputDecoration(
+                hintText: 'Search by Area (e.g. Johar Town)',
+                hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                prefixIcon: Icon(Icons.search, color: Colors.grey[400]),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 20),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {
+                            _searchQuery = '';
+                          });
+                        },
+                      )
+                    : null,
               ),
             ),
-            const SizedBox(height: 12),
+          ),
+          const SizedBox(height: 12),
 
-            // Assistance Type Filter Chips
-            SizedBox(
-              height: 36,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  // "All" chip
-                  Padding(
+          // Assistance Type Filter Chips
+          SizedBox(
+            height: 36,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                // "All" chip
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    label: const Text('All'),
+                    selected: _selectedAssistanceType == null,
+                    onSelected: (_) {
+                      setState(() => _selectedAssistanceType = null);
+                    },
+                    selectedColor: AppColors.donorGreen.withOpacity(0.2),
+                    checkmarkColor: AppColors.donorGreen,
+                    labelStyle: TextStyle(
+                      fontSize: 12,
+                      fontWeight: _selectedAssistanceType == null
+                          ? FontWeight.w600
+                          : FontWeight.w400,
+                      color: _selectedAssistanceType == null
+                          ? AppColors.donorGreen
+                          : Colors.grey[700],
+                    ),
+                    backgroundColor: Theme.of(context).cardColor,
+                    side: BorderSide(
+                      color: _selectedAssistanceType == null
+                          ? AppColors.donorGreen
+                          : Colors.grey[300]!,
+                    ),
+                  ),
+                ),
+                // Type-specific chips
+                ..._assistanceTypes.map(
+                  (type) => Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: FilterChip(
-                      label: const Text('All'),
-                      selected: _selectedAssistanceType == null,
+                      label: Text(type),
+                      selected: _selectedAssistanceType == type,
                       onSelected: (_) {
-                        setState(() => _selectedAssistanceType = null);
+                        setState(() {
+                          _selectedAssistanceType =
+                              _selectedAssistanceType == type ? null : type;
+                        });
                       },
                       selectedColor: AppColors.donorGreen.withOpacity(0.2),
                       checkmarkColor: AppColors.donorGreen,
                       labelStyle: TextStyle(
                         fontSize: 12,
-                        fontWeight: _selectedAssistanceType == null
+                        fontWeight: _selectedAssistanceType == type
                             ? FontWeight.w600
                             : FontWeight.w400,
-                        color: _selectedAssistanceType == null
+                        color: _selectedAssistanceType == type
                             ? AppColors.donorGreen
                             : Colors.grey[700],
                       ),
                       backgroundColor: Theme.of(context).cardColor,
                       side: BorderSide(
-                        color: _selectedAssistanceType == null
+                        color: _selectedAssistanceType == type
                             ? AppColors.donorGreen
                             : Colors.grey[300]!,
                       ),
                     ),
                   ),
-                  // Type-specific chips
-                  ..._assistanceTypes.map(
-                    (type) => Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        label: Text(type),
-                        selected: _selectedAssistanceType == type,
-                        onSelected: (_) {
-                          setState(() {
-                            _selectedAssistanceType =
-                                _selectedAssistanceType == type ? null : type;
-                          });
-                        },
-                        selectedColor: AppColors.donorGreen.withOpacity(0.2),
-                        checkmarkColor: AppColors.donorGreen,
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight: _selectedAssistanceType == type
-                              ? FontWeight.w600
-                              : FontWeight.w400,
-                          color: _selectedAssistanceType == type
-                              ? AppColors.donorGreen
-                              : Colors.grey[700],
-                        ),
-                        backgroundColor: Theme.of(context).cardColor,
-                        side: BorderSide(
-                          color: _selectedAssistanceType == type
-                              ? AppColors.donorGreen
-                              : Colors.grey[300]!,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
+          ),
+          const SizedBox(height: 12),
 
-            // Family list with A-Z Index
-            Expanded(
-              child: StreamBuilder<List<Family>>(
-                stream: _familiesStream,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+          // Family list with A-Z Index
+          Expanded(
+            child: StreamBuilder<List<Family>>(
+              stream: _familiesStream,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                  if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
-                  }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
 
-                  var families = snapshot.data ?? [];
+                var families = snapshot.data ?? [];
 
-                  // Filter by search query
-                  if (_searchQuery.isNotEmpty) {
-                    families = families
-                        .where(
-                          (f) =>
-                              f.area.toLowerCase().contains(_searchQuery) ||
-                              f.city.toLowerCase().contains(_searchQuery) ||
-                              f.needsSummary.toLowerCase().contains(
-                                _searchQuery,
+                // Filter by search query
+                if (_searchQuery.isNotEmpty) {
+                  families = families
+                      .where(
+                        (f) =>
+                            f.area.toLowerCase().contains(_searchQuery) ||
+                            f.city.toLowerCase().contains(_searchQuery) ||
+                            f.needsSummary.toLowerCase().contains(_searchQuery),
+                      )
+                      .toList();
+                }
+
+                // Filter by assistance type
+                if (_selectedAssistanceType != null) {
+                  families = families
+                      .where(
+                        (f) =>
+                            f.assistanceNeeds.contains(_selectedAssistanceType),
+                      )
+                      .toList();
+                }
+
+                // Sort alphabetically by City then Area
+                families.sort((a, b) {
+                  int cityCompare = a.city.toLowerCase().compareTo(
+                    b.city.toLowerCase(),
+                  );
+                  if (cityCompare != 0) return cityCompare;
+                  return a.area.toLowerCase().compareTo(b.area.toLowerCase());
+                });
+
+                if (families.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.family_restroom,
+                          size: 80,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          _searchQuery.isNotEmpty
+                              ? 'No families found matching "$_searchQuery"'
+                              : 'No families available',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return Stack(
+                  children: [
+                    ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.only(
+                        bottom: 100,
+                        right: 20,
+                      ), // Right padding for A-Z bar
+                      itemCount: families.length,
+                      itemBuilder: (context, index) {
+                        return _FamilyCard(family: families[index]);
+                      },
+                    ),
+                    // A-Z Index Slider (Samsung Style)
+                    if (_searchQuery.isEmpty && families.length > 5)
+                      Positioned(
+                        right: 2,
+                        top: 40,
+                        bottom: 40,
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 300),
+                          opacity: _isIndexVisible ? 1.0 : 0.0,
+                          child: Center(
+                            child: Container(
+                              width: 24, // Fixed width to prevent fluctuation
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).cardColor.withOpacity(0.9),
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: isDark
+                                        ? Colors.black.withOpacity(0.3)
+                                        : Colors.black.withOpacity(0.1),
+                                    blurRadius: 4,
+                                    offset: const Offset(-1, 0),
+                                  ),
+                                ],
                               ),
-                        )
-                        .toList();
-                  }
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  // Generate full A-Z list
+                                  final alphabet = List.generate(
+                                    26,
+                                    (index) => String.fromCharCode(index + 65),
+                                  );
 
-                  // Filter by assistance type
-                  if (_selectedAssistanceType != null) {
-                    families = families
-                        .where(
-                          (f) => f.assistanceNeeds.contains(
-                            _selectedAssistanceType,
-                          ),
-                        )
-                        .toList();
-                  }
+                                  return GestureDetector(
+                                    onVerticalDragUpdate: (details) {
+                                      // Reset timer on interaction
+                                      _onScroll();
 
-                  // Sort alphabetically by City then Area
-                  families.sort((a, b) {
-                    int cityCompare = a.city.toLowerCase().compareTo(
-                      b.city.toLowerCase(),
-                    );
-                    if (cityCompare != 0) return cityCompare;
-                    return a.area.toLowerCase().compareTo(b.area.toLowerCase());
-                  });
+                                      // Calculate which letter is being touched
+                                      final renderBox =
+                                          context.findRenderObject()
+                                              as RenderBox;
+                                      final localPosition = renderBox
+                                          .globalToLocal(
+                                            details.globalPosition,
+                                          );
+                                      final itemHeight =
+                                          renderBox.size.height /
+                                          alphabet.length;
+                                      final index =
+                                          (localPosition.dy / itemHeight)
+                                              .floor();
 
-                  if (families.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.family_restroom,
-                            size: 80,
-                            color: Colors.grey[400],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _searchQuery.isNotEmpty
-                                ? 'No families found matching "$_searchQuery"'
-                                : 'No families available',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withOpacity(0.6),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  return Stack(
-                    children: [
-                      ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.only(
-                          bottom: 16,
-                          right: 20,
-                        ), // Right padding for A-Z bar
-                        itemCount: families.length,
-                        itemBuilder: (context, index) {
-                          return _FamilyCard(family: families[index]);
-                        },
-                      ),
-                      // A-Z Index Slider (Samsung Style)
-                      if (_searchQuery.isEmpty && families.length > 5)
-                        Positioned(
-                          right: 2,
-                          top: 40,
-                          bottom: 40,
-                          child: AnimatedOpacity(
-                            duration: const Duration(milliseconds: 300),
-                            opacity: _isIndexVisible ? 1.0 : 0.0,
-                            child: Center(
-                              child: Container(
-                                width: 24, // Fixed width to prevent fluctuation
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(
-                                    context,
-                                  ).cardColor.withOpacity(0.9),
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: isDark
-                                          ? Colors.black.withOpacity(0.3)
-                                          : Colors.black.withOpacity(0.1),
-                                      blurRadius: 4,
-                                      offset: const Offset(-1, 0),
-                                    ),
-                                  ],
-                                ),
-                                child: LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    // Generate full A-Z list
-                                    final alphabet = List.generate(
-                                      26,
-                                      (index) =>
-                                          String.fromCharCode(index + 65),
-                                    );
-
-                                    return GestureDetector(
-                                      onVerticalDragUpdate: (details) {
-                                        // Reset timer on interaction
-                                        _onScroll();
-
-                                        // Calculate which letter is being touched
-                                        final renderBox =
-                                            context.findRenderObject()
-                                                as RenderBox;
-                                        final localPosition = renderBox
-                                            .globalToLocal(
-                                              details.globalPosition,
-                                            );
-                                        final itemHeight =
-                                            renderBox.size.height /
-                                            alphabet.length;
-                                        final index =
-                                            (localPosition.dy / itemHeight)
-                                                .floor();
-
-                                        if (index >= 0 &&
-                                            index < alphabet.length) {
-                                          final letter = alphabet[index];
-                                          _scrollToLetter(letter, families);
-                                        }
-                                      },
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: alphabet.map((letter) {
-                                          return GestureDetector(
-                                            onTap: () {
-                                              _onScroll();
-                                              _scrollToLetter(letter, families);
-                                            },
-                                            child: Container(
-                                              height:
-                                                  constraints.maxHeight /
-                                                  28, // Distribute height
-                                              alignment: Alignment.center,
-                                              child: Text(
-                                                letter,
-                                                style: const TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: AppColors.donorGreen,
-                                                ),
+                                      if (index >= 0 &&
+                                          index < alphabet.length) {
+                                        final letter = alphabet[index];
+                                        _scrollToLetter(letter, families);
+                                      }
+                                    },
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: alphabet.map((letter) {
+                                        return GestureDetector(
+                                          onTap: () {
+                                            _onScroll();
+                                            _scrollToLetter(letter, families);
+                                          },
+                                          child: Container(
+                                            height:
+                                                constraints.maxHeight /
+                                                28, // Distribute height
+                                            alignment: Alignment.center,
+                                            child: Text(
+                                              letter,
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.donorGreen,
                                               ),
                                             ),
-                                          );
-                                        }).toList(),
-                                      ),
-                                    );
-                                  },
-                                ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                           ),
                         ),
-                    ],
-                  );
-                },
-              ),
+                      ),
+                  ],
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

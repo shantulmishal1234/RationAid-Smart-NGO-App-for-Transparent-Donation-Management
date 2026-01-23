@@ -32,6 +32,7 @@ class DonorScaffold extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      extendBody: true,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
@@ -71,7 +72,20 @@ class DonorScaffold extends StatelessWidget {
       ),
       bottomNavigationBar: bottomNavigationBar,
       floatingActionButton: floatingActionButton,
-      body: useSafeArea ? SafeArea(child: body) : body,
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [const Color(0xFF121212), const Color(0xFF1E1E1E)]
+                : [const Color(0xFFE8F5E9), const Color(0xFFF1F8E9)],
+          ),
+        ),
+        child: useSafeArea ? SafeArea(bottom: false, child: body) : body,
+      ),
     );
   }
 }

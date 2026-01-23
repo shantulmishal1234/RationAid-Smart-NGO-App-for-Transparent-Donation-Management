@@ -194,19 +194,28 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
     final uid = widget.uid;
     if (uid == null) return;
 
+    final theme = Theme.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete member'),
-        content: const Text(
+        backgroundColor: theme.cardColor,
+        title: Text(
+          'Delete member',
+          style: TextStyle(color: theme.colorScheme.onSurface),
+        ),
+        content: Text(
           'This will remove this member profile from HRM and they will no longer '
           'appear in the system. This does NOT automatically delete their '
           'Firebase login account.\n\nAre you sure you want to continue?',
+          style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.8)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: theme.colorScheme.primary),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
@@ -250,269 +259,221 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
   Widget build(BuildContext context) {
     final isEdit = widget.isEdit;
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back_ios_new,
+            size: 20,
+            color: theme.colorScheme.onSurface,
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: Text(
           _isDonor()
-              ? 'View donor account'
-              : (isEdit ? 'Edit member' : 'Add member'),
-          style: const TextStyle(fontWeight: FontWeight.w700),
+              ? 'View Donor Account'
+              : (isEdit ? 'Edit Member' : 'Add New Member'),
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: theme.colorScheme.onSurface,
+            fontSize: 18,
+          ),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: theme.dividerColor.withOpacity(0.2),
+            height: 1,
+          ),
         ),
       ),
       body: Column(
         children: [
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 18,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.cardColor,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
-                      blurRadius: 18,
-                      offset: const Offset(0, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSectionHeader('Basic Information'),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: _nameCtrl,
+                      label: 'Full Name',
+                      hint: 'Enter full name',
+                      enabled: !_isDonor(),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'[a-zA-Z\s]'),
+                        ),
+                      ],
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Name is required';
+                        }
+                        if (v.trim().length < 2) {
+                          return 'Name must be at least 2 characters';
+                        }
+                        return null;
+                      },
                     ),
-                  ],
-                ),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryBlue.withOpacity(0.08),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: const Icon(
-                              Icons.badge,
-                              color: AppColors.primaryBlue,
-                              size: 22,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  isEdit
-                                      ? 'Update member profile'
-                                      : 'Create new member',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
-                                    color: theme.colorScheme.onSurface,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-
-                      _sectionHeader('Basic information'),
-                      const SizedBox(height: 10),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: _emailCtrl,
+                      label: 'Email Address',
+                      hint: 'member@example.com',
+                      keyboardType: TextInputType.emailAddress,
+                      enabled: !isEdit,
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Valid email required';
+                        }
+                        if (!v.contains('@')) return 'Valid email required';
+                        return null;
+                      },
+                    ),
+                    if (!isEdit) ...[
+                      const SizedBox(height: 16),
                       _buildTextField(
-                        controller: _nameCtrl,
-                        label: 'Full name',
-                        hint: 'Enter full name',
-                        icon: Icons.person,
-                        enabled: !_isDonor(),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                            RegExp(r'[a-zA-Z\s]'),
-                          ),
-                        ],
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Name is required';
-                          }
-                          if (v.trim().length < 2) {
-                            return 'Name must be at least 2 characters';
-                          }
-                          return null;
-                        },
+                        controller: _passwordCtrl,
+                        label: 'Temporary Password',
+                        hint: 'Minimum 6 characters',
+                        obscureText: true,
+                        validator: (v) => v == null || v.length < 6
+                            ? 'Min 6 characters'
+                            : null,
                       ),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        controller: _emailCtrl,
-                        label: 'Email',
-                        hint: 'Member email',
-                        icon: Icons.email,
-                        keyboardType: TextInputType.emailAddress,
-                        enabled: !isEdit,
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Valid email required';
-                          }
-                          if (!v.contains('@')) return 'Valid email required';
-                          return null;
-                        },
-                      ),
-                      if (!isEdit) ...[
-                        const SizedBox(height: 12),
-                        _buildTextField(
-                          controller: _passwordCtrl,
-                          label: 'Temporary password',
-                          hint: 'Minimum 6 characters',
-                          icon: Icons.lock,
-                          obscureText: true,
-                          validator: (v) => v == null || v.length < 6
-                              ? 'Min 6 characters'
-                              : null,
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        controller: _phoneCtrl,
-                        label: 'Phone',
-                        hint: 'Contact number (03XX-XXXXXXX)',
-                        icon: Icons.phone,
-                        keyboardType: TextInputType.phone,
-                        enabled: !_isDonor(),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
-                        ],
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return null; // Optional field
-                          }
-                          final cleaned = v.replaceAll(RegExp(r'[^0-9]'), '');
-                          if (!cleaned.startsWith('03') ||
-                              cleaned.length != 11) {
-                            return 'Enter valid Pakistan phone (03XX-XXXXXXX)';
-                          }
-                          return null;
-                        },
-                      ),
-
-                      // Hide designation and organization fields for donors
-                      if (!_isDonor()) ...[
-                        const SizedBox(height: 12),
-                        _buildTextField(
-                          controller: _designationCtrl,
-                          label: 'Designation (optional)',
-                          hint: 'e.g. Field Officer, Delivery Coordinator',
-                          icon: Icons.workspace_premium_outlined,
-                        ),
-
-                        const SizedBox(height: 20),
-                        _sectionHeader('Organization'),
-                        const SizedBox(height: 10),
-                        _buildDropdown<String>(
-                          label: 'Department',
-                          value: _department,
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'Distribution',
-                              child: Text('Distribution'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'Warehouse',
-                              child: Text('Warehouse'),
-                            ),
-                          ],
-                          onChanged: (v) {
-                            if (v == null) return;
-                            setState(() => _department = v);
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        _buildDropdown<String>(
-                          label: 'Main role',
-                          helperText:
-                              'HRM can only create purchaser/distributor accounts',
-                          value: _mainRole,
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'purchaser',
-                              child: Text('Purchaser (Warehouse)'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'distributor',
-                              child: Text('Distributor (Delivery)'),
-                            ),
-                          ],
-                          onChanged: (v) {
-                            if (v == null) return;
-                            setState(() => _mainRole = v);
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        _buildDropdown<String>(
-                          label: 'Hierarchy level',
-                          value: _level,
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'head',
-                              child: Text('Head'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'sub_head',
-                              child: Text('Sub-head'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'member',
-                              child: Text('Member'),
-                            ),
-                          ],
-                          onChanged: (v) {
-                            if (v == null) return;
-                            setState(() => _level = v);
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        _buildTextField(
-                          controller: _teamHeadIdCtrl,
-                          label: 'Team head UID (optional)',
-                          hint: 'UID of head / sub-head',
-                          icon: Icons.group,
-                        ),
-                      ],
-
-                      // Hide delete button for donors (view-only)
-                      if (isEdit && !_isDonor()) ...[
-                        const SizedBox(height: 24),
-                        _sectionHeader('Danger zone'),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 44,
-                          child: OutlinedButton.icon(
-                            onPressed: _isSaving ? null : _confirmDeleteMember,
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            label: const Text(
-                              'Delete member',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Colors.red),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
-                  ),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: _phoneCtrl,
+                      label: 'Phone Number',
+                      hint: '03XX-XXXXXXX',
+                      keyboardType: TextInputType.phone,
+                      enabled: !_isDonor(),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+                      ],
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return null; // Optional field
+                        }
+                        final cleaned = v.replaceAll(RegExp(r'[^0-9]'), '');
+                        if (!cleaned.startsWith('03') || cleaned.length != 11) {
+                          return 'Enter valid Pakistan phone (03XX-XXXXXXX)';
+                        }
+                        return null;
+                      },
+                    ),
+
+                    // Hide designation and organization fields for donors
+                    if (!_isDonor()) ...[
+                      const SizedBox(height: 32),
+                      _buildSectionHeader('Organization Role'),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: _designationCtrl,
+                        label: 'Designation',
+                        hint: 'e.g. Field Officer',
+                      ),
+                      const SizedBox(height: 16),
+                      _buildDropdown<String>(
+                        label: 'Department',
+                        value: _department,
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'Distribution',
+                            child: Text('Distribution'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Warehouse',
+                            child: Text('Warehouse'),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          if (v == null) return;
+                          setState(() => _department = v);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _buildDropdown<String>(
+                        label: 'Main Role',
+                        helperText:
+                            'HRM can only create purchaser/distributor accounts',
+                        value: _mainRole,
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'purchaser',
+                            child: Text('Purchaser (Warehouse)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'distributor',
+                            child: Text('Distributor (Delivery)'),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          if (v == null) return;
+                          setState(() => _mainRole = v);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _buildDropdown<String>(
+                        label: 'Hierarchy Level',
+                        value: _level,
+                        items: const [
+                          DropdownMenuItem(value: 'head', child: Text('Head')),
+                          DropdownMenuItem(
+                            value: 'sub_head',
+                            child: Text('Sub-head'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'member',
+                            child: Text('Member'),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          if (v == null) return;
+                          setState(() => _level = v);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: _teamHeadIdCtrl,
+                        label: 'Team Head UID (Optional)',
+                        hint: 'UID of head / sub-head',
+                      ),
+                    ],
+
+                    // Hide delete button for donors (view-only)
+                    if (isEdit && !_isDonor()) ...[
+                      const SizedBox(height: 40),
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: _isSaving ? null : _confirmDeleteMember,
+                          icon: Icon(
+                            Icons.delete_outline,
+                            color: theme.colorScheme.error,
+                            size: 20,
+                          ),
+                          label: Text(
+                            'Delete member profile',
+                            style: TextStyle(
+                              color: theme.colorScheme.error,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 40),
+                  ],
                 ),
               ),
             ),
@@ -521,46 +482,43 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
           // Sticky bottom save button (hide for donors - view-only)
           if (!_isDonor())
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: theme.cardColor,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
+                color: theme.scaffoldBackgroundColor,
+                border: Border(
+                  top: BorderSide(color: theme.dividerColor.withOpacity(0.5)),
+                ),
               ),
-              child: SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: _isSaving ? null : _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryBlue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              child: SafeArea(
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: _isSaving ? null : _save,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
                     ),
-                    elevation: 0,
+                    child: _isSaving
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.5,
+                            ),
+                          )
+                        : Text(isEdit ? 'Save Changes' : 'Create Member'),
                   ),
-                  child: _isSaving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          isEdit ? 'Save changes' : 'Create member',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
                 ),
               ),
             ),
@@ -569,28 +527,16 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
     );
   }
 
-  Widget _sectionHeader(String title) {
+  Widget _buildSectionHeader(String title) {
     final theme = Theme.of(context);
-    return Row(
-      children: [
-        Container(
-          width: 4,
-          height: 18,
-          decoration: BoxDecoration(
-            color: AppColors.primaryBlue,
-            borderRadius: BorderRadius.circular(999),
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          title,
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: theme.colorScheme.onSurface,
-          ),
-        ),
-      ],
+    return Text(
+      title,
+      style: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        color: theme.colorScheme.primary,
+        letterSpacing: 0.5,
+      ),
     );
   }
 
@@ -598,7 +544,6 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
     required TextEditingController controller,
     required String label,
     required String hint,
-    IconData? icon,
     String? helperText,
     String? Function(String?)? validator,
     TextInputType? keyboardType,
@@ -609,49 +554,79 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      child: TextFormField(
-        controller: controller,
-        validator: validator,
-        keyboardType: keyboardType,
-        obscureText: obscureText,
-        enabled: enabled,
-        inputFormatters: inputFormatters,
-        style: TextStyle(color: theme.colorScheme.onSurface),
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          helperText: helperText,
-          helperMaxLines: 2,
-          helperStyle: TextStyle(
-            fontSize: 11,
-            color: theme.colorScheme.onSurface.withOpacity(0.5),
-          ),
-          labelStyle: TextStyle(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
             color: theme.colorScheme.onSurface.withOpacity(0.7),
           ),
-          hintStyle: TextStyle(
-            color: theme.colorScheme.onSurface.withOpacity(0.5),
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: controller,
+          validator: validator,
+          keyboardType: keyboardType,
+          obscureText: obscureText,
+          enabled: enabled,
+          inputFormatters: inputFormatters,
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w500,
           ),
-          prefixIcon: icon != null
-              ? Icon(
-                  icon,
-                  size: 18,
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
-                )
-              : null,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 12,
+          decoration: InputDecoration(
+            hintText: hint,
+            helperText: helperText,
+            helperMaxLines: 2,
+            helperStyle: TextStyle(
+              fontSize: 11,
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
+            ),
+            hintStyle: TextStyle(
+              color: theme.colorScheme.onSurface.withOpacity(0.3),
+              fontSize: 14,
+              fontWeight: FontWeight.normal,
+            ),
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 14,
+            ),
+            filled: true,
+            fillColor: isDark
+                ? theme.colorScheme.surface
+                : theme.colorScheme.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.dividerColor.withOpacity(0.8),
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.dividerColor.withOpacity(0.8),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.colorScheme.primary,
+                width: 1.5,
+              ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.colorScheme.error.withOpacity(0.5),
+              ),
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 
@@ -663,34 +638,66 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
     required ValueChanged<T?> onChanged,
   }) {
     final theme = Theme.of(context);
-    return DropdownButtonFormField<T>(
-      initialValue: value,
-      items: items,
-      onChanged: onChanged,
-      dropdownColor: theme.cardColor,
-      style: TextStyle(color: theme.colorScheme.onSurface),
-      decoration: InputDecoration(
-        labelText: label,
-        helperText: helperText,
-        labelStyle: TextStyle(
-          color: theme.colorScheme.onSurface.withOpacity(0.7),
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
+          ),
         ),
-        helperStyle: TextStyle(
-          color: theme.colorScheme.onSurface.withOpacity(0.5),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<T>(
+          value: value,
+          items: items,
+          onChanged: onChanged,
+          dropdownColor: theme.cardColor,
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w500,
+          ),
+          decoration: InputDecoration(
+            helperText: helperText,
+            helperStyle: TextStyle(
+              fontSize: 11,
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
+            ),
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 14,
+            ),
+            filled: true,
+            fillColor: isDark
+                ? theme.colorScheme.surface
+                : theme.colorScheme.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.dividerColor.withOpacity(0.8),
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.dividerColor.withOpacity(0.8),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.colorScheme.primary,
+                width: 1.5,
+              ),
+            ),
+          ),
         ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: theme.dividerColor),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: theme.dividerColor),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
-        ),
-      ),
+      ],
     );
   }
 }

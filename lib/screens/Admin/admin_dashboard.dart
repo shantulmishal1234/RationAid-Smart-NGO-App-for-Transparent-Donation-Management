@@ -11,8 +11,7 @@ import 'package:ration_aid/screens/Admin/sections/reports_section.dart';
 import 'package:ration_aid/screens/Admin/sections/notifications_section.dart';
 import 'package:ration_aid/screens/Admin/sections/profile_section.dart';
 import 'package:ration_aid/screens/Admin/Audit Trail/audit_trail_screen.dart';
-import 'package:ration_aid/screens/Startup & Authentication/auth_screen.dart';
-import 'package:ration_aid/services/auth_service.dart';
+
 import 'package:ration_aid/theme/app_colors.dart';
 
 class AdminDashboard extends StatefulWidget {
@@ -23,7 +22,6 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
-  final _authService = AuthService();
   AdminSection _currentSection = AdminSection.dashboard;
   bool _showFloatingMenu = false;
 
@@ -80,29 +78,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 : null,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            tooltip: 'Notifications',
-            onPressed: () {
-              setState(() {
-                _currentSection = AdminSection.notifications;
-              });
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-            onPressed: () async {
-              await _authService.signOut();
-              if (!context.mounted) return;
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const AuthScreen()),
-                (route) => false,
-              );
-            },
-          ),
-        ],
       ),
       body: Stack(
         children: [

@@ -21,138 +21,121 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
   Widget build(BuildContext context) {
     final userId = FirebaseAuth.instance.currentUser?.uid;
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [const Color(0xFF121212), const Color(0xFF1E1E1E)]
-              : [const Color(0xFFE8F5E9), const Color(0xFFF1F8E9)],
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Text(
-              'My Donations',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Text(
+            'My Donations',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Track your donation journey',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-              ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Track your donation journey',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
             ),
-            const SizedBox(height: 16),
+          ),
+          const SizedBox(height: 16),
 
-            // Filter chips
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: DonationFilter.values.map((filter) {
-                  final isSelected = _selectedFilter == filter;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      label: Text(filter.displayName),
-                      selected: isSelected,
-                      onSelected: (selected) {
-                        setState(() {
-                          _selectedFilter = filter;
-                        });
-                      },
-                      selectedColor: AppColors.donorGreen.withOpacity(0.2),
-                      checkmarkColor: AppColors.donorGreen,
-                      labelStyle: TextStyle(
-                        color: isSelected
-                            ? AppColors.donorGreen
-                            : Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withOpacity(0.7),
-                        fontWeight: isSelected
-                            ? FontWeight.w600
-                            : FontWeight.normal,
-                      ),
+          // Filter chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: DonationFilter.values.map((filter) {
+                final isSelected = _selectedFilter == filter;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    label: Text(filter.displayName),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      setState(() {
+                        _selectedFilter = filter;
+                      });
+                    },
+                    selectedColor: AppColors.donorGreen.withOpacity(0.2),
+                    checkmarkColor: AppColors.donorGreen,
+                    labelStyle: TextStyle(
+                      color: isSelected
+                          ? AppColors.donorGreen
+                          : Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.7),
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.normal,
                     ),
-                  );
-                }).toList(),
-              ),
+                  ),
+                );
+              }).toList(),
             ),
-            const SizedBox(height: 16),
+          ),
+          const SizedBox(height: 16),
 
-            // Donations list
-            Expanded(
-              child: userId == null
-                  ? const Center(child: Text('Please log in'))
-                  : StreamBuilder<List<Donation>>(
-                      stream: _selectedFilter == DonationFilter.all
-                          ? _donationService.streamDonationsByDonor(userId)
-                          : _donationService.streamDonationsByDonorAndStatus(
-                              userId,
-                              _getDonationStatus(_selectedFilter),
-                            ),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
+          // Donations list
+          Expanded(
+            child: userId == null
+                ? const Center(child: Text('Please log in'))
+                : StreamBuilder<List<Donation>>(
+                    stream: _selectedFilter == DonationFilter.all
+                        ? _donationService.streamDonationsByDonor(userId)
+                        : _donationService.streamDonationsByDonorAndStatus(
+                            userId,
+                            _getDonationStatus(_selectedFilter),
+                          ),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
 
-                        if (snapshot.hasError) {
-                          return Center(
-                            child: Text('Error: ${snapshot.error}'),
-                          );
-                        }
+                      if (snapshot.hasError) {
+                        return Center(child: Text('Error: ${snapshot.error}'));
+                      }
 
-                        final donations = snapshot.data ?? [];
+                      final donations = snapshot.data ?? [];
 
-                        if (donations.isEmpty) {
-                          return Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.volunteer_activism,
-                                  size: 80,
-                                  color: Colors.grey[400],
+                      if (donations.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.volunteer_activism,
+                                size: 80,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No donations found',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withOpacity(0.6),
                                 ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No donations found',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurface.withOpacity(0.6),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-
-                        return ListView.builder(
-                          itemCount: donations.length,
-                          itemBuilder: (context, index) {
-                            return _DonationCard(donation: donations[index]);
-                          },
+                              ),
+                            ],
+                          ),
                         );
-                      },
-                    ),
-            ),
-          ],
-        ),
+                      }
+
+                      return ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 100),
+                        itemCount: donations.length,
+                        itemBuilder: (context, index) {
+                          return _DonationCard(donation: donations[index]);
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }

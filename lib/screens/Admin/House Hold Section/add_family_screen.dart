@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:ration_aid/services/cloudinary_service.dart';
-import 'package:ration_aid/theme/app_colors.dart';
 
 class AddFamilyScreen extends StatefulWidget {
   const AddFamilyScreen({super.key});
@@ -17,27 +16,23 @@ class AddFamilyScreen extends StatefulWidget {
 class _AddFamilyScreenState extends State<AddFamilyScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Basic Information Controllers
+  // Controllers
   final _familyNameController = TextEditingController();
   final _cnicController = TextEditingController();
   final _adultsController = TextEditingController(text: '0');
   final _childrenController = TextEditingController(text: '0');
 
-  // Location & Contact Controllers
   final _cityController = TextEditingController();
   final _areaController = TextEditingController();
   final _addressController = TextEditingController();
   final _phoneController = TextEditingController();
 
-  // Additional Information Controllers
   final _emergencyContactController = TextEditingController();
   final _incomeController = TextEditingController();
   final _notesController = TextEditingController();
 
-  // State variables
   final Set<String> _assistanceNeeds = {};
 
-  // Document upload
   String? _uploadedDocUrl;
   String? _uploadedFileName;
   bool _isUploadingDoc = false;
@@ -199,429 +194,255 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,
-        flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: isDark
-                  ? [
-                      theme.scaffoldBackgroundColor,
-                      theme.scaffoldBackgroundColor,
-                    ]
-                  : [
-                      AppColors.primaryBlue,
-                      AppColors.accentGreen.withOpacity(0.85),
-                    ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            border: isDark
-                ? Border(bottom: BorderSide(color: theme.dividerColor))
-                : null,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back_ios_new,
+            size: 20,
+            color: theme.colorScheme.onSurface,
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'Add New Family',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: theme.colorScheme.onSurface,
+            fontSize: 18,
           ),
         ),
-        title: const Text(
-          'Add new family',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: theme.dividerColor.withOpacity(0.2),
+            height: 1,
+          ),
         ),
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: isDark
-                ? [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor]
-                : [
-                    theme.scaffoldBackgroundColor,
-                    theme.scaffoldBackgroundColor,
-                  ],
-          ),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              // Scrollable Form Content
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header row inside sheet
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  AppColors.primaryBlue.withOpacity(0.18),
-                                  AppColors.accentGreen.withOpacity(0.12),
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: const Icon(
-                              Icons.family_restroom,
-                              color: AppColors.primaryBlue,
-                              size: 22,
-                            ),
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSectionHeader('Identity Information'),
+                    const SizedBox(height: 16),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: _buildTextField(
+                            controller: _familyNameController,
+                            label: 'Family Head Name',
+                            hint: 'Full Name',
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Required';
+                              }
+                              return null;
+                            },
                           ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Family registration',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                  color: theme.colorScheme.onSurface,
-                                ),
-                              ),
-                              Text(
-                                'Capture household details for transparent support.',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurface
-                                      .withOpacity(0.6),
-                                ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          flex: 2,
+                          child: _buildTextField(
+                            controller: _cnicController,
+                            label: 'CNIC',
+                            hint: 'XXXXX-XXXXXXX-X',
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9\-]'),
                               ),
                             ],
+                            validator: (value) {
+                              if (value != null && value.isNotEmpty) {
+                                if (value.length < 13) {
+                                  return 'Invalid';
+                                }
+                              }
+                              return null;
+                            },
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Basic Information Section
-                      _buildSectionHeader('Basic information'),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        controller: _familyNameController,
-                        label: 'Family head name',
-                        hint: 'Enter family name',
-                        icon: Icons.person,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                            RegExp(r'[a-zA-Z\s]'),
-                          ),
-                        ],
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Family name is required';
-                          }
-                          if (value.trim().length < 2) {
-                            return 'Name must be at least 2 characters';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        controller: _cnicController,
-                        label: 'CNIC (optional)',
-                        hint: 'XXXXX-XXXXXXX-X',
-                        icon: Icons.badge,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
-                        ],
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return null; // Optional
-                          }
-                          final cleaned = value.replaceAll(
-                            RegExp(r'[^0-9]'),
-                            '',
-                          );
-                          if (cleaned.length != 13) {
-                            return 'CNIC must be 13 digits (XXXXX-XXXXXXX-X)';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Total Family Size Display
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: theme.cardColor,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(
-                                isDark ? 0.2 : 0.03,
-                              ),
-                              blurRadius: 10,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                          border: Border.all(color: theme.dividerColor),
                         ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.people,
-                              color: AppColors.primaryBlue,
-                              size: 22,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              'Total family size',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: theme.colorScheme.onSurface,
-                              ),
-                            ),
-                            const Spacer(),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryBlue.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                _totalFamilySize.toString(),
-                                style: const TextStyle(
-                                  color: AppColors.primaryBlue,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Adults / Children row
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildNumberField(
-                              controller: _adultsController,
-                              label: 'Adults',
-                              icon: Icons.person,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildNumberField(
-                              controller: _childrenController,
-                              label: 'Children (under 18)',
-                              icon: Icons.child_care,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Location & Contact Section
-                      _buildSectionHeader('Location & contact'),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        controller: _cityController,
-                        label: 'City',
-                        hint: 'Enter city (e.g. Lahore)',
-                        icon: Icons.location_city,
-                        validator: (value) =>
-                            value == null || value.trim().isEmpty
-                            ? 'City is required'
-                            : null,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        controller: _areaController,
-                        label: 'Area / Neighborhood',
-                        hint: 'Enter area (e.g. Johar Town)',
-                        icon: Icons.map,
-                        validator: (value) =>
-                            value == null || value.trim().isEmpty
-                            ? 'Area is required'
-                            : null,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        controller: _addressController,
-                        label: 'Full address',
-                        hint: 'Street, house number, etc.',
-                        icon: Icons.home,
-                        maxLines: 2,
-                        validator: (value) =>
-                            value == null || value.trim().isEmpty
-                            ? 'Address is required'
-                            : null,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        controller: _phoneController,
-                        label: 'Contact phone (Pakistan)',
-                        hint: '03XX-XXXXXXX',
-                        icon: Icons.phone,
-                        keyboardType: TextInputType.phone,
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Phone number is required';
-                          }
-                          final cleaned = value.replaceAll(
-                            RegExp(r'[^0-9]'),
-                            '',
-                          );
-                          if (!cleaned.startsWith('03') ||
-                              cleaned.length != 11) {
-                            return 'Enter valid Pakistan phone (03XX-XXXXXXX)';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Assistance Needs Section
-                      _buildSectionHeader('Assistance needs'),
-                      const SizedBox(height: 8),
-                      _buildAssistanceCheckboxes(),
-                      const SizedBox(height: 24),
-
-                      // Additional Information Section
-                      _buildSectionHeader('Additional information'),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        controller: _emergencyContactController,
-                        label: 'Emergency contact (phone)',
-                        hint: '03XX-XXXXXXX',
-                        icon: Icons.contact_phone,
-                        keyboardType: TextInputType.phone,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
-                        ],
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return null; // Optional
-                          }
-                          final cleaned = value.replaceAll(
-                            RegExp(r'[^0-9]'),
-                            '',
-                          );
-                          if (!cleaned.startsWith('03') ||
-                              cleaned.length != 11) {
-                            return 'Enter valid Pakistan phone (03XX-XXXXXXX)';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        controller: _incomeController,
-                        label: 'Monthly income (PKR)',
-                        hint: 'Enter amount in PKR',
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _buildNotesField(),
-                      const SizedBox(height: 24),
-
-                      // Verification Documents Section
-                      _buildSectionHeader('Verification documents'),
-                      const SizedBox(height: 8),
-                      _buildDocumentUpload(),
-                      const SizedBox(height: 24),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Submit Button
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: theme.cardColor,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, -2),
+                      ],
                     ),
+                    const SizedBox(height: 32),
+
+                    _buildSectionHeader('Demographics & Income'),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildNumberField(
+                            controller: _adultsController,
+                            label: 'Adults',
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildNumberField(
+                            controller: _childrenController,
+                            label: 'Children',
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          flex: 2,
+                          child: _buildTextField(
+                            controller: _incomeController,
+                            label: 'Monthly Income',
+                            hint: 'PKR',
+                            keyboardType: TextInputType.number,
+                            prefixText: 'Rs. ',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+
+                    _buildSectionHeader('Contact Details'),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildTextField(
+                            controller: _phoneController,
+                            label: 'Phone Number',
+                            hint: '03XX-XXXXXXX',
+                            keyboardType: TextInputType.phone,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildTextField(
+                            controller: _emergencyContactController,
+                            label: 'Emergency Contact',
+                            hint: '03XX-XXXXXXX',
+                            keyboardType: TextInputType.phone,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+
+                    _buildSectionHeader('Location'),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildTextField(
+                            controller: _cityController,
+                            label: 'City',
+                            hint: 'City Name',
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildTextField(
+                            controller: _areaController,
+                            label: 'Area',
+                            hint: 'Area Name',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: _addressController,
+                      label: 'Full Address',
+                      hint: 'House #, Street #, etc.',
+                      maxLines: 1,
+                    ),
+                    const SizedBox(height: 32),
+
+                    _buildSectionHeader('Assistance Needs'),
+                    const SizedBox(height: 12),
+                    _buildAssistanceChips(),
+                    const SizedBox(height: 32),
+
+                    _buildSectionHeader('Additional Notes'),
+                    const SizedBox(height: 12),
+                    _buildNotesField(),
+                    const SizedBox(height: 32),
+
+                    _buildSectionHeader('Verification Documents'),
+                    const SizedBox(height: 12),
+                    _buildUploadZone(),
+                    const SizedBox(height: 40),
                   ],
                 ),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: _isSaving ? null : _saveFamily,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryBlue,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.scaffoldBackgroundColor,
+              border: Border(
+                top: BorderSide(color: theme.dividerColor.withOpacity(0.5)),
+              ),
+            ),
+            child: SafeArea(
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: _isSaving ? null : _saveFamily,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: _isSaving
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Submit for review',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                    textStyle: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                    ),
                   ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
+                          ),
+                        )
+                      : const Text('Submit Family'),
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
   Widget _buildSectionHeader(String title) {
     final theme = Theme.of(context);
-    return Row(
-      children: [
-        Container(
-          width: 4,
-          height: 18,
-          decoration: BoxDecoration(
-            color: AppColors.primaryBlue,
-            borderRadius: BorderRadius.circular(999),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: theme.colorScheme.onSurface,
-          ),
-        ),
-      ],
+    return Text(
+      title,
+      style: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        color: theme.colorScheme.primary,
+        letterSpacing: 0.5,
+      ),
     );
   }
 
@@ -629,350 +450,282 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
     required TextEditingController controller,
     required String label,
     required String hint,
-    IconData? icon,
     String? Function(String?)? validator,
     TextInputType? keyboardType,
     int maxLines = 1,
     List<TextInputFormatter>? inputFormatters,
+    String? prefixText,
   }) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.02),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: TextFormField(
-        controller: controller,
-        validator: validator,
-        keyboardType: keyboardType,
-        maxLines: maxLines,
-        inputFormatters: inputFormatters,
-        style: TextStyle(color: theme.colorScheme.onSurface),
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          hintStyle: TextStyle(
-            color: theme.colorScheme.onSurface.withOpacity(0.4),
-            fontSize: 14,
-          ),
-          labelStyle: TextStyle(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
             color: theme.colorScheme.onSurface.withOpacity(0.7),
           ),
-          prefixIcon: icon != null
-              ? Icon(
-                  icon,
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  size: 20,
-                )
-              : null,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: controller,
+          validator: validator,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          inputFormatters: inputFormatters,
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w500,
+          ),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(
+              color: theme.colorScheme.onSurface.withOpacity(0.3),
+              fontSize: 14,
+              fontWeight: FontWeight.normal,
+            ),
+            prefixText: prefixText,
+            prefixStyle: TextStyle(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w500,
+            ),
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 14,
+            ),
+            filled: true,
+            fillColor: isDark
+                ? theme.colorScheme.surface
+                : theme.colorScheme.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.dividerColor.withOpacity(0.8),
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.dividerColor.withOpacity(0.8),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.colorScheme.primary,
+                width: 1.5,
+              ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.colorScheme.error.withOpacity(0.5),
+              ),
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 
   Widget _buildNumberField({
     required TextEditingController controller,
     required String label,
-    required IconData icon,
   }) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      height: 96,
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.02),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
           ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+        ),
+        const SizedBox(height: 6),
+        Container(
+          height: 48,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: theme.dividerColor.withOpacity(0.8)),
+          ),
+          child: Row(
             children: [
-              Icon(
-                icon,
-                size: 16,
-                color: theme.colorScheme.onSurface.withOpacity(0.5),
+              _buildCounterButton(
+                icon: Icons.remove,
+                onTap: () {
+                  int val = int.tryParse(controller.text) ?? 0;
+                  if (val > 0) {
+                    controller.text = (val - 1).toString();
+                    setState(() {});
+                  }
+                },
               ),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: TextFormField(
+                  controller: controller,
+                  textAlign: TextAlign.center,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  onChanged: (_) => setState(() {}),
                 ),
+              ),
+              _buildCounterButton(
+                icon: Icons.add,
+                onTap: () {
+                  int val = int.tryParse(controller.text) ?? 0;
+                  controller.text = (val + 1).toString();
+                  setState(() {});
+                },
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          SizedBox(
-            height: 32,
-            child: Center(
-              child: TextFormField(
-                controller: controller,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface,
-                ),
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  isCollapsed: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildAssistanceCheckboxes() {
+  Widget _buildCounterButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
     final theme = Theme.of(context);
-    final needs = [
-      ('Food', Icons.restaurant),
-      ('Medicine', Icons.medical_services),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      child: Column(
-        children: needs.map((need) {
-          final isSelected = _assistanceNeeds.contains(need.$1);
-          return CheckboxListTile(
-            value: isSelected,
-            onChanged: (value) {
-              setState(() {
-                if (value == true) {
-                  _assistanceNeeds.add(need.$1);
-                } else {
-                  _assistanceNeeds.remove(need.$1);
-                }
-              });
-            },
-            title: Text(
-              need.$1,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: theme.colorScheme.onSurface,
-              ),
-            ),
-            secondary: Icon(need.$2, color: AppColors.primaryBlue, size: 20),
-            controlAffinity: ListTileControlAffinity.leading,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-            activeColor: AppColors.primaryBlue,
-            checkColor: Colors.white,
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildNotesField() {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      child: TextFormField(
-        controller: _notesController,
-        maxLines: 4,
-        maxLength: 500,
-        style: TextStyle(color: theme.colorScheme.onSurface),
-        buildCounter:
-            (context, {required currentLength, required isFocused, maxLength}) {
-              return Padding(
-                padding: const EdgeInsets.only(top: 4, right: 8),
-                child: Text(
-                  '$currentLength/500 characters',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: currentLength > 500
-                        ? Colors.red
-                        : theme.colorScheme.onSurface.withOpacity(0.5),
-                  ),
-                ),
-              );
-            },
-        decoration: InputDecoration(
-          labelText: 'Additional notes (optional)',
-          hintText: 'Any special circumstances or additional information...',
-          hintStyle: TextStyle(
-            color: theme.colorScheme.onSurface.withOpacity(0.4),
-            fontSize: 13,
-          ),
-          labelStyle: TextStyle(
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
-          ),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.all(14),
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: double.infinity,
+        decoration: BoxDecoration(color: theme.dividerColor.withOpacity(0.1)),
+        child: Icon(
+          icon,
+          size: 16,
+          color: theme.colorScheme.onSurface.withOpacity(0.7),
         ),
       ),
     );
   }
 
-  Widget _buildDocumentUpload() {
+  Widget _buildAssistanceChips() {
+    final theme = Theme.of(context);
+    final needs = ['Food', 'Medicine', 'Clothing', 'Education', 'Shelter'];
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: needs.map((need) {
+        final isSelected = _assistanceNeeds.contains(need);
+        return FilterChip(
+          label: Text(need),
+          selected: isSelected,
+          onSelected: (selected) {
+            setState(() {
+              if (selected) {
+                _assistanceNeeds.add(need);
+              } else {
+                _assistanceNeeds.remove(need);
+              }
+            });
+          },
+          selectedColor: theme.colorScheme.primary.withOpacity(0.15),
+          checkmarkColor: theme.colorScheme.primary,
+          labelStyle: TextStyle(
+            color: isSelected
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface.withOpacity(0.7),
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+            fontSize: 13,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : theme.dividerColor.withOpacity(0.8),
+            ),
+          ),
+          backgroundColor: Colors.transparent,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildNotesField() {
+    return _buildTextField(
+      controller: _notesController,
+      label: 'Remarks / Notes',
+      hint: 'Any additional details...',
+      maxLines: 3,
+    );
+  }
+
+  Widget _buildUploadZone() {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.upload_file,
-                color: theme.colorScheme.onSurface.withOpacity(0.7),
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Upload verification documents',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-            ],
+    return InkWell(
+      onTap: _isUploadingDoc ? null : _pickAndUploadDocument,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: theme.scaffoldBackgroundColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: theme.dividerColor,
+            style: BorderStyle
+                .solid, // Dashed border needs custom painter, solid is fine for now or use DottedBorder package if available
           ),
-          const SizedBox(height: 4),
-          Text(
-            'ID, proof of income, utility bills, etc.',
-            style: TextStyle(
-              fontSize: 12,
-              color: theme.colorScheme.onSurface.withOpacity(0.6),
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (_uploadedFileName != null) ...[
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.green.withOpacity(0.1)
-                    : Colors.green[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isDark
-                      ? Colors.green.withOpacity(0.5)
-                      : Colors.green[200]!,
-                ),
-              ),
-              child: Row(
+        ),
+        child: _isUploadingDoc
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
                 children: [
                   Icon(
-                    Icons.check_circle,
-                    color: isDark ? Colors.green[300] : Colors.green[700],
-                    size: 18,
+                    _uploadedDocUrl != null
+                        ? Icons.check_circle
+                        : Icons.cloud_upload_outlined,
+                    size: 32,
+                    color: _uploadedDocUrl != null
+                        ? Colors.green
+                        : theme.colorScheme.primary,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _uploadedFileName!,
+                  const SizedBox(height: 12),
+                  Text(
+                    _uploadedFileName ?? 'Tap to upload verification document',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (_uploadedDocUrl == null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Supports JPG, PNG',
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDark ? Colors.green[100] : Colors.green[900],
+                        color: theme.colorScheme.onSurface.withOpacity(0.4),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.close,
-                      color: isDark ? Colors.green[300] : Colors.green[700],
-                      size: 18,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _uploadedDocUrl = null;
-                        _uploadedFileName = null;
-                      });
-                    },
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
+                  ],
                 ],
               ),
-            ),
-            const SizedBox(height: 10),
-          ],
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _isUploadingDoc ? null : _pickAndUploadDocument,
-              icon: _isUploadingDoc
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      Icons.folder_open,
-                      size: 18,
-                      color: theme.colorScheme.primary,
-                    ),
-              label: Text(
-                _isUploadingDoc ? 'Uploading...' : 'Choose files',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                side: BorderSide(color: theme.dividerColor),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

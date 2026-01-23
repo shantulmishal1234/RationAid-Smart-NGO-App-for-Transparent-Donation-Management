@@ -850,7 +850,7 @@ class _DonationDetailsCard extends StatelessWidget {
                   ],
                 ),
               );
-            }).toList(),
+            }),
           ],
           if (donation.amount != null) ...[
             const SizedBox(height: 12),
@@ -942,7 +942,7 @@ class _UpdateHistoryCard extends StatelessWidget {
           const Divider(height: 24),
           ...reversedHistory.map((entry) {
             return _UpdateItem(entry: entry);
-          }).toList(),
+          }),
         ],
       ),
     );

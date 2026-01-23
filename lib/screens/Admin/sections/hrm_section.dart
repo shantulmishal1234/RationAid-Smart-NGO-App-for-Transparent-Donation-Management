@@ -58,18 +58,9 @@ class _HrmSectionState extends State<HrmSection> {
     final cs = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
+    return Padding(
       key: const ValueKey('hrm'),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: isDark
-              ? [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor]
-              : [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor],
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -241,6 +232,16 @@ class _HrmSectionState extends State<HrmSection> {
 
                   var docs = snapshot.data?.docs ?? [];
 
+                  // Sort by createdAt (oldest first)
+                  docs.sort((a, b) {
+                    final t1 = a.data()['createdAt'] as Timestamp?;
+                    final t2 = b.data()['createdAt'] as Timestamp?;
+                    if (t1 == null && t2 == null) return 0;
+                    if (t1 == null) return 1;
+                    if (t2 == null) return -1;
+                    return t1.compareTo(t2);
+                  });
+
                   // Client-side search filter
                   if (_searchText.isNotEmpty) {
                     docs = docs.where((doc) {
@@ -319,6 +320,7 @@ class _HrmSectionState extends State<HrmSection> {
                       const SizedBox(height: 10),
                       Expanded(
                         child: ListView.separated(
+                          padding: const EdgeInsets.only(bottom: 100),
                           itemCount: docs.length,
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 8),
@@ -328,6 +330,7 @@ class _HrmSectionState extends State<HrmSection> {
 
                             return MemberTile(
                               uid: id,
+                              serialNumber: index + 1, // NEW
                               name: data['name'] ?? 'Unnamed',
                               email: data['email'] ?? '',
                               roles: List<String>.from(data['roles'] ?? []),

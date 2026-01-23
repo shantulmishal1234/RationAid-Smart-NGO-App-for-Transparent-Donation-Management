@@ -12,6 +12,7 @@ class Family {
   final Map<String, int> needs; // map of item name to quantity needed
   final List<String> assistanceNeeds; // Types of assistance needed
   final String status; // should always be 'accepted' for donor view
+  final String? remarks; // Additional notes
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -25,6 +26,7 @@ class Family {
     required this.needs,
     required this.assistanceNeeds,
     required this.status,
+    this.remarks,
     this.createdAt,
     this.updatedAt,
   });
@@ -61,6 +63,7 @@ class Family {
           ? List<String>.from(data['assistanceNeeds'] as List)
           : [],
       status: data['status'] ?? '',
+      remarks: data['remarks'],
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );

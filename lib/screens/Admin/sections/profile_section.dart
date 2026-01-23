@@ -1086,204 +1086,199 @@ class _AdminProfileSectionState extends State<AdminProfileSection> {
     final user = FirebaseAuth.instance.currentUser;
     final theme = Theme.of(context);
 
-    return Container(
+    return SingleChildScrollView(
       key: const ValueKey('profile'),
-      color: theme.scaffoldBackgroundColor,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Profile header card
-            Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    // Profile photo with edit capability
-                    GestureDetector(
-                      onTap: _isUploadingPhoto ? null : _changeProfilePhoto,
-                      child: Stack(
-                        children: [
-                          CircleAvatar(
-                            radius: 50,
-                            backgroundColor: AppColors.primaryBlue.withValues(
-                              alpha: 0.2,
-                            ),
-                            backgroundImage: _profilePhotoUrl != null
-                                ? NetworkImage(_profilePhotoUrl!)
-                                : null,
-                            child: _profilePhotoUrl == null
-                                ? const Icon(
-                                    Icons.admin_panel_settings,
-                                    size: 50,
-                                    color: AppColors.primaryBlue,
-                                  )
-                                : null,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // Profile header card
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  // Profile photo with edit capability
+                  GestureDetector(
+                    onTap: _isUploadingPhoto ? null : _changeProfilePhoto,
+                    child: Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 50,
+                          backgroundColor: AppColors.primaryBlue.withValues(
+                            alpha: 0.2,
                           ),
-                          // Upload indicator
-                          if (_isUploadingPhoto)
-                            Positioned.fill(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: Colors.black.withValues(alpha: 0.5),
-                                ),
-                                child: const Center(
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          // Edit badge
-                          if (!_isUploadingPhoto)
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
+                          backgroundImage: _profilePhotoUrl != null
+                              ? NetworkImage(_profilePhotoUrl!)
+                              : null,
+                          child: _profilePhotoUrl == null
+                              ? const Icon(
+                                  Icons.admin_panel_settings,
+                                  size: 50,
                                   color: AppColors.primaryBlue,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 2,
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.camera_alt,
-                                  size: 16,
+                                )
+                              : null,
+                        ),
+                        // Upload indicator
+                        if (_isUploadingPhoto)
+                          Positioned.fill(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.black.withValues(alpha: 0.5),
+                              ),
+                              child: const Center(
+                                child: CircularProgressIndicator(
                                   color: Colors.white,
+                                  strokeWidth: 2,
                                 ),
                               ),
                             ),
-                        ],
+                          ),
+                        // Edit badge
+                        if (!_isUploadingPhoto)
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryBlue,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.camera_alt,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    user?.displayName ?? 'Admin',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    user?.email ?? '',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Account Settings
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Account Settings',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+                  _SettingsTile(
+                    icon: Icons.lock_outline,
+                    title: 'Change Password',
+                    subtitle: 'Update your password',
+                    onTap: _showChangePasswordDialog,
+                  ),
+                  const Divider(height: 8),
+                  _SettingsTile(
+                    icon: Icons.person_outline,
+                    title: 'Update Name',
+                    subtitle: 'Change your display name',
+                    onTap: _showUpdateNameDialog,
+                  ),
+                  const Divider(height: 8),
+                  _SettingsTile(
+                    icon: Icons.phone_outlined,
+                    title: 'Update Phone',
+                    subtitle: 'Add or update phone number',
+                    onTap: _showUpdatePhoneDialog,
+                  ),
+                  const Divider(height: 8),
+                  // Dark Mode Toggle
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.indigo.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Theme.of(context).brightness == Brightness.dark
+                            ? Icons.dark_mode
+                            : Icons.light_mode,
+                        color: Colors.indigo,
+                        size: 20,
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      user?.displayName ?? 'Admin',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
+                    title: const Text(
+                      'Dark Mode',
+                      style: TextStyle(fontWeight: FontWeight.w500),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      user?.email ?? '',
+                    subtitle: Text(
+                      Theme.of(context).brightness == Brightness.dark
+                          ? 'Enabled'
+                          : 'Disabled',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 12,
                         color: Theme.of(
                           context,
                         ).colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
-                  ],
-                ),
+                    trailing: Switch(
+                      value: Theme.of(context).brightness == Brightness.dark,
+                      activeTrackColor: AppColors.primaryBlue.withValues(
+                        alpha: 0.5,
+                      ),
+                      onChanged: (value) {
+                        themeProvider.toggleTheme();
+                      },
+                    ),
+                  ),
+                  const Divider(height: 8),
+                  _SettingsTile(
+                    icon: Icons.logout,
+                    title: 'Logout',
+                    subtitle: 'Sign out of your account',
+                    onTap: _showLogoutDialog,
+                    iconColor: Colors.red,
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-
-            // Account Settings
-            Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Account Settings',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _SettingsTile(
-                      icon: Icons.lock_outline,
-                      title: 'Change Password',
-                      subtitle: 'Update your password',
-                      onTap: _showChangePasswordDialog,
-                    ),
-                    const Divider(height: 8),
-                    _SettingsTile(
-                      icon: Icons.person_outline,
-                      title: 'Update Name',
-                      subtitle: 'Change your display name',
-                      onTap: _showUpdateNameDialog,
-                    ),
-                    const Divider(height: 8),
-                    _SettingsTile(
-                      icon: Icons.phone_outlined,
-                      title: 'Update Phone',
-                      subtitle: 'Add or update phone number',
-                      onTap: _showUpdatePhoneDialog,
-                    ),
-                    const Divider(height: 8),
-                    // Dark Mode Toggle
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.indigo.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          Theme.of(context).brightness == Brightness.dark
-                              ? Icons.dark_mode
-                              : Icons.light_mode,
-                          color: Colors.indigo,
-                          size: 20,
-                        ),
-                      ),
-                      title: const Text(
-                        'Dark Mode',
-                        style: TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                      subtitle: Text(
-                        Theme.of(context).brightness == Brightness.dark
-                            ? 'Enabled'
-                            : 'Disabled',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.6),
-                        ),
-                      ),
-                      trailing: Switch(
-                        value: Theme.of(context).brightness == Brightness.dark,
-                        activeTrackColor: AppColors.primaryBlue.withValues(
-                          alpha: 0.5,
-                        ),
-                        onChanged: (value) {
-                          themeProvider.toggleTheme();
-                        },
-                      ),
-                    ),
-                    const Divider(height: 8),
-                    _SettingsTile(
-                      icon: Icons.logout,
-                      title: 'Logout',
-                      subtitle: 'Sign out of your account',
-                      onTap: _showLogoutDialog,
-                      iconColor: Colors.red,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 100),
+        ],
       ),
     );
   }

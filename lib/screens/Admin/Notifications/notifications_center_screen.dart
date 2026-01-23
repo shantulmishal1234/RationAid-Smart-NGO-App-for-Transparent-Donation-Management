@@ -82,138 +82,183 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,
-        title: const Text(
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: isDark
+                  ? [
+                      AppColors.primaryBlue.withOpacity(0.1),
+                      AppColors.primaryBlue.withOpacity(0.05),
+                    ]
+                  : [
+                      AppColors.primaryBlue,
+                      AppColors.primaryBlue.withOpacity(0.85),
+                    ],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            border: isDark
+                ? Border(
+                    bottom: BorderSide(
+                      color: AppColors.primaryBlue.withOpacity(0.3),
+                      width: 1.5,
+                    ),
+                  )
+                : null,
+          ),
+        ),
+        title: Text(
           'Notifications (demo)',
-          style: TextStyle(fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: isDark ? AppColors.primaryBlue : Colors.white,
+          ),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Small header inside body if you like
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Recent activity',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [const Color(0xFF121212), const Color(0xFF1E1E1E)]
+                : [const Color(0xFFE3F2FD), const Color(0xFFBBDEFB)],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              // Small header inside body if you like
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Recent activity',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: theme.cardColor.withOpacity(0.96),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
-                      blurRadius: 18,
-                      offset: const Offset(0, 10),
+              const SizedBox(height: 8),
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withOpacity(0.08)
+                        : theme.cardColor.withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(isDark ? 0.3 : 0.04),
+                        blurRadius: 18,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withOpacity(0.15)
+                          : Colors.white.withOpacity(0.7),
+                      width: 0.8,
                     ),
-                  ],
-                ),
-                child: ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
-                  itemCount: _demoNotifications.length,
-                  itemBuilder: (context, index) {
-                    final data = _demoNotifications[index];
-                    final isRead = data['isRead'] ?? false;
-                    final title = data['title'] ?? 'Notification';
-                    final body = data['body'] ?? '';
-                    final createdAt = data['createdAt'] as DateTime?;
+                  ),
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+                    itemCount: _demoNotifications.length,
+                    itemBuilder: (context, index) {
+                      final data = _demoNotifications[index];
+                      final isRead = data['isRead'] ?? false;
+                      final title = data['title'] ?? 'Notification';
+                      final body = data['body'] ?? '';
+                      final createdAt = data['createdAt'] as DateTime?;
 
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                        vertical: 4,
-                        horizontal: 8,
-                      ),
-                      color: isRead
-                          ? theme.cardColor
-                          : (isDark
-                                ? AppColors.primaryBlue.withOpacity(0.15)
-                                : Colors.blue[50]),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: isRead
-                              ? (isDark ? Colors.grey[700] : Colors.grey[300])
-                              : AppColors.primaryBlue,
-                          child: Icon(
-                            isRead
-                                ? Icons.notifications_none
-                                : Icons.notifications_active,
-                            color: Colors.white,
-                            size: 20,
-                          ),
+                      return Card(
+                        margin: const EdgeInsets.symmetric(
+                          vertical: 4,
+                          horizontal: 8,
                         ),
-                        title: Text(
-                          title,
-                          style: TextStyle(
-                            fontWeight: isRead
-                                ? FontWeight.w500
-                                : FontWeight.w700,
-                            fontSize: 15,
-                            color: theme.colorScheme.onSurface,
-                          ),
+                        color: isRead
+                            ? theme.cardColor
+                            : (isDark
+                                  ? AppColors.primaryBlue.withOpacity(0.15)
+                                  : Colors.blue[50]),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
                         ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 4),
-                            Text(
-                              body,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: theme.colorScheme.onSurface.withOpacity(
-                                  0.8,
-                                ),
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: isRead
+                                ? (isDark ? Colors.grey[700] : Colors.grey[300])
+                                : AppColors.primaryBlue,
+                            child: Icon(
+                              isRead
+                                  ? Icons.notifications_none
+                                  : Icons.notifications_active,
+                              color: Colors.white,
+                              size: 20,
                             ),
-                            if (createdAt != null) ...[
-                              const SizedBox(height: 6),
+                          ),
+                          title: Text(
+                            title,
+                            style: TextStyle(
+                              fontWeight: isRead
+                                  ? FontWeight.w500
+                                  : FontWeight.w700,
+                              fontSize: 15,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 4),
                               Text(
-                                _formatTime(createdAt),
+                                body,
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 13,
                                   color: theme.colorScheme.onSurface
-                                      .withOpacity(0.5),
+                                      .withOpacity(0.8),
                                 ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
+                              if (createdAt != null) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  _formatTime(createdAt),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: theme.colorScheme.onSurface
+                                        .withOpacity(0.5),
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
+                          trailing: isRead
+                              ? null
+                              : const Icon(
+                                  Icons.fiber_new,
+                                  color: Colors.orange,
+                                  size: 18,
+                                ),
+                          onTap: () => _showNotificationDetail(
+                            title: title,
+                            body: body,
+                            createdAt: createdAt,
+                            isRead: isRead,
+                          ),
                         ),
-                        trailing: isRead
-                            ? null
-                            : const Icon(
-                                Icons.fiber_new,
-                                color: Colors.orange,
-                                size: 18,
-                              ),
-                        onTap: () => _showNotificationDetail(
-                          title: title,
-                          body: body,
-                          createdAt: createdAt,
-                          isRead: isRead,
-                        ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

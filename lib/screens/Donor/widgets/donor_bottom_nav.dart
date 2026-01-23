@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/screens/Donor/models/donor_enums.dart';
 import 'package:ration_aid/theme/app_colors.dart';
@@ -77,84 +76,91 @@ class _DonorBottomNavState extends State<DonorBottomNav>
     }
   }
 
+  double _getAdjustedNotchX(int index, double itemWidth, double barWidth) {
+    if (index < 0) return -100;
+    double x = index * itemWidth + (itemWidth / 2);
+    const notchW = 35.0;
+    const buffer = 10.0;
+    const minX = notchW + buffer;
+    final maxX = barWidth - minX;
+    return x.clamp(minX, maxX);
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentIndex = _getSectionIndex(widget.currentSection);
     final screenWidth = MediaQuery.of(context).size.width;
     final barWidth = screenWidth - 32;
     final itemWidth = barWidth / 5;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final adjustedNotchX = _getAdjustedNotchX(
+      currentIndex,
+      itemWidth,
+      barWidth,
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-      child: Container(
-        height: 75,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.donorGreen.withValues(alpha: 0.2),
-              blurRadius: 25,
-              offset: const Offset(0, 10),
-              spreadRadius: 0,
-            ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(30),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? const Color(0xFF1E1E1E).withValues(alpha: 0.95)
-                    : Colors.white.withValues(alpha: 0.95),
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white.withValues(alpha: 0.1)
-                      : Colors.white.withValues(alpha: 0.5),
-                  width: 1.5,
-                ),
-              ),
-              child: Stack(
-                children: [
-                  // Animated sliding indicator
-                  AnimatedPositioned(
-                    duration: const Duration(milliseconds: 350),
-                    curve: Curves.easeOutCubic,
-                    left: currentIndex * itemWidth + itemWidth * 0.15,
-                    top: 10,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 350),
-                      width: itemWidth * 0.7,
-                      height: 55,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            AppColors.donorGreen,
-                            AppColors.donorGreen.withValues(alpha: 0.85),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
+      child: SizedBox(
+        height: 85,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // Floating Indicator Dot
+            if (currentIndex >= 0)
+              TweenAnimationBuilder<double>(
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeInOutCubic,
+                tween: Tween<double>(begin: 0, end: adjustedNotchX),
+                builder: (context, x, child) {
+                  return Positioned(
+                    top: 0,
+                    left: x - 4,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: AppColors.donorGreen,
+                        shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.donorGreen.withValues(alpha: 0.4),
-                            blurRadius: 15,
-                            offset: const Offset(0, 5),
+                            color: AppColors.donorGreen,
+                            blurRadius: 10,
+                            spreadRadius: 2,
                           ),
                         ],
                       ),
                     ),
-                  ),
-                  // Navigation items
-                  Row(
+                  );
+                },
+              ),
+            // Notched Background
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: TweenAnimationBuilder<double>(
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeInOutCubic,
+                tween: Tween<double>(begin: 0, end: adjustedNotchX),
+                builder: (context, notchX, child) {
+                  return CustomPaint(
+                    size: Size(barWidth, 75),
+                    painter: NotchedBarPainter(
+                      notchX: notchX,
+                      color: isDark
+                          ? const Color(0xFF1E1E1E).withValues(alpha: 0.95)
+                          : Colors.white.withValues(alpha: 0.95),
+                      isDark: isDark,
+                    ),
+                    child: child,
+                  );
+                },
+                child: Container(
+                  height: 75,
+                  padding: const EdgeInsets.symmetric(horizontal: 0),
+                  child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _buildNavItem(
@@ -189,10 +195,10 @@ class _DonorBottomNavState extends State<DonorBottomNav>
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -213,7 +219,7 @@ class _DonorBottomNavState extends State<DonorBottomNav>
         behavior: HitTestBehavior.opaque,
         child: Container(
           height: 75,
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.only(top: 15, bottom: 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -231,7 +237,7 @@ class _DonorBottomNavState extends State<DonorBottomNav>
                       child: Icon(
                         icon,
                         color: isActive
-                            ? Colors.white
+                            ? AppColors.donorGreen
                             : (Theme.of(context).brightness == Brightness.dark
                                   ? Colors.grey[400]
                                   : Colors.grey[600]),
@@ -245,10 +251,10 @@ class _DonorBottomNavState extends State<DonorBottomNav>
               AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 250),
                 style: TextStyle(
-                  fontSize: isActive ? 11 : 10,
+                  fontSize: isActive ? 10.5 : 10,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                   color: isActive
-                      ? Colors.white
+                      ? AppColors.donorGreen
                       : (Theme.of(context).brightness == Brightness.dark
                             ? Colors.grey[400]
                             : Colors.grey[600]),
@@ -265,5 +271,100 @@ class _DonorBottomNavState extends State<DonorBottomNav>
         ),
       ),
     );
+  }
+}
+
+/// Custom painter for the notched navigation bar background
+class NotchedBarPainter extends CustomPainter {
+  final double notchX;
+  final Color color;
+  final bool isDark;
+
+  NotchedBarPainter({
+    required this.notchX,
+    required this.color,
+    required this.isDark,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final w = size.width;
+    final h = size.height;
+    const r = 20.0; // Reduced corner radius for symmetry
+    const notchW = 35.0; // Reduced notch width for symmetry
+    const notchH = 18.0; // Notch depth
+
+    // 1. Create the base bar path (rounded rectangle)
+    final baseBarPath = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(0, 0, w, h),
+          const Radius.circular(r),
+        ),
+      );
+
+    // 2. Create the notch "cutter" path
+    final notchPath = Path();
+    if (notchX > 0) {
+      notchPath.moveTo(notchX - notchW, 0);
+      // Refined fluid notch using improved cubic bezier control points
+      notchPath.cubicTo(
+        notchX - notchW * 0.4,
+        0,
+        notchX - notchW * 0.5,
+        notchH,
+        notchX,
+        notchH,
+      );
+      notchPath.cubicTo(
+        notchX + notchW * 0.5,
+        notchH,
+        notchX + notchW * 0.4,
+        0,
+        notchX + notchW,
+        0,
+      );
+      notchPath.lineTo(notchX + notchW, -10); // Ensure it cuts the top edge
+      notchPath.lineTo(notchX - notchW, -10);
+      notchPath.close();
+    }
+
+    // 3. Combine paths: Base Bar - Notch
+    final finalPath = Path.combine(
+      PathOperation.difference,
+      baseBarPath,
+      notchPath,
+    );
+
+    // Draw shadow
+    canvas.drawShadow(
+      finalPath,
+      Colors.black.withOpacity(isDark ? 0.5 : 0.1),
+      15,
+      false,
+    );
+
+    // Draw background
+    canvas.drawPath(finalPath, paint);
+
+    // Draw border
+    final borderPaint = Paint()
+      ..color = isDark
+          ? Colors.white.withOpacity(0.1)
+          : Colors.white.withOpacity(0.5)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    canvas.drawPath(finalPath, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant NotchedBarPainter oldDelegate) {
+    return oldDelegate.notchX != notchX ||
+        oldDelegate.color != color ||
+        oldDelegate.isDark != isDark;
   }
 }

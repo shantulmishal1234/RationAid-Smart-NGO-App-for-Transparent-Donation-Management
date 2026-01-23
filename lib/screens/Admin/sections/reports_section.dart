@@ -16,18 +16,9 @@ class ReportsSection extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
+    return Padding(
       key: const ValueKey('reports'),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: isDark
-              ? [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor]
-              : [theme.scaffoldBackgroundColor, theme.scaffoldBackgroundColor],
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -72,6 +63,7 @@ class ReportsSection extends StatelessWidget {
               ),
               padding: const EdgeInsets.all(16),
               child: GridView.count(
+                padding: const EdgeInsets.only(bottom: 100),
                 crossAxisCount: 2,
                 crossAxisSpacing: 16,
                 mainAxisSpacing: 16,

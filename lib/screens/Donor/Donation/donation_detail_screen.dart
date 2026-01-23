@@ -491,7 +491,7 @@ class _DonationInfoCard extends StatelessWidget {
                     ),
                   ),
                 );
-              }).toList(),
+              }),
             ],
             _InfoRow('Anonymous', donation.anonymous ? 'Yes' : 'No'),
             if (donation.donationNote != null)

@@ -12,6 +12,7 @@ class MemberTile extends StatelessWidget {
   final Timestamp? lastLoginAt;
   final int deliveryCount;
   final VoidCallback onTap;
+  final int? serialNumber; // NEW
 
   const MemberTile({
     super.key,
@@ -24,6 +25,7 @@ class MemberTile extends StatelessWidget {
     required this.lastLoginAt,
     required this.deliveryCount,
     required this.onTap,
+    this.serialNumber, // NEW
   });
 
   String _mainRoleLabel() {
@@ -85,7 +87,9 @@ class MemberTile extends StatelessWidget {
                     ? Colors.blueGrey[800]
                     : Colors.blueGrey[50],
                 child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : '?',
+                  serialNumber != null
+                      ? serialNumber.toString()
+                      : (name.isNotEmpty ? name[0].toUpperCase() : '?'),
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     color: isDark ? Colors.white : Colors.black87,

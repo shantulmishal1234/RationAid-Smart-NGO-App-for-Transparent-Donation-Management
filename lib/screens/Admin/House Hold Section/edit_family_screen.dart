@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:ration_aid/services/cloudinary_service.dart';
-import 'package:ration_aid/theme/app_colors.dart';
 
 class EditFamilyScreen extends StatefulWidget {
   final String familyId;
@@ -263,440 +262,262 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,
-        flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: isDark
-                  ? [
-                      theme.scaffoldBackgroundColor,
-                      theme.scaffoldBackgroundColor,
-                    ]
-                  : [
-                      theme.colorScheme.primary,
-                      theme.colorScheme.primary.withOpacity(0.8),
-                    ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            border: isDark
-                ? Border(bottom: BorderSide(color: theme.dividerColor))
-                : null,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back_ios_new,
+            size: 20,
+            color: theme.colorScheme.onSurface,
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'Edit Family Profile',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: theme.colorScheme.onSurface,
+            fontSize: 18,
           ),
         ),
-        title: const Text(
-          'Edit family',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: theme.dividerColor.withOpacity(0.2),
+            height: 1,
+          ),
         ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: isDark
-                      ? [
-                          theme.scaffoldBackgroundColor,
-                          theme.scaffoldBackgroundColor,
-                        ]
-                      : [
-                          theme.scaffoldBackgroundColor,
-                          theme.scaffoldBackgroundColor,
-                        ],
-                ),
-              ),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Header
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        theme.colorScheme.primary.withOpacity(
-                                          0.1,
-                                        ),
-                                        theme.colorScheme.primary.withOpacity(
-                                          0.05,
-                                        ),
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: const Icon(
-                                    Icons.family_restroom,
-                                    color: AppColors.primaryBlue,
-                                    size: 22,
-                                  ),
+          : Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 24,
+                    ),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionHeader('Identity Information'),
+                          const SizedBox(height: 16),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: _buildTextField(
+                                  controller: _familyNameController,
+                                  label: 'Family Head Name',
+                                  hint: 'Full Name',
+                                  validator: (value) {
+                                    if (value == null || value.trim().isEmpty) {
+                                      return 'Required';
+                                    }
+                                    return null;
+                                  },
                                 ),
-                                const SizedBox(width: 12),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Edit family profile',
-                                      style: theme.textTheme.titleMedium
-                                          ?.copyWith(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w800,
-                                            color: theme.colorScheme.onSurface,
-                                          ),
-                                    ),
-                                    Text(
-                                      'Update household details to keep records accurate.',
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
-                                            color: theme.colorScheme.onSurface
-                                                .withOpacity(0.6),
-                                          ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                flex: 2,
+                                child: _buildTextField(
+                                  controller: _cnicController,
+                                  label: 'CNIC',
+                                  hint: 'XXXXX-XXXXXXX-X',
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.allow(
+                                      RegExp(r'[0-9\-]'),
                                     ),
                                   ],
+                                  validator: (value) {
+                                    if (value != null && value.isNotEmpty) {
+                                      if (value.length < 13) {
+                                        return 'Invalid';
+                                      }
+                                    }
+                                    return null;
+                                  },
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-
-                            _buildSectionHeader('Basic information'),
-                            const SizedBox(height: 12),
-                            _buildTextField(
-                              controller: _familyNameController,
-                              label: 'Family head name',
-                              hint: 'Enter family name',
-                              icon: Icons.person,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(
-                                  RegExp(r'[a-zA-Z\s]'),
-                                ),
-                              ],
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Family name is required';
-                                }
-                                if (value.trim().length < 2) {
-                                  return 'Name must be at least 2 characters';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 12),
-                            _buildTextField(
-                              controller: _cnicController,
-                              label: 'CNIC (optional)',
-                              hint: 'XXXXX-XXXXXXX-X',
-                              icon: Icons.badge,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(
-                                  RegExp(r'[0-9\-]'),
-                                ),
-                              ],
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return null; // Optional
-                                }
-                                final cleaned = value.replaceAll(
-                                  RegExp(r'[^0-9]'),
-                                  '',
-                                );
-                                if (cleaned.length != 13) {
-                                  return 'CNIC must be 13 digits (XXXXX-XXXXXXX-X)';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Family size
-                            Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: theme.cardColor,
-                                borderRadius: BorderRadius.circular(16),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(
-                                      isDark ? 0.2 : 0.03,
-                                    ),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 6),
-                                  ),
-                                ],
-                                border: Border.all(color: theme.dividerColor),
                               ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.people,
-                                    color: AppColors.primaryBlue,
-                                    size: 22,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    'Total family size',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: theme.colorScheme.onSurface,
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primaryBlue.withOpacity(
-                                        0.12,
-                                      ),
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Text(
-                                      _totalFamilySize.toString(),
-                                      style: const TextStyle(
-                                        color: AppColors.primaryBlue,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildNumberField(
-                                    controller: _adultsController,
-                                    label: 'Adults',
-                                    icon: Icons.person,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _buildNumberField(
-                                    controller: _childrenController,
-                                    label: 'Children (under 18)',
-                                    icon: Icons.child_care,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 24),
-
-                            _buildSectionHeader('Location & contact'),
-                            const SizedBox(height: 12),
-                            _buildTextField(
-                              controller: _cityController,
-                              label: 'City',
-                              hint: 'Enter city (e.g. Lahore)',
-                              icon: Icons.location_city,
-                              validator: (value) =>
-                                  value == null || value.trim().isEmpty
-                                  ? 'City is required'
-                                  : null,
-                            ),
-                            const SizedBox(height: 12),
-                            _buildTextField(
-                              controller: _areaController,
-                              label: 'Area / Neighborhood',
-                              hint: 'Enter area (e.g. Johar Town)',
-                              icon: Icons.map,
-                              validator: (value) =>
-                                  value == null || value.trim().isEmpty
-                                  ? 'Area is required'
-                                  : null,
-                            ),
-                            const SizedBox(height: 12),
-                            _buildTextField(
-                              controller: _addressController,
-                              label: 'Full address',
-                              hint: 'Street, house number, etc.',
-                              icon: Icons.home,
-                              maxLines: 2,
-                              validator: (value) =>
-                                  value == null || value.trim().isEmpty
-                                  ? 'Address is required'
-                                  : null,
-                            ),
-                            const SizedBox(height: 12),
-                            _buildTextField(
-                              controller: _phoneController,
-                              label: 'Contact phone (Pakistan)',
-                              hint: '03XX-XXXXXXX',
-                              icon: Icons.phone,
-                              keyboardType: TextInputType.phone,
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Phone number is required';
-                                }
-                                final cleaned = value.replaceAll(
-                                  RegExp(r'[^0-9]'),
-                                  '',
-                                );
-                                if (!cleaned.startsWith('03') ||
-                                    cleaned.length != 11) {
-                                  return 'Enter valid Pakistan phone (03XX-XXXXXXX)';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 24),
-
-                            _buildSectionHeader('Assistance needs'),
-                            const SizedBox(height: 8),
-                            _buildAssistanceCheckboxes(),
-                            const SizedBox(height: 24),
-
-                            _buildSectionHeader('Additional information'),
-                            const SizedBox(height: 12),
-                            _buildTextField(
-                              controller: _emergencyContactController,
-                              label: 'Emergency contact (phone)',
-                              hint: '03XX-XXXXXXX',
-                              icon: Icons.contact_phone,
-                              keyboardType: TextInputType.phone,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(
-                                  RegExp(r'[0-9\-]'),
-                                ),
-                              ],
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return null; // Optional
-                                }
-                                final cleaned = value.replaceAll(
-                                  RegExp(r'[^0-9]'),
-                                  '',
-                                );
-                                if (!cleaned.startsWith('03') ||
-                                    cleaned.length != 11) {
-                                  return 'Enter valid Pakistan phone (03XX-XXXXXXX)';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 12),
-                            _buildTextField(
-                              controller: _incomeController,
-                              label: 'Monthly income (PKR)',
-                              hint: 'Enter amount in PKR',
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            _buildNotesField(),
-                            const SizedBox(height: 24),
-
-                            _buildSectionHeader('Verification documents'),
-                            const SizedBox(height: 8),
-                            _buildDocumentUpload(),
-                            const SizedBox(height: 24),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // Bottom button
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: theme.cardColor,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(
-                              isDark ? 0.2 : 0.05,
-                            ),
-                            blurRadius: 8,
-                            offset: const Offset(0, -2),
+                            ],
                           ),
+                          const SizedBox(height: 32),
+
+                          _buildSectionHeader('Demographics & Income'),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildNumberField(
+                                  controller: _adultsController,
+                                  label: 'Adults',
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _buildNumberField(
+                                  controller: _childrenController,
+                                  label: 'Children',
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                flex: 2,
+                                child: _buildTextField(
+                                  controller: _incomeController,
+                                  label: 'Monthly Income',
+                                  hint: 'PKR',
+                                  keyboardType: TextInputType.number,
+                                  prefixText: 'Rs. ',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 32),
+
+                          _buildSectionHeader('Contact Details'),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildTextField(
+                                  controller: _phoneController,
+                                  label: 'Phone Number',
+                                  hint: '03XX-XXXXXXX',
+                                  keyboardType: TextInputType.phone,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _buildTextField(
+                                  controller: _emergencyContactController,
+                                  label: 'Emergency Contact',
+                                  hint: '03XX-XXXXXXX',
+                                  keyboardType: TextInputType.phone,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 32),
+
+                          _buildSectionHeader('Location'),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildTextField(
+                                  controller: _cityController,
+                                  label: 'City',
+                                  hint: 'City Name',
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: _buildTextField(
+                                  controller: _areaController,
+                                  label: 'Area',
+                                  hint: 'Area Name',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          _buildTextField(
+                            controller: _addressController,
+                            label: 'Full Address',
+                            hint: 'House #, Street #, etc.',
+                            maxLines: 1,
+                          ),
+                          const SizedBox(height: 32),
+
+                          _buildSectionHeader('Assistance Needs'),
+                          const SizedBox(height: 12),
+                          _buildAssistanceChips(),
+                          const SizedBox(height: 32),
+
+                          _buildSectionHeader('Additional Notes'),
+                          const SizedBox(height: 12),
+                          _buildNotesField(),
+                          const SizedBox(height: 32),
+
+                          _buildSectionHeader('Verification Documents'),
+                          const SizedBox(height: 12),
+                          _buildUploadZone(),
+                          const SizedBox(height: 40),
                         ],
                       ),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton(
-                          onPressed: _isSaving ? null : _saveFamily,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryBlue,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: _isSaving
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.5,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Text(
-                                  'Save changes',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                        ),
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: theme.scaffoldBackgroundColor,
+                    border: Border(
+                      top: BorderSide(
+                        color: theme.dividerColor.withOpacity(0.5),
                       ),
                     ),
-                  ],
+                  ),
+                  child: SafeArea(
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: _isSaving ? null : _saveFamily,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        child: _isSaving
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2.5,
+                                ),
+                              )
+                            : const Text('Save Changes'),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
     );
   }
 
   Widget _buildSectionHeader(String title) {
     final theme = Theme.of(context);
-    return Row(
-      children: [
-        Container(
-          width: 4,
-          height: 18,
-          decoration: BoxDecoration(
-            color: AppColors.primaryBlue,
-            borderRadius: BorderRadius.circular(999),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: theme.colorScheme.onSurface,
-          ),
-        ),
-      ],
+    return Text(
+      title,
+      style: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        color: theme.colorScheme.primary,
+        letterSpacing: 0.5,
+      ),
     );
   }
 
@@ -704,303 +525,319 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
     required TextEditingController controller,
     required String label,
     required String hint,
-    IconData? icon,
     String? Function(String?)? validator,
     TextInputType? keyboardType,
     int maxLines = 1,
     List<TextInputFormatter>? inputFormatters,
+    String? prefixText,
   }) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.02),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: TextFormField(
-        controller: controller,
-        validator: validator,
-        keyboardType: keyboardType,
-        maxLines: maxLines,
-        inputFormatters: inputFormatters,
-        style: TextStyle(color: theme.colorScheme.onSurface),
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          hintStyle: TextStyle(
-            color: theme.colorScheme.onSurface.withOpacity(0.4),
-            fontSize: 14,
-          ),
-          labelStyle: TextStyle(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
             color: theme.colorScheme.onSurface.withOpacity(0.7),
           ),
-          prefixIcon: icon != null
-              ? Icon(
-                  icon,
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  size: 20,
-                )
-              : null,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: controller,
+          validator: validator,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          inputFormatters: inputFormatters,
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w500,
+          ),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(
+              color: theme.colorScheme.onSurface.withOpacity(0.3),
+              fontSize: 14,
+              fontWeight: FontWeight.normal,
+            ),
+            prefixText: prefixText,
+            prefixStyle: TextStyle(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w500,
+            ),
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 14,
+            ),
+            filled: true,
+            fillColor: isDark
+                ? theme.colorScheme.surface
+                : theme.colorScheme.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.dividerColor.withOpacity(0.8),
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.dividerColor.withOpacity(0.8),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.colorScheme.primary,
+                width: 1.5,
+              ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.colorScheme.error.withOpacity(0.5),
+              ),
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 
   Widget _buildNumberField({
     required TextEditingController controller,
     required String label,
-    required IconData icon,
   }) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      height: 96,
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.02),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: theme.colorScheme.onSurface.withOpacity(0.7),
           ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: theme.colorScheme.onSurface.withOpacity(0.5),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface,
           ),
-          const SizedBox(height: 6),
-          SizedBox(
-            height: 32,
-            child: Center(
-              child: TextFormField(
-                controller: controller,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface,
-                ),
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  isCollapsed: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(vertical: 14),
+            filled: true,
+            fillColor: isDark
+                ? theme.colorScheme.surface
+                : theme.colorScheme.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.dividerColor.withOpacity(0.8),
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.dividerColor.withOpacity(0.8),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.colorScheme.primary,
+                width: 1.5,
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildAssistanceCheckboxes() {
+  Widget _buildAssistanceChips() {
     final theme = Theme.of(context);
     final needs = [
       ('Food', Icons.restaurant),
       ('Medicine', Icons.medical_services),
+      ('Education', Icons.school),
+      ('Shelter', Icons.home),
     ];
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      child: Column(
-        children: needs.map((need) {
-          final isSelected = _assistanceNeeds.contains(need.$1);
-          return CheckboxListTile(
-            value: isSelected,
-            onChanged: (value) {
-              setState(() {
-                if (value == true) {
-                  _assistanceNeeds.add(need.$1);
-                } else {
-                  _assistanceNeeds.remove(need.$1);
-                }
-              });
-            },
-            title: Text(
-              need.$1,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: theme.colorScheme.onSurface,
-              ),
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: needs.map((need) {
+        final isSelected = _assistanceNeeds.contains(need.$1);
+        return FilterChip(
+          label: Text(need.$1),
+          avatar: isSelected
+              ? null
+              : Icon(
+                  need.$2,
+                  size: 16,
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                ),
+          selected: isSelected,
+          onSelected: (bool selected) {
+            setState(() {
+              if (selected) {
+                _assistanceNeeds.add(need.$1);
+              } else {
+                _assistanceNeeds.remove(need.$1);
+              }
+            });
+          },
+          backgroundColor: theme.scaffoldBackgroundColor,
+          selectedColor: theme.colorScheme.primary.withOpacity(0.15),
+          checkmarkColor: theme.colorScheme.primary,
+          labelStyle: TextStyle(
+            color: isSelected
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface.withOpacity(0.8),
+            fontSize: 13,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : theme.dividerColor.withOpacity(0.8),
             ),
-            secondary: Icon(need.$2, color: AppColors.primaryBlue, size: 20),
-            controlAffinity: ListTileControlAffinity.leading,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-            activeColor: AppColors.primaryBlue,
-            checkColor: Colors.white,
-          );
-        }).toList(),
-      ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        );
+      }).toList(),
     );
   }
 
   Widget _buildNotesField() {
     final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      child: TextFormField(
-        controller: _notesController,
-        maxLines: 4,
-        maxLength: 500,
-        style: TextStyle(color: theme.colorScheme.onSurface),
-        buildCounter:
-            (context, {required currentLength, required isFocused, maxLength}) {
-              return Padding(
-                padding: const EdgeInsets.only(top: 4, right: 8),
-                child: Text(
-                  '$currentLength/500 characters',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: currentLength > 500
-                        ? Colors.red
-                        : theme.colorScheme.onSurface.withOpacity(0.5),
-                  ),
+    final isDark = theme.brightness == Brightness.dark;
+
+    return TextFormField(
+      controller: _notesController,
+      maxLines: 4,
+      maxLength: 500,
+      style: TextStyle(color: theme.colorScheme.onSurface),
+      buildCounter:
+          (context, {required currentLength, required isFocused, maxLength}) {
+            return Padding(
+              padding: const EdgeInsets.only(top: 4, right: 8),
+              child: Text(
+                '$currentLength/500 characters',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: currentLength > 500
+                      ? Colors.red
+                      : theme.colorScheme.onSurface.withOpacity(0.5),
                 ),
-              );
-            },
-        decoration: InputDecoration(
-          labelText: 'Additional notes (optional)',
-          hintText: 'Any special circumstances or additional information...',
-          hintStyle: TextStyle(
-            color: theme.colorScheme.onSurface.withOpacity(0.4),
-            fontSize: 13,
-          ),
-          labelStyle: TextStyle(
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
-          ),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.all(14),
+              ),
+            );
+          },
+      decoration: InputDecoration(
+        labelText: 'Additional notes (optional)',
+        hintText: 'Any special circumstances or additional information...',
+        filled: true,
+        fillColor: isDark
+            ? theme.scaffoldBackgroundColor
+            : theme.scaffoldBackgroundColor.withOpacity(0.5),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: theme.dividerColor),
         ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: theme.dividerColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.all(14),
       ),
     );
   }
 
-  Widget _buildDocumentUpload() {
+  Widget _buildUploadZone() {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.upload_file,
-                color: theme.colorScheme.onSurface.withOpacity(0.7),
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Upload verification documents',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-            ],
+    return InkWell(
+      onTap: _isUploadingDoc ? null : _pickAndUploadDocument,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: theme.dividerColor,
+            style: BorderStyle.solid,
+            width: 1,
           ),
-          const SizedBox(height: 4),
-          Text(
-            'ID, proof of income, utility bills, etc.',
-            style: TextStyle(
-              fontSize: 12,
-              color: theme.colorScheme.onSurface.withOpacity(0.6),
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (_uploadedFileName != null) ...[
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.green.withOpacity(0.1)
-                    : Colors.green.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isDark
-                      ? Colors.green.withOpacity(0.5)
-                      : Colors.green.withOpacity(0.5),
-                ),
-              ),
-              child: Row(
+        ),
+        child: _uploadedFileName != null
+            ? Row(
                 children: [
-                  Icon(
-                    Icons.check_circle,
-                    color: isDark ? Colors.green[300] : Colors.green[700],
-                    size: 18,
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.description,
+                      color: Colors.green,
+                      size: 24,
+                    ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 16),
                   Expanded(
-                    child: Text(
-                      _uploadedFileName!,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.green[200] : Colors.green[800],
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _uploadedFileName!,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Tap to replace',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   IconButton(
                     icon: Icon(
                       Icons.close,
-                      color: isDark ? Colors.green[300] : Colors.green[700],
-                      size: 18,
+                      color: theme.colorScheme.onSurface.withOpacity(0.5),
                     ),
                     onPressed: () {
                       setState(() {
@@ -1008,46 +845,35 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                         _uploadedFileName = null;
                       });
                     },
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              )
+            : Column(
+                children: [
+                  Icon(
+                    Icons.cloud_upload_outlined,
+                    size: 32,
+                    color: theme.colorScheme.primary.withOpacity(0.6),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _isUploadingDoc ? 'Uploading...' : 'Tap to upload document',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface.withOpacity(0.8),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Supports JPG, PNG, PDF (Max 5MB)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurface.withOpacity(0.5),
+                    ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 10),
-          ],
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _isUploadingDoc ? null : _pickAndUploadDocument,
-              icon: _isUploadingDoc
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      Icons.folder_open,
-                      size: 18,
-                      color: theme.colorScheme.primary,
-                    ),
-              label: Text(
-                _isUploadingDoc ? 'Uploading...' : 'Choose files',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                side: BorderSide(color: theme.dividerColor),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
