@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:ration_aid/services/audit_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
+import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
+import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 
 class DonationDetailScreen extends StatefulWidget {
   final String donationId;
@@ -136,36 +138,8 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: AppBar(
-        elevation: 0,
-        centerTitle: true,
-        backgroundColor: theme.scaffoldBackgroundColor,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_new,
-            size: 20,
-            color: theme.colorScheme.onSurface,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          'Donation Details',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: theme.colorScheme.onSurface,
-            fontSize: 18,
-          ),
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            color: theme.dividerColor.withOpacity(0.2),
-            height: 1,
-          ),
-        ),
-      ),
+    return AdminScaffold(
+      title: 'Donation Details',
       body: Column(
         children: [
           Expanded(
@@ -181,31 +155,33 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                   // Timestamps
                   _buildSectionHeader('Timestamps'),
                   const SizedBox(height: 12),
-                  _buildTimestamps(
-                    createdAt,
-                    updatedAt,
-                    decisionByName,
-                    decisionByEmail,
+                  FrostedPanel(
+                    child: _buildTimestamps(
+                      createdAt,
+                      updatedAt,
+                      decisionByName,
+                      decisionByEmail,
+                    ),
                   ),
                   const SizedBox(height: 32),
 
                   // Payment Proof
                   _buildSectionHeader('Payment Proof'),
                   const SizedBox(height: 12),
-                  _buildProofSection(d),
+                  FrostedPanel(child: _buildProofSection(d)),
                   const SizedBox(height: 32),
 
                   // Verification Decision
                   _buildSectionHeader('Verification Decision'),
                   const SizedBox(height: 12),
-                  _buildDecisionSection(isDark),
+                  FrostedPanel(child: _buildDecisionSection(isDark)),
                   const SizedBox(height: 32),
 
                   // History
                   if (verifications.isNotEmpty) ...[
                     _buildSectionHeader('Verification History'),
                     const SizedBox(height: 12),
-                    _buildHistoryList(verifications),
+                    FrostedPanel(child: _buildHistoryList(verifications)),
                     const SizedBox(height: 32),
                   ],
                 ],

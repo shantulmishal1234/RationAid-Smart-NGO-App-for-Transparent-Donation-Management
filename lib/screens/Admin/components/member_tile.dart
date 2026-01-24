@@ -12,7 +12,7 @@ class MemberTile extends StatelessWidget {
   final Timestamp? lastLoginAt;
   final int deliveryCount;
   final VoidCallback onTap;
-  final int? serialNumber; // NEW
+  final int? serialNumber;
 
   const MemberTile({
     super.key,
@@ -25,7 +25,7 @@ class MemberTile extends StatelessWidget {
     required this.lastLoginAt,
     required this.deliveryCount,
     required this.onTap,
-    this.serialNumber, // NEW
+    this.serialNumber,
   });
 
   String _mainRoleLabel() {
@@ -64,25 +64,18 @@ class MemberTile extends StatelessWidget {
     return RepaintBoundary(
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: theme.cardColor,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
-            ],
-            border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: theme.dividerColor.withOpacity(0.6)),
           ),
           child: Row(
             children: [
               CircleAvatar(
-                radius: 20,
+                radius: 16,
                 backgroundColor: isDark
                     ? Colors.blueGrey[800]
                     : Colors.blueGrey[50],
@@ -92,11 +85,12 @@ class MemberTile extends StatelessWidget {
                       : (name.isNotEmpty ? name[0].toUpperCase() : '?'),
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
+                    fontSize: 12,
                     color: isDark ? Colors.white : Colors.black87,
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,6 +100,7 @@ class MemberTile extends StatelessWidget {
                       style: theme.textTheme.bodyLarge?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: theme.colorScheme.onSurface,
+                        fontSize: 14,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -115,37 +110,41 @@ class MemberTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        fontSize: 11,
                       ),
                     ),
                     // For donors: show last login only
                     // For others: show role, department, last login, and deliveries
                     if (isDonor) ...[
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 1),
                       Text(
                         'Last login: $lastLoginText',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          fontSize: 10,
                         ),
                       ),
                     ] else ...[
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 1),
                       Text(
                         '$roleText • $department',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          fontSize: 10,
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 1),
                       Text(
                         'Last login: $lastLoginText • Deliveries: $deliveryCount',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          fontSize: 10,
                         ),
                       ),
                     ],

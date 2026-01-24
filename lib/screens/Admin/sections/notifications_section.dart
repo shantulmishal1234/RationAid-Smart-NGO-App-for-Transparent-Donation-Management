@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:ration_aid/screens/Admin/widgets/notification_card.dart';
 import 'package:ration_aid/screens/Admin/Notifications/admin_send_notification_screen.dart';
 import 'package:ration_aid/screens/Admin/Notifications/notifications_center_screen.dart';
+import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 
 /// Notifications section for sending and viewing notifications
 class NotificationsSection extends StatelessWidget {
@@ -42,18 +43,7 @@ class NotificationsSection extends StatelessWidget {
 
         // Grid inside card container
         Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              color: theme.cardColor.withOpacity(0.96),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
-                  blurRadius: 18,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
+          child: FrostedPanel(
             padding: const EdgeInsets.all(16),
             child: GridView.count(
               padding: const EdgeInsets.only(bottom: 100),

@@ -4,6 +4,7 @@ import 'package:ration_aid/screens/Admin/widgets/report_card.dart';
 import 'package:ration_aid/screens/Admin/Reports&Analytics/hrm_report_screen.dart';
 import 'package:ration_aid/screens/Admin/Reports&Analytics/donations_report_screen.dart';
 import 'package:ration_aid/screens/Admin/Reports&Analytics/family_statistics_report_screen.dart';
+import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 
 /// Reports section showing different report types
 class ReportsSection extends StatelessWidget {
@@ -49,18 +50,7 @@ class ReportsSection extends StatelessWidget {
 
           // Grid inside card container
           Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: theme.cardColor.withOpacity(0.96),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
-                    blurRadius: 18,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
+            child: FrostedPanel(
               padding: const EdgeInsets.all(16),
               child: GridView.count(
                 padding: const EdgeInsets.only(bottom: 100),

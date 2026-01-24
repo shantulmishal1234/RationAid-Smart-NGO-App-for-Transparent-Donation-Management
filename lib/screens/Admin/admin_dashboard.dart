@@ -13,6 +13,7 @@ import 'package:ration_aid/screens/Admin/sections/profile_section.dart';
 import 'package:ration_aid/screens/Admin/Audit Trail/audit_trail_screen.dart';
 
 import 'package:ration_aid/theme/app_colors.dart';
+import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -48,42 +49,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: AppBar(
-        elevation: 0,
-        titleSpacing: 16,
-        title: Text(
-          'Admin Dashboard',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: theme.colorScheme.onSurface,
-          ),
-        ),
-        // Gradient app bar background
-        flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: isDark
-                  ? [
-                      theme.scaffoldBackgroundColor,
-                      theme.scaffoldBackgroundColor,
-                    ]
-                  : [AppColors.primaryBlue, AppColors.accentGreen],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-            border: isDark
-                ? Border(bottom: BorderSide(color: theme.dividerColor))
-                : null,
-          ),
-        ),
-      ),
+    return AdminScaffold(
+      title: 'Admin Dashboard',
+      showBackButton: false,
       body: Stack(
         children: [
           // Main content
           SafeArea(
             top: false,
+            bottom: false,
             child: Padding(
               padding: const EdgeInsets.only(top: 4),
               child: AnimatedSwitcher(

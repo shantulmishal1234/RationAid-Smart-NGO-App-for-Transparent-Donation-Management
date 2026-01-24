@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:ration_aid/services/audit_service.dart';
 import 'package:ration_aid/utils/file_download_helper.dart';
 import 'package:ration_aid/theme/app_colors.dart';
+import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
+import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 
 class DonationsReportScreen extends StatefulWidget {
   const DonationsReportScreen({super.key});
@@ -239,28 +241,15 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: AppBar(
-        elevation: 0,
-        centerTitle: true,
-        title: Text(
-          'Donations report',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: isDark ? AppColors.primaryBlue : Colors.white,
-          ),
+    return AdminScaffold(
+      title: 'Donations Analytics',
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.download),
+          tooltip: 'Export report',
+          onPressed: _exportReport,
         ),
-        backgroundColor: isDark ? Colors.grey[900] : AppColors.primaryBlue,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.download),
-            tooltip: 'Export report',
-            onPressed: _exportReport,
-          ),
-        ],
-      ),
+      ],
       body: FutureBuilder<Map<String, dynamic>>(
         future: _loadDonationsSummary(),
         builder: (context, snapshot) {
@@ -294,31 +283,6 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Centered header
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Donations analytics',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: theme.colorScheme.onSurface,
-                        letterSpacing: 0.1,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Financial contributions and verification status overview.',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
                 // Overview
                 _sectionTitle('Overview'),
                 const SizedBox(height: 12),
@@ -375,9 +339,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
                 // Status breakdown
                 _sectionTitle('Status breakdown'),
                 const SizedBox(height: 12),
-                Card(
-                  elevation: 2,
-                  color: theme.cardColor,
+                FrostedPanel(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -420,9 +382,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
                 _sectionTitle('Top donors'),
                 const SizedBox(height: 12),
                 if (topDonors.isEmpty)
-                  Card(
-                    elevation: 2,
-                    color: theme.cardColor,
+                  FrostedPanel(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Text(
@@ -437,9 +397,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
                   ...topDonors.asMap().entries.map((entry) {
                     final index = entry.key;
                     final donor = entry.value;
-                    return Card(
-                      elevation: 1,
-                      color: theme.cardColor,
+                    return FrostedPanel(
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         leading: CircleAvatar(
@@ -517,9 +475,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
     required Color color,
   }) {
     final theme = Theme.of(context);
-    return Card(
-      elevation: 2,
-      color: theme.cardColor,
+    return FrostedPanel(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

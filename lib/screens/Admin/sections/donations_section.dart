@@ -1,13 +1,17 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/screens/Admin/models/admin_enums.dart';
 import 'package:ration_aid/screens/Admin/utils/admin_queries.dart';
-import 'package:ration_aid/screens/Admin/widgets/filters/donation_status_filter.dart';
+import 'package:ration_aid/screens/Admin/utils/admin_helpers.dart';
+
 import 'package:ration_aid/screens/Admin/components/donation_card.dart';
 import 'package:ration_aid/screens/Admin/Donation Section/donation_detail_screen.dart';
+import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 
 /// Donations section for managing donor payments
-class DonationsSection extends StatelessWidget {
+class DonationsSection extends StatefulWidget {
   final DonationStatusFilter donationFilter;
   final ValueChanged<DonationStatusFilter> onFilterChanged;
 
@@ -18,154 +22,417 @@ class DonationsSection extends StatelessWidget {
   });
 
   @override
+  State<DonationsSection> createState() => _DonationsSectionState();
+}
+
+class _DonationsSectionState extends State<DonationsSection> {
+  final _searchController = TextEditingController();
+  String _donationSearch = '';
+  Timer? _debounce;
+  late Future<Map<String, int>> _overviewFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOverview();
+  }
+
+  void _loadOverview({bool forceRefresh = false}) {
+    _overviewFuture = AdminHelpers.loadDonationOverview(
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {
+          _donationSearch = value.trim().toLowerCase();
+        });
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
 
-    return Padding(
-      key: const ValueKey('donations'),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Centered header
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Donation verification',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: theme.colorScheme.onSurface,
-                  letterSpacing: 0.1,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Header Row
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Center(
+            child: Text(
+              'Donation Verification',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: theme.colorScheme.onSurface,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+        ),
+
+        // Collapsible Overview
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+
+          child: FrostedPanel(
+            padding: EdgeInsets.zero,
+            child: ExpansionTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              collapsedShape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              title: Text(
+                'Overview & Statistics',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface.withOpacity(0.8),
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Admin-only review of donor payments and impact records.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+              leading: Icon(
+                Icons.analytics_outlined,
+                color: theme.colorScheme.primary,
+              ),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              children: [
+                FutureBuilder<Map<String, int>>(
+                  future: _overviewFuture,
+                  builder: (context, snapshot) {
+                    final d =
+                        snapshot.data ??
+                        {
+                          'total': 0,
+                          'pending': 0,
+                          'under_review': 0,
+                          'verified': 0,
+                          'rejected': 0,
+                        };
+                    final loading =
+                        snapshot.connectionState == ConnectionState.waiting;
+
+                    if (loading) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      );
+                    }
+
+                    return Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        _overviewChip(
+                          context,
+                          label: 'Total',
+                          value: d['total'].toString(),
+                          color: AdminColors.primaryBlue,
+                        ),
+                        _overviewChip(
+                          context,
+                          label: 'Pending',
+                          value: d['pending'].toString(),
+                          color: Colors.amber[700]!,
+                        ),
+                        _overviewChip(
+                          context,
+                          label: 'Review',
+                          value: d['under_review'].toString(),
+                          color: Colors.blue[600]!,
+                        ),
+                        _overviewChip(
+                          context,
+                          label: 'Verified',
+                          value: d['verified'].toString(),
+                          color: Colors.green[600]!,
+                        ),
+                        _overviewChip(
+                          context,
+                          label: 'Rejected',
+                          value: d['rejected'].toString(),
+                          color: Colors.red[400]!,
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Toolbar: Search | Filter
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              // Search Bar
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: TextField(
+                    controller: _searchController,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontSize: 14,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Search donations...',
+                      hintStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        fontSize: 14,
+                      ),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        size: 20,
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                      ),
+                      filled: true,
+                      fillColor: theme.cardColor,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: theme.dividerColor.withOpacity(0.6),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: theme.dividerColor.withOpacity(0.6),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.primary,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                    onChanged: _onSearchChanged,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+
+              // Filter Menu
+              Container(
+                height: 48,
+                width: 48,
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.dividerColor.withOpacity(0.6),
+                  ),
+                ),
+                child: PopupMenuButton<DonationStatusFilter>(
+                  icon: Icon(
+                    Icons.filter_list,
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    size: 22,
+                  ),
+                  tooltip: 'Filter by Status',
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  onSelected: widget.onFilterChanged,
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: DonationStatusFilter.all,
+                      child: Text('All Status'),
+                    ),
+                    const PopupMenuItem(
+                      value: DonationStatusFilter.pending,
+                      child: Text('Pending'),
+                    ),
+                    const PopupMenuItem(
+                      value: DonationStatusFilter.underReview,
+                      child: Text('Under Review'),
+                    ),
+                    const PopupMenuItem(
+                      value: DonationStatusFilter.verified,
+                      child: Text('Verified'),
+                    ),
+                    const PopupMenuItem(
+                      value: DonationStatusFilter.rejected,
+                      child: Text('Rejected'),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+        ),
+        const SizedBox(height: 16),
 
-          // Filter chips inside soft panel
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: theme.cardColor.withOpacity(0.95),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: cs.outline.withOpacity(0.08)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
-                  blurRadius: 14,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: DonationStatusFilterChips(
-              selected: donationFilter,
-              onChanged: onFilterChanged,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // List container
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: theme.cardColor.withOpacity(0.96),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
-                    blurRadius: 18,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.fromLTRB(10, 10, 10, 4),
-              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: AdminQueries.donationsQuery(donationFilter),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Text(
-                        'Failed to load donations',
-                        style: TextStyle(color: theme.colorScheme.error),
-                      ),
-                    );
-                  }
-
-                  final docs = snapshot.data?.docs ?? [];
-
-                  // Sort by createdAt (oldest first)
-                  docs.sort((a, b) {
-                    final t1 = a.data()['createdAt'] as Timestamp?;
-                    final t2 = b.data()['createdAt'] as Timestamp?;
-                    if (t1 == null && t2 == null) return 0;
-                    if (t1 == null) return 1;
-                    if (t2 == null) return -1;
-                    return t1.compareTo(t2);
-                  });
-
-                  if (docs.isEmpty) {
-                    return Center(
-                      child: Text(
-                        'No donations for this filter.',
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurface.withOpacity(0.5),
-                        ),
-                      ),
-                    );
-                  }
-
-                  return ListView.separated(
-                    padding: const EdgeInsets.only(bottom: 100),
-                    itemCount: docs.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final data = docs[index].data();
-                      final id = docs[index].id;
-
-                      return DonationCard(
-                        id: id,
-                        serialNumber: index + 1, // NEW
-                        donorName: data['donorName'] ?? 'Unknown donor',
-                        donorEmail: data['donorEmail'] ?? '',
-                        amount: (data['amount'] ?? 0).toDouble(),
-                        currency: data['currency'] ?? 'PKR',
-                        method: data['method'] ?? 'cash',
-                        status: data['status'] ?? 'pending',
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => DonationDetailScreen(
-                                donationId: id,
-                                initialData: data,
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
+        // List container
+        Expanded(
+          child: FrostedPanel(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: EdgeInsets.zero,
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: AdminQueries.donationsQuery(widget.donationFilter),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Failed to load donations',
+                      style: TextStyle(color: theme.colorScheme.error),
+                    ),
                   );
-                },
-              ),
+                }
+
+                var docs = snapshot.data?.docs ?? [];
+
+                // Sort by createdAt (oldest first)
+                docs.sort((a, b) {
+                  final t1 = a.data()['createdAt'] as Timestamp?;
+                  final t2 = b.data()['createdAt'] as Timestamp?;
+                  if (t1 == null && t2 == null) return 0;
+                  if (t1 == null) return 1;
+                  if (t2 == null) return -1;
+                  return t1.compareTo(t2);
+                });
+
+                // Client-side search filter
+                if (_donationSearch.isNotEmpty) {
+                  docs = docs.where((doc) {
+                    final data = doc.data();
+                    final name = (data['donorName'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                    final email = (data['donorEmail'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                    final method = (data['method'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                    final needle = _donationSearch;
+                    return name.contains(needle) ||
+                        email.contains(needle) ||
+                        method.contains(needle);
+                  }).toList();
+                }
+
+                if (docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.search_off,
+                          size: 48,
+                          color: theme.colorScheme.onSurface.withOpacity(0.2),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No donations found.',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
+                  itemCount: docs.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final data = docs[index].data();
+                    final id = docs[index].id;
+
+                    return DonationCard(
+                      id: id,
+                      serialNumber: index + 1,
+                      donorName: data['donorName'] ?? 'Unknown donor',
+                      donorEmail: data['donorEmail'] ?? '',
+                      amount: (data['amount'] ?? 0).toDouble(),
+                      currency: data['currency'] ?? 'PKR',
+                      method: data['method'] ?? 'cash',
+                      status: data['status'] ?? 'pending',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => DonationDetailScreen(
+                              donationId: id,
+                              initialData: data,
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
             ),
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+
+  Widget _overviewChip(
+    BuildContext context, {
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          '$label: ',
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 }

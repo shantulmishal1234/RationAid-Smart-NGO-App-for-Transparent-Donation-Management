@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:ration_aid/screens/Admin/utils/admin_helpers.dart';
 import 'package:ration_aid/screens/Admin/widgets/stat_card.dart';
 import 'package:ration_aid/screens/Admin/widgets/alert_tile.dart';
+import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 
 /// Dashboard section showing overview statistics and alerts
@@ -111,7 +112,7 @@ class _DashboardSectionState extends State<DashboardSection> {
               const SizedBox(height: 18),
 
               // Live stats in frosted panel - OPTIMIZED with stable future
-              _FrostedPanel(
+              FrostedPanel(
                 child: FutureBuilder<Map<String, int>>(
                   future: _statsFuture,
                   builder: (context, snapshot) {
@@ -191,7 +192,7 @@ class _DashboardSectionState extends State<DashboardSection> {
               const SizedBox(height: 16),
 
               // Secondary stats (kept as-is, but text not about verification bar)
-              _FrostedPanel(
+              FrostedPanel(
                 child: const Row(
                   children: [
                     Expanded(
@@ -252,7 +253,7 @@ class _DashboardSectionState extends State<DashboardSection> {
               const SizedBox(height: 10),
 
               // Static alerts
-              _FrostedPanel(
+              FrostedPanel(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 10,
@@ -294,7 +295,7 @@ class _DashboardSectionState extends State<DashboardSection> {
                 ),
               ),
               const SizedBox(height: 10),
-              _FrostedPanel(
+              FrostedPanel(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 10,
@@ -328,43 +329,6 @@ class _DashboardSectionState extends State<DashboardSection> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// Frosted / glass panel used around groups of content
-class _FrostedPanel extends StatelessWidget {
-  final Widget child;
-  final EdgeInsetsGeometry? padding;
-
-  const _FrostedPanel({required this.child, this.padding});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      decoration: BoxDecoration(
-        color: theme.cardColor.withOpacity(isDark ? 0.6 : 0.82),
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
-        border: Border.all(
-          color: theme.dividerColor.withOpacity(isDark ? 0.1 : 0.5),
-          width: 0.8,
-        ),
-      ),
-      child: Padding(
-        padding: padding ?? const EdgeInsets.all(14),
-        child: child,
       ),
     );
   }

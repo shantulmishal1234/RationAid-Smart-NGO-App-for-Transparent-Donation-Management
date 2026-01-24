@@ -257,10 +257,10 @@ class _AuthScreenState extends State<AuthScreen>
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: isDark
-                  ? [Colors.black, Colors.black]
+                  ? [const Color(0xFF121212), const Color(0xFF1E1E1E)]
                   : [const Color(0xFF1E88E5), const Color(0xFF26A69A)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
           ),
           child: SafeArea(

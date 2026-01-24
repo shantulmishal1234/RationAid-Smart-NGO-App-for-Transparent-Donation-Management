@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:ration_aid/services/cloudinary_service.dart';
+import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
+import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 
 class EditFamilyScreen extends StatefulWidget {
   final String familyId;
@@ -263,36 +265,8 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: AppBar(
-        elevation: 0,
-        centerTitle: true,
-        backgroundColor: theme.scaffoldBackgroundColor,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_new,
-            size: 20,
-            color: theme.colorScheme.onSurface,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          'Edit Family Profile',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: theme.colorScheme.onSurface,
-            fontSize: 18,
-          ),
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            color: theme.dividerColor.withOpacity(0.2),
-            height: 1,
-          ),
-        ),
-      ),
+    return AdminScaffold(
+      title: 'Edit Family Profile',
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
@@ -310,150 +284,163 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                         children: [
                           _buildSectionHeader('Identity Information'),
                           const SizedBox(height: 16),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: _buildTextField(
-                                  controller: _familyNameController,
-                                  label: 'Family Head Name',
-                                  hint: 'Full Name',
-                                  validator: (value) {
-                                    if (value == null || value.trim().isEmpty) {
-                                      return 'Required';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                flex: 2,
-                                child: _buildTextField(
-                                  controller: _cnicController,
-                                  label: 'CNIC',
-                                  hint: 'XXXXX-XXXXXXX-X',
-                                  keyboardType: TextInputType.number,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.allow(
-                                      RegExp(r'[0-9\-]'),
-                                    ),
-                                  ],
-                                  validator: (value) {
-                                    if (value != null && value.isNotEmpty) {
-                                      if (value.length < 13) {
-                                        return 'Invalid';
+                          FrostedPanel(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: _buildTextField(
+                                    controller: _familyNameController,
+                                    label: 'Family Head Name',
+                                    hint: 'Full Name',
+                                    validator: (value) {
+                                      if (value == null ||
+                                          value.trim().isEmpty) {
+                                        return 'Required';
                                       }
-                                    }
-                                    return null;
-                                  },
+                                      return null;
+                                    },
+                                  ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  flex: 2,
+                                  child: _buildTextField(
+                                    controller: _cnicController,
+                                    label: 'CNIC',
+                                    hint: 'XXXXX-XXXXXXX-X',
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.allow(
+                                        RegExp(r'[0-9\-]'),
+                                      ),
+                                    ],
+                                    validator: (value) {
+                                      if (value != null && value.isNotEmpty) {
+                                        if (value.length < 13) {
+                                          return 'Invalid';
+                                        }
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 32),
 
                           _buildSectionHeader('Demographics & Income'),
                           const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildNumberField(
-                                  controller: _adultsController,
-                                  label: 'Adults',
+                          FrostedPanel(
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _buildNumberField(
+                                    controller: _adultsController,
+                                    label: 'Adults',
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildNumberField(
-                                  controller: _childrenController,
-                                  label: 'Children',
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _buildNumberField(
+                                    controller: _childrenController,
+                                    label: 'Children',
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                flex: 2,
-                                child: _buildTextField(
-                                  controller: _incomeController,
-                                  label: 'Monthly Income',
-                                  hint: 'PKR',
-                                  keyboardType: TextInputType.number,
-                                  prefixText: 'Rs. ',
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  flex: 2,
+                                  child: _buildTextField(
+                                    controller: _incomeController,
+                                    label: 'Monthly Income',
+                                    hint: 'PKR',
+                                    keyboardType: TextInputType.number,
+                                    prefixText: 'Rs. ',
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 32),
 
                           _buildSectionHeader('Contact Details'),
                           const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildTextField(
-                                  controller: _phoneController,
-                                  label: 'Phone Number',
-                                  hint: '03XX-XXXXXXX',
-                                  keyboardType: TextInputType.phone,
+                          FrostedPanel(
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: _phoneController,
+                                    label: 'Phone Number',
+                                    hint: '03XX-XXXXXXX',
+                                    keyboardType: TextInputType.phone,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildTextField(
-                                  controller: _emergencyContactController,
-                                  label: 'Emergency Contact',
-                                  hint: '03XX-XXXXXXX',
-                                  keyboardType: TextInputType.phone,
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _buildTextField(
+                                    controller: _emergencyContactController,
+                                    label: 'Emergency Contact',
+                                    hint: '03XX-XXXXXXX',
+                                    keyboardType: TextInputType.phone,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 32),
 
                           _buildSectionHeader('Location'),
                           const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildTextField(
-                                  controller: _cityController,
-                                  label: 'City',
-                                  hint: 'City Name',
+                          FrostedPanel(
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _buildTextField(
+                                        controller: _cityController,
+                                        label: 'City',
+                                        hint: 'City Name',
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: _buildTextField(
+                                        controller: _areaController,
+                                        label: 'Area',
+                                        hint: 'Area Name',
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildTextField(
-                                  controller: _areaController,
-                                  label: 'Area',
-                                  hint: 'Area Name',
+                                const SizedBox(height: 16),
+                                _buildTextField(
+                                  controller: _addressController,
+                                  label: 'Full Address',
+                                  hint: 'House #, Street #, etc.',
+                                  maxLines: 1,
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          _buildTextField(
-                            controller: _addressController,
-                            label: 'Full Address',
-                            hint: 'House #, Street #, etc.',
-                            maxLines: 1,
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 32),
 
                           _buildSectionHeader('Assistance Needs'),
                           const SizedBox(height: 12),
-                          _buildAssistanceChips(),
+                          FrostedPanel(child: _buildAssistanceChips()),
                           const SizedBox(height: 32),
 
                           _buildSectionHeader('Additional Notes'),
                           const SizedBox(height: 12),
-                          _buildNotesField(),
+                          FrostedPanel(child: _buildNotesField()),
                           const SizedBox(height: 32),
 
                           _buildSectionHeader('Verification Documents'),
                           const SizedBox(height: 12),
-                          _buildUploadZone(),
+                          FrostedPanel(child: _buildUploadZone()),
                           const SizedBox(height: 40),
                         ],
                       ),

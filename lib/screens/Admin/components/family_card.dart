@@ -11,7 +11,7 @@ class FamilyCard extends StatelessWidget {
   final VoidCallback onTap;
   final String? assignedVolunteerName;
   final VoidCallback? onEdit;
-  final int? serialNumber; // NEW
+  final int? serialNumber;
 
   const FamilyCard({
     super.key,
@@ -24,7 +24,7 @@ class FamilyCard extends StatelessWidget {
     required this.assignedVolunteerName,
     required this.onTap,
     this.onEdit,
-    this.serialNumber, // NEW
+    this.serialNumber,
   });
 
   Color _statusColor() {
@@ -58,30 +58,22 @@ class FamilyCard extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // RepaintBoundary isolates repaints to this card, improving scroll performance
     return RepaintBoundary(
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: theme.cardColor,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
-            ],
-            border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: theme.dividerColor.withOpacity(0.6)),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
-                radius: 20,
+                radius: 16,
                 backgroundColor: isDark
                     ? Colors.blueGrey[800]
                     : Colors.blueGrey[50],
@@ -91,11 +83,12 @@ class FamilyCard extends StatelessWidget {
                       : familySize.toString(),
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
+                    fontSize: 12,
                     color: isDark ? Colors.white : Colors.black87,
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -105,6 +98,7 @@ class FamilyCard extends StatelessWidget {
                       style: theme.textTheme.bodyLarge?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: theme.colorScheme.onSurface,
+                        fontSize: 14,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -112,15 +106,17 @@ class FamilyCard extends StatelessWidget {
                       area,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        fontSize: 11,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 1),
                     Text(
                       address,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        fontSize: 10,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -131,7 +127,8 @@ class FamilyCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
                         color: assignedVolunteerName == null
                             ? theme.colorScheme.onSurface.withOpacity(0.5)
                             : (isDark ? Colors.greenAccent : Colors.green[700]),
@@ -141,40 +138,43 @@ class FamilyCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              // Status pill + optional edit icon in a column
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                      horizontal: 6,
+                      vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: _statusColor().withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(999),
+                      color: _statusColor().withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: _statusColor().withOpacity(0.2),
+                      ),
                     ),
                     child: Text(
                       _statusLabel(),
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 9,
                         fontWeight: FontWeight.w600,
                         color: _statusColor(),
                       ),
                     ),
                   ),
                   if (onEdit != null) ...[
-                    const SizedBox(height: 4),
-                    IconButton(
-                      icon: Icon(
-                        Icons.edit_outlined,
-                        size: 18,
-                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: onEdit,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.edit_outlined,
+                          size: 14,
+                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        ),
                       ),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      tooltip: 'Edit family',
-                      onPressed: onEdit,
                     ),
                   ],
                 ],

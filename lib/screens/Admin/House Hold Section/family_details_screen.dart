@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:ration_aid/services/audit_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
+import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
+import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 import 'edit_family_screen.dart';
 
 class FamilyDetailScreen extends StatefulWidget {
@@ -75,13 +77,17 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
       }
 
       if (!mounted) return;
+      if (!mounted) return;
       setState(() {
-        _distributors = list;
+        _distributors = [
+          {'uid': 'none', 'name': 'None'},
+          ...list,
+        ];
         if (_assignedVolunteerUid != null &&
             list.any((e) => e['uid'] == _assignedVolunteerUid)) {
           _selectedDistributorUid = _assignedVolunteerUid;
-        } else if (list.isNotEmpty && _selectedDistributorUid == null) {
-          _selectedDistributorUid = list.first['uid'];
+        } else {
+          _selectedDistributorUid = 'none';
         }
         _loadingDistributors = false;
       });
@@ -175,6 +181,41 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     }
 
     try {
+      final familyName = _familyData['name'] ?? 'Unnamed family';
+
+      if (uid == 'none') {
+        // Unassign volunteer
+        await FirebaseFirestore.instance
+            .collection('families')
+            .doc(widget.familyId)
+            .update({
+              'assignedVolunteerUid': FieldValue.delete(),
+              'assignedVolunteerName': FieldValue.delete(),
+            });
+
+        await AuditService.logFamilyAction(
+          action: 'Volunteer unassigned',
+          familyId: widget.familyId,
+          familyName: familyName,
+          details: 'Volunteer removed from family',
+        );
+
+        if (!mounted) return;
+        setState(() {
+          _assignedVolunteerUid = null;
+          _assignedVolunteerName = null;
+          _selectedDistributorUid = 'none';
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Volunteer unassigned successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        return;
+      }
+
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -193,7 +234,6 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
       final userData = userDoc.data()!;
       final name =
           (userData['name'] ?? userData['email'] ?? 'Unknown') as String;
-      final familyName = _familyData['name'] ?? 'Unnamed family';
 
       await FirebaseFirestore.instance
           .collection('families')
@@ -351,43 +391,15 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
       _familyData['decisions'] ?? [],
     );
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: AppBar(
-        elevation: 0,
-        centerTitle: true,
-        backgroundColor: theme.scaffoldBackgroundColor,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_new,
-            size: 20,
-            color: theme.colorScheme.onSurface,
-          ),
-          onPressed: () => Navigator.pop(context),
+    return AdminScaffold(
+      title: 'Family Details',
+      actions: [
+        IconButton(
+          icon: Icon(Icons.edit, color: theme.colorScheme.primary),
+          onPressed: _isLoading ? null : _navigateToEdit,
+          tooltip: 'Edit family',
         ),
-        title: Text(
-          'Family Details',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: theme.colorScheme.onSurface,
-            fontSize: 18,
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.edit, color: theme.colorScheme.primary),
-            onPressed: _isLoading ? null : _navigateToEdit,
-            tooltip: 'Edit family',
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            color: theme.dividerColor.withOpacity(0.2),
-            height: 1,
-          ),
-        ),
-      ),
+      ],
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -400,35 +412,37 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
 
                   _buildSectionHeader(context, 'Contact & Location'),
                   const SizedBox(height: 16),
-                  _buildContactInfo(context),
+                  FrostedPanel(child: _buildContactInfo(context)),
                   const SizedBox(height: 32),
 
                   _buildSectionHeader(context, 'Assistance Needs'),
                   const SizedBox(height: 16),
-                  _buildAssistanceChips(context),
+                  FrostedPanel(child: _buildAssistanceChips(context)),
                   const SizedBox(height: 32),
 
                   _buildSectionHeader(context, 'Assigned Volunteer'),
                   const SizedBox(height: 16),
-                  _buildVolunteerSection(context),
+                  FrostedPanel(child: _buildVolunteerSection(context)),
                   const SizedBox(height: 32),
 
                   _buildSectionHeader(context, 'Verification Decision'),
                   const SizedBox(height: 16),
-                  _buildDecisionSection(context),
+                  FrostedPanel(child: _buildDecisionSection(context)),
                   const SizedBox(height: 32),
 
                   if (_documents.isNotEmpty) ...[
                     _buildSectionHeader(context, 'Documents'),
                     const SizedBox(height: 16),
-                    _buildDocumentsList(context),
+                    FrostedPanel(child: _buildDocumentsList(context)),
                     const SizedBox(height: 32),
                   ],
 
                   if (decisions.isNotEmpty) ...[
                     _buildSectionHeader(context, 'Decision History'),
                     const SizedBox(height: 16),
-                    _buildHistorySection(context, decisions),
+                    FrostedPanel(
+                      child: _buildHistorySection(context, decisions),
+                    ),
                     const SizedBox(height: 32),
                   ],
 
@@ -644,6 +658,8 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
 
   Widget _buildVolunteerSection(BuildContext context) {
     final theme = Theme.of(context);
+    final canAssign = _status == 'accepted';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -669,57 +685,79 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
             style: TextStyle(fontSize: 12, color: Colors.red),
           )
         else
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _selectedDistributorUid,
-                  items: _distributors.map((d) {
-                    return DropdownMenuItem<String>(
-                      value: d['uid'],
-                      child: Text(
-                        d['name'] ?? 'Unknown',
-                        overflow: TextOverflow.ellipsis,
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedDistributorUid,
+                      items: _distributors.map((d) {
+                        return DropdownMenuItem<String>(
+                          value: d['uid'],
+                          child: Text(
+                            d['name'] ?? 'Unknown',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: canAssign
+                          ? (value) {
+                              setState(() => _selectedDistributorUid = value);
+                            }
+                          : null,
+                      dropdownColor: theme.cardColor,
+                      style: TextStyle(color: theme.colorScheme.onSurface),
+                      decoration: InputDecoration(
+                        labelText: 'Select volunteer',
+                        labelStyle: TextStyle(
+                          color: theme.colorScheme.onSurface.withOpacity(0.7),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: theme.dividerColor),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                       ),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() => _selectedDistributorUid = value);
-                  },
-                  dropdownColor: theme.cardColor,
-                  style: TextStyle(color: theme.colorScheme.onSurface),
-                  decoration: InputDecoration(
-                    labelText: 'Select volunteer',
-                    labelStyle: TextStyle(
-                      color: theme.colorScheme.onSurface.withOpacity(0.7),
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: theme.dividerColor),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: canAssign ? _assignVolunteerFromDropdown : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryBlue,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: theme.disabledColor.withOpacity(
+                        0.1,
+                      ),
+                      disabledForegroundColor: theme.disabledColor,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
+                    child: const Text('Assign'),
+                  ),
+                ],
+              ),
+              if (!canAssign) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Volunteer assignment is only available for accepted households.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.error,
+                    fontStyle: FontStyle.italic,
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: _assignVolunteerFromDropdown,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryBlue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: const Text('Assign'),
-              ),
+              ],
             ],
           ),
       ],

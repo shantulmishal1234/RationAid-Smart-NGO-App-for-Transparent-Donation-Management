@@ -144,6 +144,72 @@ class AdminHelpers {
     return data;
   }
 
+  /// Load donation overview statistics - PARALLEL execution
+  static Future<Map<String, int>> loadDonationOverview({
+    bool forceRefresh = false,
+  }) async {
+    // Check cache first
+    if (!forceRefresh) {
+      final cached = AdminCache.get<Map<String, int>>(
+        CacheKeys.donationOverview,
+      );
+      if (cached != null) return cached;
+    }
+
+    final donationsRef = FirebaseFirestore.instance.collection('donations');
+
+    // Execute all count queries in parallel
+    final results = await Future.wait([
+      donationsRef.count().get(),
+      donationsRef.where('status', isEqualTo: 'pending').count().get(),
+      donationsRef.where('status', isEqualTo: 'under_review').count().get(),
+      donationsRef.where('status', isEqualTo: 'verified').count().get(),
+      donationsRef.where('status', isEqualTo: 'rejected').count().get(),
+    ]);
+
+    final data = {
+      'total': results[0].count ?? 0,
+      'pending': results[1].count ?? 0,
+      'under_review': results[2].count ?? 0,
+      'verified': results[3].count ?? 0,
+      'rejected': results[4].count ?? 0,
+    };
+
+    // Cache the results
+    AdminCache.set(CacheKeys.donationOverview, data);
+    return data;
+  }
+
+  /// Load HRM overview statistics - PARALLEL execution
+  static Future<Map<String, int>> loadHrmOverview({
+    bool forceRefresh = false,
+  }) async {
+    // Check cache first
+    if (!forceRefresh) {
+      final cached = AdminCache.get<Map<String, int>>(CacheKeys.hrmOverview);
+      if (cached != null) return cached;
+    }
+
+    // Execute all count queries in parallel
+    final results = await Future.wait([
+      _usersRef.count().get(),
+      _usersRef.where('roles', arrayContains: 'purchaser').count().get(),
+      _usersRef.where('roles', arrayContains: 'distributor').count().get(),
+      _usersRef.where('roles', arrayContains: 'donor').count().get(),
+    ]);
+
+    final data = {
+      'total': results[0].count ?? 0,
+      'purchaser': results[1].count ?? 0,
+      'distributor': results[2].count ?? 0,
+      'donor': results[3].count ?? 0,
+    };
+
+    // Cache the results
+    AdminCache.set(CacheKeys.hrmOverview, data);
+    return data;
+  }
+
   /// Invalidate all cached stats (call after data mutations)
   static void invalidateCache() {
     AdminCache.invalidate();

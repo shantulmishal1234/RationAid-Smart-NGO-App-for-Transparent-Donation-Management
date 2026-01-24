@@ -69,4 +69,6 @@ class CacheKeys {
   static const String familyCounts = 'family_counts';
   static const String memberCounts = 'member_counts';
   static const String householdOverview = 'household_overview';
+  static const String donationOverview = 'donation_overview';
+  static const String hrmOverview = 'hrm_overview';
 }

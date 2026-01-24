@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:ration_aid/theme/app_colors.dart';
+import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 
 class AuditTrailScreen extends StatefulWidget {
   const AuditTrailScreen({super.key});
@@ -33,56 +33,72 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: AppBar(
-        elevation: 0,
-        centerTitle: true,
-        title: const Text(
-          'Audit trail',
-          style: TextStyle(fontWeight: FontWeight.w700),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Header Row (Matches HRM Section)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Center(
+            child: Text(
+              'Audit Trail',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: theme.colorScheme.onSurface,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
         ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(120),
-          child: Column(
+
+        // Toolbar: Search | Filter
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
             children: [
-              const SizedBox(height: 4),
-              // Search bar
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: theme.cardColor,
-                    borderRadius: BorderRadius.circular(999),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
-                        blurRadius: 10,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                    border: Border.all(color: cs.outline.withOpacity(0.06)),
-                  ),
+              // Search Bar
+              Expanded(
+                child: SizedBox(
+                  height: 48,
                   child: TextField(
                     controller: _searchController,
-                    style: TextStyle(color: cs.onSurface),
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface,
+                      fontSize: 14,
+                    ),
                     decoration: InputDecoration(
-                      hintText: 'Search by action, user, or details...',
-                      hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                        color: cs.onSurface.withOpacity(0.5),
+                      hintText: 'Search logs...',
+                      hintStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        fontSize: 14,
                       ),
                       prefixIcon: Icon(
                         Icons.search,
                         size: 20,
-                        color: cs.onSurface.withOpacity(0.6),
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
                       ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
+                      filled: true,
+                      fillColor: theme.cardColor,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: theme.dividerColor.withOpacity(0.6),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: theme.dividerColor.withOpacity(0.6),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.primary,
+                          width: 1.5,
+                        ),
                       ),
                     ),
                     onChanged: (value) {
@@ -91,170 +107,127 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
                   ),
                 ),
               ),
-              // Filter chips
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    _filterChip('all', 'All'),
-                    _filterChip('family', 'Families'),
-                    _filterChip('donation', 'Donations'),
-                    _filterChip('user', 'Users'),
-                    _filterChip('system', 'System'),
-                  ],
+              const SizedBox(width: 12),
+
+              // Filter Menu
+              SizedBox(
+                width: 48,
+                height: 48,
+                child: FrostedPanel(
+                  padding: EdgeInsets.zero,
+                  child: PopupMenuButton<String>(
+                    icon: Icon(
+                      Icons.filter_list,
+                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      size: 22,
+                    ),
+                    tooltip: 'Filter by Type',
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    onSelected: (v) => setState(() => _selectedEntityType = v),
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'all',
+                        child: Text('All Logs'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'family',
+                        child: Text('Families'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'donation',
+                        child: Text('Donations'),
+                      ),
+                      const PopupMenuItem(value: 'user', child: Text('Users')),
+                      const PopupMenuItem(
+                        value: 'system',
+                        child: Text('System'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 8),
             ],
           ),
         ),
-      ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _getAuditLogs(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+        const SizedBox(height: 16),
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline, size: 48, color: Colors.red[400]),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Error loading audit logs',
-                    style: TextStyle(color: Colors.red[400]),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${snapshot.error}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: cs.onSurface.withOpacity(0.6),
+        // List container
+        Expanded(
+          child: FrostedPanel(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: EdgeInsets.zero,
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _getAuditLogs(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Error loading logs',
+                      style: TextStyle(color: theme.colorScheme.error),
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            );
-          }
+                  );
+                }
 
-          var docs = snapshot.data?.docs ?? [];
+                var docs = snapshot.data?.docs ?? [];
 
-          // Client-side filter by entity type
-          if (_selectedEntityType != 'all') {
-            docs = docs.where((doc) {
-              final data = doc.data();
-              return data['entityType'] == _selectedEntityType;
-            }).toList();
-          }
+                // Client-side filter by entity type
+                if (_selectedEntityType != 'all') {
+                  docs = docs.where((doc) {
+                    final data = doc.data();
+                    return data['entityType'] == _selectedEntityType;
+                  }).toList();
+                }
 
-          // Client-side search filter
-          if (_searchQuery.isNotEmpty) {
-            docs = docs.where((doc) {
-              final data = doc.data();
-              final action = (data['action'] ?? '').toString().toLowerCase();
-              final details = (data['details'] ?? '').toString().toLowerCase();
-              final email = (data['performedByEmail'] ?? '')
-                  .toString()
-                  .toLowerCase();
-              return action.contains(_searchQuery) ||
-                  details.contains(_searchQuery) ||
-                  email.contains(_searchQuery);
-            }).toList();
-          }
+                // Client-side search filter
+                if (_searchQuery.isNotEmpty) {
+                  docs = docs.where((doc) {
+                    final data = doc.data();
+                    final action = (data['action'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                    final details = (data['details'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                    final email = (data['performedByEmail'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                    return action.contains(_searchQuery) ||
+                        details.contains(_searchQuery) ||
+                        email.contains(_searchQuery);
+                  }).toList();
+                }
 
-          if (docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.history,
-                    size: 64,
-                    color: cs.onSurface.withOpacity(0.3),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    _selectedEntityType == 'all'
-                        ? 'No audit logs found'
-                        : 'No $_selectedEntityType logs found',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: cs.onSurface.withOpacity(0.6),
+                if (docs.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No audit logs found.',
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                      ),
                     ),
-                  ),
-                  if (_selectedEntityType != 'all') ...[
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: () {
-                        setState(() => _selectedEntityType = 'all');
-                      },
-                      child: const Text('View all logs'),
-                    ),
-                  ],
-                ],
-              ),
-            );
-          }
+                  );
+                }
 
-          return Container(
-            margin: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: theme.cardColor.withOpacity(isDark ? 0.5 : 0.96),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
-                  blurRadius: 18,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-              itemCount: docs.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                final data = docs[index].data();
-                return _AuditLogCard(data: data);
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
+                  itemCount: docs.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final data = docs[index].data();
+                    return _AuditLogCard(data: data);
+                  },
+                );
               },
             ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _filterChip(String value, String label) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final isSelected = _selectedEntityType == value;
-
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: isSelected,
-        onSelected: (_) {
-          setState(() => _selectedEntityType = value);
-        },
-        selectedColor: AppColors.primaryBlue.withOpacity(0.16),
-        backgroundColor: isDark ? theme.colorScheme.surface : null,
-        labelStyle: TextStyle(
-          color: isSelected
-              ? AppColors.primaryBlue
-              : cs.onSurface.withOpacity(0.7),
-          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+          ),
         ),
-        side: BorderSide(
-          color: isSelected ? AppColors.primaryBlue : theme.dividerColor,
-        ),
-      ),
+      ],
     );
   }
 }
@@ -318,12 +291,9 @@ class _AuditLogCard extends StatelessWidget {
 
     final color = _getEntityColor(entityType);
 
-    return Card(
-      elevation: 1,
-      color: theme.cardColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+    return RepaintBoundary(
+      child: FrostedPanel(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -331,10 +301,10 @@ class _AuditLogCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(_getEntityIcon(entityType), color: color, size: 20),
+              child: Icon(_getEntityIcon(entityType), color: color, size: 18),
             ),
             const SizedBox(width: 10),
             // Main content
@@ -348,29 +318,30 @@ class _AuditLogCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           action,
-                          style: TextStyle(
-                            fontSize: 14,
+                          style: theme.textTheme.bodyLarge?.copyWith(
                             fontWeight: FontWeight.w600,
                             color: cs.onSurface,
+                            fontSize: 14,
                           ),
-                          maxLines: 2,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
+                          horizontal: 6,
+                          vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: color.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(999),
+                          color: color.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: color.withOpacity(0.2)),
                         ),
                         child: Text(
                           entityType,
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 9,
                             fontWeight: FontWeight.w600,
                             color: color,
                           ),
@@ -379,32 +350,33 @@ class _AuditLogCard extends StatelessWidget {
                     ],
                   ),
                   if (entityName.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
                       entityName,
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w500,
                         color: cs.onSurface.withOpacity(0.8),
+                        fontSize: 11,
                       ),
                     ),
                   ],
                   if (details.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
                       details,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         color: cs.onSurface.withOpacity(0.6),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Row(
                     children: [
                       Icon(
-                        Icons.person,
+                        Icons.person_outline,
                         size: 12,
                         color: cs.onSurface.withOpacity(0.5),
                       ),
@@ -413,17 +385,12 @@ class _AuditLogCard extends StatelessWidget {
                         child: Text(
                           performedBy,
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 10,
                             color: cs.onSurface.withOpacity(0.5),
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
                       Icon(
                         Icons.access_time,
                         size: 12,
@@ -433,7 +400,7 @@ class _AuditLogCard extends StatelessWidget {
                       Text(
                         timeStr,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 10,
                           color: cs.onSurface.withOpacity(0.5),
                         ),
                       ),

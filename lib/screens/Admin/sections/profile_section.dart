@@ -8,6 +8,7 @@ import 'package:ration_aid/services/cloudinary_service.dart';
 import 'package:ration_aid/services/auth_service.dart';
 import 'package:ration_aid/screens/Startup & Authentication/auth_screen.dart';
 import 'package:ration_aid/theme/app_colors.dart';
+import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 
 /// Admin Profile Section - Full profile management
 class AdminProfileSection extends StatefulWidget {
@@ -1092,10 +1093,7 @@ class _AdminProfileSectionState extends State<AdminProfileSection> {
       child: Column(
         children: [
           // Profile header card
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
+          FrostedPanel(
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Column(
@@ -1188,10 +1186,7 @@ class _AdminProfileSectionState extends State<AdminProfileSection> {
           const SizedBox(height: 16),
 
           // Account Settings
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
+          FrostedPanel(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(

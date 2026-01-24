@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:ration_aid/services/audit_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
+import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
+import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 
 class AddOrEditMemberScreen extends StatefulWidget {
   final String? uid;
@@ -260,38 +262,10 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
     final isEdit = widget.isEdit;
     final theme = Theme.of(context);
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: AppBar(
-        elevation: 0,
-        centerTitle: true,
-        backgroundColor: theme.scaffoldBackgroundColor,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_new,
-            size: 20,
-            color: theme.colorScheme.onSurface,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          _isDonor()
-              ? 'View Donor Account'
-              : (isEdit ? 'Edit Member' : 'Add New Member'),
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: theme.colorScheme.onSurface,
-            fontSize: 18,
-          ),
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            color: theme.dividerColor.withOpacity(0.2),
-            height: 1,
-          ),
-        ),
-      ),
+    return AdminScaffold(
+      title: _isDonor()
+          ? 'View Donor Account'
+          : (isEdit ? 'Edit Member' : 'Add New Member'),
       body: Column(
         children: [
           Expanded(
@@ -304,73 +278,86 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
                   children: [
                     _buildSectionHeader('Basic Information'),
                     const SizedBox(height: 16),
-                    _buildTextField(
-                      controller: _nameCtrl,
-                      label: 'Full Name',
-                      hint: 'Enter full name',
-                      enabled: !_isDonor(),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'[a-zA-Z\s]'),
-                        ),
-                      ],
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) {
-                          return 'Name is required';
-                        }
-                        if (v.trim().length < 2) {
-                          return 'Name must be at least 2 characters';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    _buildTextField(
-                      controller: _emailCtrl,
-                      label: 'Email Address',
-                      hint: 'member@example.com',
-                      keyboardType: TextInputType.emailAddress,
-                      enabled: !isEdit,
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) {
-                          return 'Valid email required';
-                        }
-                        if (!v.contains('@')) return 'Valid email required';
-                        return null;
-                      },
-                    ),
-                    if (!isEdit) ...[
-                      const SizedBox(height: 16),
-                      _buildTextField(
-                        controller: _passwordCtrl,
-                        label: 'Temporary Password',
-                        hint: 'Minimum 6 characters',
-                        obscureText: true,
-                        validator: (v) => v == null || v.length < 6
-                            ? 'Min 6 characters'
-                            : null,
+                    FrostedPanel(
+                      child: Column(
+                        children: [
+                          _buildTextField(
+                            controller: _nameCtrl,
+                            label: 'Full Name',
+                            hint: 'Enter full name',
+                            enabled: !_isDonor(),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[a-zA-Z\s]'),
+                              ),
+                            ],
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) {
+                                return 'Name is required';
+                              }
+                              if (v.trim().length < 2) {
+                                return 'Name must be at least 2 characters';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          _buildTextField(
+                            controller: _emailCtrl,
+                            label: 'Email Address',
+                            hint: 'member@example.com',
+                            keyboardType: TextInputType.emailAddress,
+                            enabled: !isEdit,
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) {
+                                return 'Valid email required';
+                              }
+                              if (!v.contains('@'))
+                                return 'Valid email required';
+                              return null;
+                            },
+                          ),
+                          if (!isEdit) ...[
+                            const SizedBox(height: 16),
+                            _buildTextField(
+                              controller: _passwordCtrl,
+                              label: 'Temporary Password',
+                              hint: 'Minimum 6 characters',
+                              obscureText: true,
+                              validator: (v) => v == null || v.length < 6
+                                  ? 'Min 6 characters'
+                                  : null,
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+                          _buildTextField(
+                            controller: _phoneCtrl,
+                            label: 'Phone Number',
+                            hint: '03XX-XXXXXXX',
+                            keyboardType: TextInputType.phone,
+                            enabled: !_isDonor(),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9\-]'),
+                              ),
+                            ],
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) {
+                                return null; // Optional field
+                              }
+                              final cleaned = v.replaceAll(
+                                RegExp(r'[^0-9]'),
+                                '',
+                              );
+                              if (!cleaned.startsWith('03') ||
+                                  cleaned.length != 11) {
+                                return 'Enter valid Pakistan phone (03XX-XXXXXXX)';
+                              }
+                              return null;
+                            },
+                          ),
+                        ],
                       ),
-                    ],
-                    const SizedBox(height: 16),
-                    _buildTextField(
-                      controller: _phoneCtrl,
-                      label: 'Phone Number',
-                      hint: '03XX-XXXXXXX',
-                      keyboardType: TextInputType.phone,
-                      enabled: !_isDonor(),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
-                      ],
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) {
-                          return null; // Optional field
-                        }
-                        final cleaned = v.replaceAll(RegExp(r'[^0-9]'), '');
-                        if (!cleaned.startsWith('03') || cleaned.length != 11) {
-                          return 'Enter valid Pakistan phone (03XX-XXXXXXX)';
-                        }
-                        return null;
-                      },
                     ),
 
                     // Hide designation and organization fields for donors
@@ -378,76 +365,85 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
                       const SizedBox(height: 32),
                       _buildSectionHeader('Organization Role'),
                       const SizedBox(height: 16),
-                      _buildTextField(
-                        controller: _designationCtrl,
-                        label: 'Designation',
-                        hint: 'e.g. Field Officer',
-                      ),
-                      const SizedBox(height: 16),
-                      _buildDropdown<String>(
-                        label: 'Department',
-                        value: _department,
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'Distribution',
-                            child: Text('Distribution'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'Warehouse',
-                            child: Text('Warehouse'),
-                          ),
-                        ],
-                        onChanged: (v) {
-                          if (v == null) return;
-                          setState(() => _department = v);
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      _buildDropdown<String>(
-                        label: 'Main Role',
-                        helperText:
-                            'HRM can only create purchaser/distributor accounts',
-                        value: _mainRole,
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'purchaser',
-                            child: Text('Purchaser (Warehouse)'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'distributor',
-                            child: Text('Distributor (Delivery)'),
-                          ),
-                        ],
-                        onChanged: (v) {
-                          if (v == null) return;
-                          setState(() => _mainRole = v);
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      _buildDropdown<String>(
-                        label: 'Hierarchy Level',
-                        value: _level,
-                        items: const [
-                          DropdownMenuItem(value: 'head', child: Text('Head')),
-                          DropdownMenuItem(
-                            value: 'sub_head',
-                            child: Text('Sub-head'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'member',
-                            child: Text('Member'),
-                          ),
-                        ],
-                        onChanged: (v) {
-                          if (v == null) return;
-                          setState(() => _level = v);
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      _buildTextField(
-                        controller: _teamHeadIdCtrl,
-                        label: 'Team Head UID (Optional)',
-                        hint: 'UID of head / sub-head',
+                      FrostedPanel(
+                        child: Column(
+                          children: [
+                            _buildTextField(
+                              controller: _designationCtrl,
+                              label: 'Designation',
+                              hint: 'e.g. Field Officer',
+                            ),
+                            const SizedBox(height: 16),
+                            _buildDropdown<String>(
+                              label: 'Department',
+                              value: _department,
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'Distribution',
+                                  child: Text('Distribution'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'Warehouse',
+                                  child: Text('Warehouse'),
+                                ),
+                              ],
+                              onChanged: (v) {
+                                if (v == null) return;
+                                setState(() => _department = v);
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            _buildDropdown<String>(
+                              label: 'Main Role',
+                              helperText:
+                                  'HRM can only create purchaser/distributor accounts',
+                              value: _mainRole,
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'purchaser',
+                                  child: Text('Purchaser (Warehouse)'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'distributor',
+                                  child: Text('Distributor (Delivery)'),
+                                ),
+                              ],
+                              onChanged: (v) {
+                                if (v == null) return;
+                                setState(() => _mainRole = v);
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            _buildDropdown<String>(
+                              label: 'Hierarchy Level',
+                              value: _level,
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'head',
+                                  child: Text('Head'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'sub_head',
+                                  child: Text('Sub-head'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'member',
+                                  child: Text('Member'),
+                                ),
+                              ],
+                              onChanged: (v) {
+                                if (v == null) return;
+                                setState(() => _level = v);
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            _buildTextField(
+                              controller: _teamHeadIdCtrl,
+                              label: 'Team Head UID (Optional)',
+                              hint: 'UID of head / sub-head',
+                            ),
+                          ],
+                        ),
                       ),
                     ],
 
@@ -653,7 +649,7 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
         ),
         const SizedBox(height: 6),
         DropdownButtonFormField<T>(
-          value: value,
+          initialValue: value,
           items: items,
           onChanged: onChanged,
           dropdownColor: theme.cardColor,
