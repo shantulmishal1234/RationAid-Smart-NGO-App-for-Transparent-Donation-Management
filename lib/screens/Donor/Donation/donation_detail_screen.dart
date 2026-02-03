@@ -250,10 +250,15 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () {
-                // TODO: Navigate to edit screen
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Edit feature coming soon')),
-                );
+                // Navigate to create donation screen with existing donation
+                Navigator.pushNamed(
+                  context,
+                  '/create-donation',
+                  arguments: donation, // Pass donation for editing
+                ).then((_) {
+                  // Refresh the screen after edit
+                  setState(() {});
+                });
               },
               icon: const Icon(Icons.edit),
               label: const Text('Edit Donation'),

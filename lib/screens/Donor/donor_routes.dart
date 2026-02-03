@@ -10,10 +10,18 @@ class DonorRoutes {
   static Route<dynamic>? generateRoute(RouteSettings settings) {
     switch (settings.name) {
       case '/create-donation':
-        final family = settings.arguments as Family?;
-        return MaterialPageRoute(
-          builder: (_) => CreateDonationScreen(selectedFamily: family),
-        );
+        // Can receive either Family (for new donation) or Donation (for editing)
+        final args = settings.arguments;
+        if (args is Donation) {
+          return MaterialPageRoute(
+            builder: (_) => CreateDonationScreen(existingDonation: args),
+          );
+        } else {
+          final family = args as Family?;
+          return MaterialPageRoute(
+            builder: (_) => CreateDonationScreen(selectedFamily: family),
+          );
+        }
 
       case '/donation-tracking':
         final donation = settings.arguments as Donation;

@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:ration_aid/services/audit_service.dart';
-import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 
@@ -312,8 +311,9 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
                               if (v == null || v.trim().isEmpty) {
                                 return 'Valid email required';
                               }
-                              if (!v.contains('@'))
+                              if (!v.contains('@')) {
                                 return 'Valid email required';
+                              }
                               return null;
                             },
                           ),

@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:ration_aid/models/donation_model.dart';
 import 'package:ration_aid/screens/Admin/widgets/stat_card.dart';
 import 'package:ration_aid/services/donation_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
@@ -205,15 +206,77 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
               ),
               const SizedBox(height: 10),
               _FrostedPanel(
-                padding: const EdgeInsets.all(16),
-                child: Center(
-                  child: Text(
-                    'No recent donations',
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurface.withOpacity(0.6),
-                      fontSize: 14,
-                    ),
+                padding: const EdgeInsets.all(12),
+                child: StreamBuilder<List<Donation>>(
+                  stream: _donationService.streamRecentDonationsByDonor(
+                    user!.uid,
+                    limit: 3,
                   ),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      );
+                    }
+
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.volunteer_activism_outlined,
+                                size: 48,
+                                color: theme.colorScheme.onSurface.withOpacity(
+                                  0.3,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'No donations yet',
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.6),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Start making a difference today!',
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.4),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      children: snapshot.data!
+                          .map(
+                            (donation) => _RecentDonationTile(
+                              donation: donation,
+                              onTap: () {
+                                Navigator.pushNamed(
+                                  context,
+                                  '/donation-tracking',
+                                  arguments: donation,
+                                );
+                              },
+                            ),
+                          )
+                          .toList(),
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 100),
@@ -334,5 +397,123 @@ class _QuickActionButton extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _RecentDonationTile extends StatelessWidget {
+  final Donation donation;
+  final VoidCallback onTap;
+
+  const _RecentDonationTile({required this.donation, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final statusColor = _getStatusColor(donation.status);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: theme.cardColor.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: theme.colorScheme.onSurface.withOpacity(0.1),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            // Icon
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                donation.donationType == DonationType.cash
+                    ? Icons.payments
+                    : Icons.inventory_2,
+                color: statusColor,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    donation.donationType == DonationType.cash
+                        ? 'Cash Donation'
+                        : 'In-Kind Donation',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    donation.status.displayName,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: statusColor,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Amount or items count
+            if (donation.donationType == DonationType.cash)
+              Text(
+                'Rs ${donation.amount?.toStringAsFixed(0) ?? '0'}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.donorGreen,
+                ),
+              )
+            else
+              Text(
+                '${donation.items?.length ?? 0} items',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            const SizedBox(width: 8),
+            Icon(
+              Icons.chevron_right,
+              color: theme.colorScheme.onSurface.withOpacity(0.4),
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getStatusColor(DonationStatus status) {
+    switch (status) {
+      case DonationStatus.draft:
+        return Colors.grey;
+      case DonationStatus.pending:
+      case DonationStatus.underVerification:
+        return Colors.orange;
+      case DonationStatus.verified:
+      case DonationStatus.inProcess:
+        return Colors.blue;
+      case DonationStatus.outForDelivery:
+        return Colors.purple;
+      case DonationStatus.delivered:
+      case DonationStatus.closed:
+        return Colors.green;
+      case DonationStatus.rejected:
+        return Colors.red;
+    }
   }
 }

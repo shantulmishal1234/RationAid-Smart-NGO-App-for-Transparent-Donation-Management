@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ration_aid/models/donation_model.dart';
 import 'package:ration_aid/services/audit_service.dart';
+import 'package:ration_aid/services/notification_service.dart';
 
 /// Service for managing donations in Firestore
 class DonationService {
@@ -9,9 +10,60 @@ class DonationService {
   /// Create a new donation
   Future<String> createDonation(Donation donation) async {
     try {
+      // Fetch donor information from users collection
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(donation.donorId)
+          .get();
+
+      if (!userDoc.exists) {
+        throw Exception(
+          'User document not found for donorId: ${donation.donorId}',
+        );
+      }
+
+      final userData = userDoc.data();
+      final donorName =
+          userData?['name'] as String? ?? userData?['display_name'] as String?;
+      final donorEmail = userData?['email'] as String?;
+
+      // Debug: Print donor info (remove in production)
+      print('Creating donation with donor info:');
+      print('  donorId: ${donation.donorId}');
+      print('  donorName: $donorName');
+      print('  donorEmail: $donorEmail');
+
+      // Create donation with donor information
+      final donationWithDonorInfo = Donation(
+        id: donation.id,
+        donorId: donation.donorId,
+        donorName: donorName,
+        donorEmail: donorEmail,
+        familyId: donation.familyId,
+        donationType: donation.donationType,
+        amount: donation.amount,
+        items: donation.items,
+        anonymous: donation.anonymous,
+        status: donation.status,
+        rejectionReason: donation.rejectionReason,
+        paymentProofUrl: donation.paymentProofUrl,
+        receiptUrl: donation.receiptUrl,
+        donationNote: donation.donationNote,
+        createdAt: donation.createdAt,
+        updatedAt: donation.updatedAt,
+        statusHistory: donation.statusHistory,
+        estimatedDelivery: donation.estimatedDelivery,
+        driverName: donation.driverName,
+        driverPhone: donation.driverPhone,
+        vehicleNumber: donation.vehicleNumber,
+        deliveryPhotos: donation.deliveryPhotos,
+        deliveredAt: donation.deliveredAt,
+        receivedBy: donation.receivedBy,
+      );
+
       final docRef = await _firestore
           .collection('donations')
-          .add(donation.toFirestore());
+          .add(donationWithDonorInfo.toFirestore());
 
       // Log audit trail
       await AuditService.logDonationAction(
@@ -20,8 +72,25 @@ class DonationService {
         details: 'Status: ${donation.status.toFirestore()}',
       );
 
+      // Send notification to admins if submitted for verification
+      if (donation.status == DonationStatus.underVerification) {
+        await NotificationService.sendToRole(
+          role: 'admin',
+          title: 'New Donation Submitted',
+          body:
+              '${donorName ?? "A donor"} submitted a ${donation.donationType == DonationType.cash ? "Cash" : "In-Kind"} donation for verification',
+          data: {
+            'type': 'donation_submitted',
+            'donationId': docRef.id,
+            'route': '/admin/donations',
+          },
+        );
+        print('Notification sent to admins for donation: ${docRef.id}');
+      }
+
       return docRef.id;
     } catch (e) {
+      print('Error creating donation: $e');
       throw Exception('Failed to create donation: $e');
     }
   }
@@ -48,6 +117,25 @@ class DonationService {
         donationId: donationId,
         details: 'Status: $beforeStatus → ${donation.status.toFirestore()}',
       );
+
+      // Notify admins if status changed to underVerification
+      final afterStatus = donation.status.toFirestore();
+      if (afterStatus == 'under_verification' &&
+          (beforeStatus == 'draft' || beforeStatus == 'pending')) {
+        final donorName = donation.donorName ?? 'A donor';
+        await NotificationService.sendToRole(
+          role: 'admin',
+          title: 'Donation Submitted for Verification',
+          body:
+              '$donorName submitted a ${donation.donationType == DonationType.cash ? "Cash" : "In-Kind"} donation for verification',
+          data: {
+            'type': 'donation_submitted',
+            'donationId': donationId,
+            'route': '/admin/donations',
+          },
+        );
+        print('Notification sent to admins for updated donation: $donationId');
+      }
     } catch (e) {
       throw Exception('Failed to update donation: $e');
     }
@@ -121,6 +209,24 @@ class DonationService {
         .collection('donations')
         .where('donorId', isEqualTo: donorId)
         .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) => Donation.fromFirestore(doc))
+              .toList();
+        });
+  }
+
+  /// Stream recent donations by donor ID with limit
+  Stream<List<Donation>> streamRecentDonationsByDonor(
+    String donorId, {
+    int limit = 5,
+  }) {
+    return _firestore
+        .collection('donations')
+        .where('donorId', isEqualTo: donorId)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
         .snapshots()
         .map((snapshot) {
           return snapshot.docs

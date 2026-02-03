@@ -29,7 +29,7 @@ class DonationCard extends StatelessWidget {
     switch (status) {
       case 'verified':
         return Colors.green;
-      case 'under_review':
+      case 'under_verification':
         return Colors.orange;
       case 'rejected':
         return Colors.red;
@@ -43,7 +43,7 @@ class DonationCard extends StatelessWidget {
     switch (status) {
       case 'verified':
         return 'Verified';
-      case 'under_review':
+      case 'under_verification':
         return 'Review';
       case 'rejected':
         return 'Rejected';

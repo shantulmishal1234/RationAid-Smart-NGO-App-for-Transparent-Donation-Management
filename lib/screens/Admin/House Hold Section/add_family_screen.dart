@@ -273,23 +273,36 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                     const SizedBox(height: 16),
                     FrostedPanel(
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            child: _buildNumberField(
+                            flex: 2,
+                            child: _buildTextField(
                               controller: _adultsController,
                               label: 'Adults',
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildNumberField(
-                              controller: _childrenController,
-                              label: 'Children',
+                              hint: '0',
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
                             ),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
                             flex: 2,
+                            child: _buildTextField(
+                              controller: _childrenController,
+                              label: 'Children',
+                              hint: '0',
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 3,
                             child: _buildTextField(
                               controller: _incomeController,
                               label: 'Monthly Income',
@@ -531,94 +544,9 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
     );
   }
 
-  Widget _buildNumberField({
-    required TextEditingController controller,
-    required String label,
-  }) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Container(
-          height: 48,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: theme.dividerColor.withOpacity(0.8)),
-          ),
-          child: Row(
-            children: [
-              _buildCounterButton(
-                icon: Icons.remove,
-                onTap: () {
-                  int val = int.tryParse(controller.text) ?? 0;
-                  if (val > 0) {
-                    controller.text = (val - 1).toString();
-                    setState(() {});
-                  }
-                },
-              ),
-              Expanded(
-                child: TextFormField(
-                  controller: controller,
-                  textAlign: TextAlign.center,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-              _buildCounterButton(
-                icon: Icons.add,
-                onTap: () {
-                  int val = int.tryParse(controller.text) ?? 0;
-                  controller.text = (val + 1).toString();
-                  setState(() {});
-                },
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCounterButton({
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: double.infinity,
-        decoration: BoxDecoration(color: theme.dividerColor.withOpacity(0.1)),
-        child: Icon(
-          icon,
-          size: 16,
-          color: theme.colorScheme.onSurface.withOpacity(0.7),
-        ),
-      ),
-    );
-  }
-
   Widget _buildAssistanceChips() {
     final theme = Theme.of(context);
-    final needs = ['Food', 'Medicine', 'Clothing', 'Education', 'Shelter'];
+    final needs = ['Food', 'Medicine', 'Education'];
 
     return Wrap(
       spacing: 8,

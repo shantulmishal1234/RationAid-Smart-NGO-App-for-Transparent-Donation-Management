@@ -94,51 +94,62 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              FadeTransition(
-                opacity: _fadeLogo,
-                child: Image.asset(
-                  'assets/images/app_logo.png',
-                  width: 200,
-                  height: 200,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: Theme.of(context).brightness == Brightness.dark
+                ? [const Color(0xFF121212), const Color(0xFF1E1E1E)]
+                : [const Color(0xFF1E88E5), const Color(0xFF26A69A)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                FadeTransition(
+                  opacity: _fadeLogo,
+                  child: Image.asset(
+                    'assets/images/app_logo.png',
+                    width: 200,
+                    height: 200,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              SlideTransition(
-                position: _slideText,
-                child: FadeTransition(
+                const SizedBox(height: 20),
+                SlideTransition(
+                  position: _slideText,
+                  child: FadeTransition(
+                    opacity: _fadeText,
+                    child: Text(
+                      'Connecting Help with Need',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 40),
+                // Optional: Loading indicator
+                FadeTransition(
                   opacity: _fadeText,
-                  child: Text(
-                    'Connecting Help with Need',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).primaryColor,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 40),
-              // Optional: Loading indicator
-              FadeTransition(
-                opacity: _fadeText,
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      Theme.of(context).primaryColor.withValues(alpha: 0.6),
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Colors.white.withOpacity(0.6),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

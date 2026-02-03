@@ -17,6 +17,7 @@ class AdminQueries {
   }
 
   /// Query donations by status filter
+  /// NOTE: Draft donations are excluded from admin view - they're only visible to donors
   static Stream<QuerySnapshot<Map<String, dynamic>>> donationsQuery(
     DonationStatusFilter filter,
   ) {
@@ -24,11 +25,14 @@ class AdminQueries {
 
     switch (filter) {
       case DonationStatusFilter.all:
-        return base.snapshots();
+        // Exclude draft donations - they're only for donors
+        return base.where('status', whereNotIn: ['draft']).snapshots();
       case DonationStatusFilter.pending:
         return base.where('status', isEqualTo: 'pending').snapshots();
       case DonationStatusFilter.underReview:
-        return base.where('status', isEqualTo: 'under_review').snapshots();
+        return base
+            .where('status', isEqualTo: 'under_verification')
+            .snapshots();
       case DonationStatusFilter.verified:
         return base.where('status', isEqualTo: 'verified').snapshots();
       case DonationStatusFilter.rejected:

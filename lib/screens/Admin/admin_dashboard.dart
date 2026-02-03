@@ -12,7 +12,6 @@ import 'package:ration_aid/screens/Admin/sections/notifications_section.dart';
 import 'package:ration_aid/screens/Admin/sections/profile_section.dart';
 import 'package:ration_aid/screens/Admin/Audit Trail/audit_trail_screen.dart';
 
-import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 
 class AdminDashboard extends StatefulWidget {

@@ -162,7 +162,10 @@ class AdminHelpers {
     final results = await Future.wait([
       donationsRef.count().get(),
       donationsRef.where('status', isEqualTo: 'pending').count().get(),
-      donationsRef.where('status', isEqualTo: 'under_review').count().get(),
+      donationsRef
+          .where('status', isEqualTo: 'under_verification')
+          .count()
+          .get(),
       donationsRef.where('status', isEqualTo: 'verified').count().get(),
       donationsRef.where('status', isEqualTo: 'rejected').count().get(),
     ]);
@@ -170,7 +173,7 @@ class AdminHelpers {
     final data = {
       'total': results[0].count ?? 0,
       'pending': results[1].count ?? 0,
-      'under_review': results[2].count ?? 0,
+      'under_verification': results[2].count ?? 0,
       'verified': results[3].count ?? 0,
       'rejected': results[4].count ?? 0,
     };

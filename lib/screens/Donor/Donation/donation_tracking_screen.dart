@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ration_aid/models/donation_model.dart';
+import 'package:ration_aid/services/donation_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:ration_aid/screens/Donor/widgets/donor_scaffold.dart';
@@ -38,6 +39,14 @@ class DonationTrackingScreen extends StatelessWidget {
             // Update History
             if (donation.statusHistory.isNotEmpty)
               _UpdateHistoryCard(donation: donation),
+
+            // Action Buttons for drafts
+            if (donation.isEditable || donation.isDeletable) ...[
+              const SizedBox(height: 20),
+              _ActionButtons(donation: donation),
+            ],
+
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -149,7 +158,6 @@ class _StatusTimeline extends StatelessWidget {
   const _StatusTimeline({required this.donation});
 
   List<DonationStatus> get _allStatuses => [
-    DonationStatus.pending,
     DonationStatus.underVerification,
     DonationStatus.verified,
     DonationStatus.inProcess,
@@ -1031,5 +1039,153 @@ class _UpdateItem extends StatelessWidget {
 
   String _formatTimestamp(DateTime dt) {
     return '${dt.day}/${dt.month}/${dt.year}, ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+/// Action Buttons Widget - Edit and Delete for drafts
+class _ActionButtons extends StatefulWidget {
+  final Donation donation;
+
+  const _ActionButtons({required this.donation});
+
+  @override
+  State<_ActionButtons> createState() => _ActionButtonsState();
+}
+
+class _ActionButtonsState extends State<_ActionButtons> {
+  bool _isDeleting = false;
+
+  Future<void> _editDonation() async {
+    final result = await Navigator.pushNamed(
+      context,
+      '/create-donation',
+      arguments: widget.donation,
+    );
+
+    // If edit was successful, go back to refresh
+    if (result != null && mounted) {
+      Navigator.pop(context);
+    }
+  }
+
+  Future<void> _deleteDonation() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Donation?'),
+        content: const Text(
+          'This action cannot be undone. Are you sure you want to delete this draft donation?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      setState(() => _isDeleting = true);
+
+      try {
+        final donationService = DonationService();
+        await donationService.deleteDonation(widget.donation.id);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Donation deleted successfully')),
+          );
+          Navigator.pop(context); // Go back after deletion
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isDeleting = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting donation: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Actions',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Edit Button
+          if (widget.donation.isEditable)
+            ElevatedButton.icon(
+              onPressed: _editDonation,
+              icon: const Icon(Icons.edit),
+              label: const Text('Edit Donation'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.donorGreen,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+
+          // Delete Button
+          if (widget.donation.isDeletable) ...[
+            if (widget.donation.isEditable) const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _isDeleting ? null : _deleteDonation,
+              icon: _isDeleting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.red,
+                      ),
+                    )
+                  : const Icon(Icons.delete),
+              label: Text(_isDeleting ? 'Deleting...' : 'Delete Draft'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red,
+                side: const BorderSide(color: Colors.red),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }

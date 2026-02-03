@@ -44,7 +44,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
   }
 
   Future<void> _openProof() async {
-    final url = widget.initialData['proofUrl'] as String?;
+    final url = widget.initialData['paymentProofUrl'] as String?;
     if (url == null || url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -364,7 +364,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
 
   Widget _buildProofSection(Map<String, dynamic> d) {
     final theme = Theme.of(context);
-    final hasProof = (d['proofUrl'] as String?)?.isNotEmpty == true;
+    final hasProof = (d['paymentProofUrl'] as String?)?.isNotEmpty == true;
 
     return InkWell(
       onTap: hasProof ? _openProof : null,
@@ -440,7 +440,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
           runSpacing: 8,
           children: [
             _statusChip('pending', 'Pending'),
-            _statusChip('under_review', 'Under Review'),
+            _statusChip('under_verification', 'Under Verification'),
             _statusChip('verified', 'Verified'),
             _statusChip('rejected', 'Rejected'),
           ],
@@ -639,7 +639,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     switch (value) {
       case 'verified':
         return Colors.green;
-      case 'under_review':
+      case 'under_verification':
         return Colors.orange;
       case 'rejected':
         return Colors.red;
@@ -652,8 +652,8 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     switch (value) {
       case 'verified':
         return 'Verified';
-      case 'under_review':
-        return 'Under Review';
+      case 'under_verification':
+        return 'Under Verification';
       case 'rejected':
         return 'Rejected';
       case 'pending':

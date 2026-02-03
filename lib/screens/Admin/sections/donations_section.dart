@@ -118,7 +118,7 @@ class _DonationsSectionState extends State<DonationsSection> {
                         {
                           'total': 0,
                           'pending': 0,
-                          'under_review': 0,
+                          'under_verification': 0,
                           'verified': 0,
                           'rejected': 0,
                         };
@@ -158,7 +158,7 @@ class _DonationsSectionState extends State<DonationsSection> {
                         _overviewChip(
                           context,
                           label: 'Review',
-                          value: d['under_review'].toString(),
+                          value: d['under_verification'].toString(),
                           color: Colors.blue[600]!,
                         ),
                         _overviewChip(

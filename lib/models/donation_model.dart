@@ -17,7 +17,7 @@ enum DonationStatus {
       case DonationStatus.draft:
         return 'Draft';
       case DonationStatus.pending:
-        return 'Pending Upload';
+        return 'Pending'; // Legacy status, not used in current donor flow
       case DonationStatus.underVerification:
         return 'Under Verification';
       case DonationStatus.verified:
@@ -140,6 +140,8 @@ class StatusHistoryEntry {
 class Donation {
   final String id;
   final String donorId;
+  final String? donorName; // Donor's name for display
+  final String? donorEmail; // Donor's email for display
   final String familyId;
   final DonationType donationType;
   final double? amount; // nullable for in-kind or when not specified
@@ -166,6 +168,8 @@ class Donation {
   Donation({
     required this.id,
     required this.donorId,
+    this.donorName,
+    this.donorEmail,
     required this.familyId,
     required this.donationType,
     this.amount,
@@ -209,6 +213,8 @@ class Donation {
     return Donation(
       id: doc.id,
       donorId: data['donorId'] ?? '',
+      donorName: data['donorName'],
+      donorEmail: data['donorEmail'],
       familyId: data['familyId'] ?? '',
       donationType: DonationType.fromFirestore(data['donationType'] ?? 'cash'),
       amount: data['amount']?.toDouble(),
@@ -238,6 +244,8 @@ class Donation {
   Map<String, dynamic> toFirestore() {
     return {
       'donorId': donorId,
+      'donorName': donorName,
+      'donorEmail': donorEmail,
       'familyId': familyId,
       'donationType': donationType.toFirestore(),
       'amount': amount,

@@ -40,8 +40,8 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
         .where('status', isEqualTo: 'pending')
         .count()
         .get();
-    final underReviewAgg = await donationsRef
-        .where('status', isEqualTo: 'under_review')
+    final underVerificationAgg = await donationsRef
+        .where('status', isEqualTo: 'under_verification')
         .count()
         .get();
     final rejectedAgg = await donationsRef
@@ -52,7 +52,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
     final totalDonations = totalAgg.count ?? 0;
     final verified = verifiedAgg.count ?? 0;
     final pending = pendingAgg.count ?? 0;
-    final underReview = underReviewAgg.count ?? 0;
+    final underVerification = underVerificationAgg.count ?? 0;
     final rejected = rejectedAgg.count ?? 0;
 
     // Get all donations for amount calculations
@@ -74,7 +74,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
 
       if (status == 'verified') {
         verifiedAmount += amount;
-      } else if (status == 'pending' || status == 'under_review') {
+      } else if (status == 'pending' || status == 'under_verification') {
         pendingAmount += amount;
       }
 
@@ -113,7 +113,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
       'totalDonations': totalDonations,
       'verified': verified,
       'pending': pending,
-      'underReview': underReview,
+      'underVerification': underVerification,
       'rejected': rejected,
       'totalAmount': totalAmount,
       'verifiedAmount': verifiedAmount,
@@ -151,7 +151,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
       csvContent.writeln('Status,Count');
       csvContent.writeln('Verified,${data['verified']}');
       csvContent.writeln('Pending,${data['pending']}');
-      csvContent.writeln('Under Review,${data['underReview']}');
+      csvContent.writeln('Under Verification,${data['underVerification']}');
       csvContent.writeln('Rejected,${data['rejected']}');
       csvContent.writeln('');
 
@@ -271,7 +271,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
           final totalDonations = data['totalDonations'] as int;
           final verified = data['verified'] as int;
           final pending = data['pending'] as int;
-          final underReview = data['underReview'] as int;
+          final underVerification = data['underVerification'] as int;
           final rejected = data['rejected'] as int;
           final totalAmount = data['totalAmount'] as double;
           final verifiedAmount = data['verifiedAmount'] as double;
@@ -359,8 +359,8 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
                         ),
                         const Divider(height: 16),
                         _statusRow(
-                          'Under review',
-                          underReview,
+                          'Under verification',
+                          underVerification,
                           totalDonations,
                           Colors.blue,
                         ),

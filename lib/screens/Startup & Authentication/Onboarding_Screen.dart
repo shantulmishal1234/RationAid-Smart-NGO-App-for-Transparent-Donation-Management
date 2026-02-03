@@ -132,15 +132,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: theme.brightness == Brightness.dark
-                          ? theme.cardColor
-                          : Colors.white.withOpacity(0.94),
+                      color: theme.cardColor.withOpacity(
+                        theme.brightness == Brightness.dark ? 0.6 : 0.82,
+                      ),
                       borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: theme.brightness == Brightness.dark
+                            ? Colors.white.withOpacity(0.1)
+                            : Colors.white.withOpacity(0.7),
+                        width: 0.8,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.12),
-                          blurRadius: 26,
-                          offset: const Offset(0, 16),
+                          color: theme.brightness == Brightness.dark
+                              ? Colors.black.withOpacity(0.3)
+                              : Colors.black.withOpacity(0.06),
+                          blurRadius: 18,
+                          offset: const Offset(0, 10),
                         ),
                       ],
                     ),

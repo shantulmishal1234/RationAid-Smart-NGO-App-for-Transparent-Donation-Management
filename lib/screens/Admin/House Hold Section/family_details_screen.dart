@@ -410,6 +410,49 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                   _buildHeader(context),
                   const SizedBox(height: 32),
 
+                  _buildSectionHeader(context, 'Demographics & Income'),
+                  const SizedBox(height: 16),
+                  FrostedPanel(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildCompactInfoItem(
+                            'Adults',
+                            (_familyData['adults'] ?? 0).toString(),
+                            Icons.person,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildCompactInfoItem(
+                            'Children',
+                            (_familyData['children'] ?? 0).toString(),
+                            Icons.child_care,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildCompactInfoItem(
+                            'Family Size',
+                            (_familyData['familySize'] ?? 0).toString(),
+                            Icons.groups,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildCompactInfoItem(
+                            'Income',
+                            _familyData['monthlyIncome'] != null
+                                ? _formatCurrency(_familyData['monthlyIncome'])
+                                : '-',
+                            Icons.attach_money,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
                   _buildSectionHeader(context, 'Contact & Location'),
                   const SizedBox(height: 16),
                   FrostedPanel(child: _buildContactInfo(context)),
@@ -692,7 +735,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _selectedDistributorUid,
+                      initialValue: _selectedDistributorUid,
                       items: _distributors.map((d) {
                         return DropdownMenuItem<String>(
                           value: d['uid'],

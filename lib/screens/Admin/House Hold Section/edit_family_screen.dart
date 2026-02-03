@@ -663,7 +663,6 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
       ('Food', Icons.restaurant),
       ('Medicine', Icons.medical_services),
       ('Education', Icons.school),
-      ('Shelter', Icons.home),
     ];
 
     return Wrap(
