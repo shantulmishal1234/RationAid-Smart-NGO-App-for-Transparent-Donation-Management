@@ -9,6 +9,7 @@ import 'package:ration_aid/screens/Admin/utils/admin_helpers.dart';
 import 'package:ration_aid/screens/Admin/components/donation_card.dart';
 import 'package:ration_aid/screens/Admin/Donation Section/donation_detail_screen.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
+import 'package:ration_aid/services/funding_service.dart';
 
 /// Donations section for managing donor payments
 class DonationsSection extends StatefulWidget {
@@ -86,99 +87,196 @@ class _DonationsSectionState extends State<DonationsSection> {
         // Collapsible Overview
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            children: [
+              FrostedPanel(
+                padding: EdgeInsets.zero,
+                child: ExpansionTile(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  collapsedShape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  title: Text(
+                    'Overview & Statistics',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface.withOpacity(0.8),
+                    ),
+                  ),
+                  leading: Icon(
+                    Icons.analytics_outlined,
+                    color: theme.colorScheme.primary,
+                  ),
+                  childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  children: [
+                    FutureBuilder<Map<String, int>>(
+                      future: _overviewFuture,
+                      builder: (context, snapshot) {
+                        final d =
+                            snapshot.data ??
+                            {
+                              'total': 0,
+                              'pending': 0,
+                              'under_verification': 0,
+                              'verified': 0,
+                              'rejected': 0,
+                            };
+                        final loading =
+                            snapshot.connectionState == ConnectionState.waiting;
 
-          child: FrostedPanel(
-            padding: EdgeInsets.zero,
-            child: ExpansionTile(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              collapsedShape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              title: Text(
-                'Overview & Statistics',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.onSurface.withOpacity(0.8),
+                        if (loading) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+
+                        return Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            _overviewChip(
+                              context,
+                              label: 'Total',
+                              value: d['total'].toString(),
+                              color: AdminColors.primaryBlue,
+                            ),
+                            _overviewChip(
+                              context,
+                              label: 'Pending',
+                              value: d['pending'].toString(),
+                              color: Colors.amber[700]!,
+                            ),
+                            _overviewChip(
+                              context,
+                              label: 'Review',
+                              value: d['under_verification'].toString(),
+                              color: Colors.blue[600]!,
+                            ),
+                            _overviewChip(
+                              context,
+                              label: 'Verified',
+                              value: d['verified'].toString(),
+                              color: Colors.green[600]!,
+                            ),
+                            _overviewChip(
+                              context,
+                              label: 'Rejected',
+                              value: d['rejected'].toString(),
+                              color: Colors.red[400]!,
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
-              leading: Icon(
-                Icons.analytics_outlined,
-                color: theme.colorScheme.primary,
-              ),
-              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              children: [
-                FutureBuilder<Map<String, int>>(
-                  future: _overviewFuture,
-                  builder: (context, snapshot) {
-                    final d =
-                        snapshot.data ??
-                        {
-                          'total': 0,
-                          'pending': 0,
-                          'under_verification': 0,
-                          'verified': 0,
-                          'rejected': 0,
-                        };
-                    final loading =
-                        snapshot.connectionState == ConnectionState.waiting;
+              const SizedBox(height: 12),
+              StreamBuilder<Map<String, double>>(
+                stream: FundingService.getFundingStatsStream(),
+                builder: (context, snapshot) {
+                  final stats =
+                      snapshot.data ??
+                      {'totalTarget': 0.0, 'totalRaised': 0.0, 'totalGap': 0.0};
+                  final target = stats['totalTarget']!;
+                  final raised = stats['totalRaised']!;
+                  final percent = target > 0 ? (raised / target) : 0.0;
 
-                    if (loading) {
-                      return const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                  return FrostedPanel(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.monetization_on,
+                              color: Colors.green,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Funding Pool Status',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                            const Spacer(),
+                            if (target > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '${(percent * 100).toInt()}% Funded',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _fundingMetric(
+                              context,
+                              'Target',
+                              target,
+                              theme.colorScheme.primary,
+                            ),
+                            _fundingMetric(
+                              context,
+                              'Raised',
+                              raised,
+                              Colors.green,
+                            ),
+                            _fundingMetric(
+                              context,
+                              'Gap',
+                              stats['totalGap']!,
+                              Colors.red,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: percent.clamp(0.0, 1.0),
+                            backgroundColor: Colors.grey[200],
+                            color: Colors.green,
+                            minHeight: 6,
                           ),
                         ),
-                      );
-                    }
-
-                    return Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        _overviewChip(
-                          context,
-                          label: 'Total',
-                          value: d['total'].toString(),
-                          color: AdminColors.primaryBlue,
-                        ),
-                        _overviewChip(
-                          context,
-                          label: 'Pending',
-                          value: d['pending'].toString(),
-                          color: Colors.amber[700]!,
-                        ),
-                        _overviewChip(
-                          context,
-                          label: 'Review',
-                          value: d['under_verification'].toString(),
-                          color: Colors.blue[600]!,
-                        ),
-                        _overviewChip(
-                          context,
-                          label: 'Verified',
-                          value: d['verified'].toString(),
-                          color: Colors.green[600]!,
-                        ),
-                        _overviewChip(
-                          context,
-                          label: 'Rejected',
-                          value: d['rejected'].toString(),
-                          color: Colors.red[400]!,
-                        ),
                       ],
-                    );
-                  },
-                ),
-              ],
-            ),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 16),
@@ -428,6 +526,35 @@ class _DonationsSectionState extends State<DonationsSection> {
           value,
           style: TextStyle(
             fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _fundingMetric(
+    BuildContext context,
+    String label,
+    double value,
+    Color color,
+  ) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+          ),
+        ),
+        Text(
+          value >= 1000
+              ? '${(value / 1000).toStringAsFixed(1)}k'
+              : value.toStringAsFixed(0),
+          style: TextStyle(
+            fontSize: 16,
             fontWeight: FontWeight.bold,
             color: color,
           ),

@@ -5,11 +5,16 @@ enum AdminSection {
   dashboard,
   households,
   donations,
+  assistancePacks,
   hrm,
+  finalApproval,
   audit,
   reports,
   notifications,
   profile,
+  // Phase 5
+  purchaseApproval,
+  deliveryVerification,
 }
 
 /// Enum for household view modes (cards or table)

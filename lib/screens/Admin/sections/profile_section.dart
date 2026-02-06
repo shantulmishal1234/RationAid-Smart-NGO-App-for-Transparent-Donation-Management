@@ -9,6 +9,7 @@ import 'package:ration_aid/services/auth_service.dart';
 import 'package:ration_aid/screens/Startup & Authentication/auth_screen.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
+import 'package:ration_aid/services/audit_service.dart';
 
 /// Admin Profile Section - Full profile management
 class AdminProfileSection extends StatefulWidget {
@@ -177,6 +178,13 @@ class _AdminProfileSectionState extends State<AdminProfileSection> {
 
           await FirebaseAuth.instance.currentUser?.updatePhotoURL(url);
 
+          // Log audit
+          await AuditService.logUserAction(
+            action: 'update_profile_photo',
+            userId: userId,
+            details: 'Updated profile photo',
+          );
+
           if (mounted) {
             setState(() {
               _profilePhotoUrl = url;
@@ -222,6 +230,13 @@ class _AdminProfileSectionState extends State<AdminProfileSection> {
         );
 
         await FirebaseAuth.instance.currentUser?.updatePhotoURL(null);
+
+        // Log audit
+        await AuditService.logUserAction(
+          action: 'remove_profile_photo',
+          userId: userId,
+          details: 'Removed profile photo',
+        );
 
         if (mounted) {
           setState(() => _profilePhotoUrl = null);
@@ -578,6 +593,12 @@ class _AdminProfileSectionState extends State<AdminProfileSection> {
                             );
 
                             if (context.mounted) {
+                              // Log audit
+                              await AuditService.logUserAction(
+                                action: 'change_password',
+                                userId: user.uid,
+                                details: 'Password updated successfully',
+                              );
                               Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
@@ -795,6 +816,15 @@ class _AdminProfileSectionState extends State<AdminProfileSection> {
                           // Update display name
                           await user.updateDisplayName(newName);
                           await user.reload();
+
+                          // Log audit
+                          await AuditService.logUserAction(
+                            action: 'update_name',
+                            userId: user.uid,
+                            userName: newName,
+                            details:
+                                'Name updated from ${user.displayName} to $newName',
+                          );
 
                           if (context.mounted) {
                             Navigator.pop(context);

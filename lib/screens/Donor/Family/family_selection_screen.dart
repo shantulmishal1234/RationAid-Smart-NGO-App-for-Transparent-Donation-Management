@@ -183,6 +183,35 @@ class _FamilySelectionCard extends StatelessWidget {
                       'Family of ${family.familySize} • ${family.needs.length} items needed',
                       style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                     ),
+                    if (family.targetAmount > 0) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value:
+                                    (family.raisedAmount / family.targetAmount)
+                                        .clamp(0.0, 1.0),
+                                backgroundColor: Colors.grey[200],
+                                color: AppColors.donorGreen,
+                                minHeight: 4,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${((family.raisedAmount / family.targetAmount) * 100).toInt()}%',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.donorGreen,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),

@@ -24,6 +24,18 @@ class _FloatingActionMenuState extends State<FloatingActionMenu>
 
   final List<Map<String, dynamic>> _menuItems = [
     {
+      'icon': Icons.gavel,
+      'label': 'Final Approval',
+      'section': AdminSection.finalApproval,
+      'color': const Color(0xFF00BCD4),
+    },
+    {
+      'icon': Icons.inventory_2,
+      'label': 'Assistance Packs',
+      'section': AdminSection.assistancePacks,
+      'color': const Color(0xFF9C27B0),
+    },
+    {
       'icon': Icons.bar_chart_rounded,
       'label': 'Reports',
       'section': AdminSection.reports,
@@ -47,6 +59,18 @@ class _FloatingActionMenuState extends State<FloatingActionMenu>
       'section': AdminSection.profile,
       'color': const Color(0xFF2196F3),
     },
+    {
+      'icon': Icons.shopping_bag,
+      'label': 'Purchase Approval',
+      'section': AdminSection.purchaseApproval,
+      'color': const Color(0xFF673AB7),
+    },
+    {
+      'icon': Icons.local_shipping,
+      'label': 'Delivery Verification',
+      'section': AdminSection.deliveryVerification,
+      'color': const Color(0xFFFF5722),
+    },
   ];
 
   @override
@@ -68,8 +92,8 @@ class _FloatingActionMenuState extends State<FloatingActionMenu>
         CurvedAnimation(
           parent: _controller,
           curve: Interval(
-            index * 0.08,
-            0.5 + (index * 0.08),
+            index * 0.05,
+            0.5 + (index * 0.05),
             curve: Curves.elasticOut,
           ),
         ),

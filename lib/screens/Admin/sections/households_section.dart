@@ -270,10 +270,6 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
                       child: Text('All Status'),
                     ),
                     const PopupMenuItem(
-                      value: 'pending',
-                      child: Text('Pending'),
-                    ),
-                    const PopupMenuItem(
                       value: 'accepted',
                       child: Text('Accepted'),
                     ),
@@ -412,6 +408,8 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
                       status: data['status'] ?? 'pending',
                       assignedVolunteerName:
                           data['assignedVolunteerName'] as String?,
+                      targetAmount: (data['targetAmount'] ?? 0).toDouble(),
+                      raisedAmount: (data['raisedAmount'] ?? 0).toDouble(),
                       onTap: () async {
                         await Navigator.push(
                           context,

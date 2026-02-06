@@ -8,7 +8,8 @@ class AuditService {
   /// Log any action to the audit trail
   static Future<void> logAction({
     required String action,
-    required String entityType, // 'family', 'donation', 'user', 'system'
+    required String
+    entityType, // 'family', 'donation', 'user', 'system', 'assistance_pack'
     String? entityId,
     String? details,
     Map<String, dynamic>? metadata,
@@ -86,5 +87,21 @@ class AuditService {
     String? details,
   }) async {
     await logAction(action: action, entityType: 'system', details: details);
+  }
+
+  /// Log Assistance Pack changes
+  static Future<void> logPackAction({
+    required String action,
+    required String packId,
+    required String packName,
+    String? details,
+  }) async {
+    await logAction(
+      action: action,
+      entityType: 'assistance_pack',
+      entityId: packId,
+      details: details,
+      metadata: {'packName': packName},
+    );
   }
 }

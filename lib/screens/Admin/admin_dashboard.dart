@@ -8,9 +8,14 @@ import 'package:ration_aid/screens/Admin/sections/households_section.dart';
 import 'package:ration_aid/screens/Admin/sections/donations_section.dart';
 import 'package:ration_aid/screens/Admin/sections/hrm_section.dart';
 import 'package:ration_aid/screens/Admin/sections/reports_section.dart';
-import 'package:ration_aid/screens/Admin/sections/notifications_section.dart';
+// import 'package:ration_aid/screens/Admin/sections/notifications_section.dart'; // Deprecated
+import 'package:ration_aid/screens/Admin/Notifications/notifications_center_screen.dart';
 import 'package:ration_aid/screens/Admin/sections/profile_section.dart';
 import 'package:ration_aid/screens/Admin/Audit Trail/audit_trail_screen.dart';
+import 'package:ration_aid/screens/Admin/FinalApprover/final_approver_screen.dart';
+import 'package:ration_aid/screens/Admin/AssistancePacks/pack_management_screen.dart';
+import 'package:ration_aid/screens/Admin/Verification/purchase_approval_screen.dart';
+import 'package:ration_aid/screens/Admin/Verification/delivery_verification_screen.dart';
 
 import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 
@@ -126,6 +131,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
           },
         );
 
+      case AdminSection.assistancePacks:
+        return const PackManagementScreen();
+
+      case AdminSection.finalApproval:
+        return const FinalApproverScreen();
+
       case AdminSection.audit:
         return const AuditTrailScreen();
 
@@ -139,10 +150,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
         );
 
       case AdminSection.notifications:
-        return const NotificationsSection();
+        return const NotificationsCenterScreen();
 
       case AdminSection.profile:
         return const AdminProfileSection();
+
+      case AdminSection.purchaseApproval:
+        return const PurchaseApprovalScreen();
+
+      case AdminSection.deliveryVerification:
+        return const DeliveryVerificationScreen();
     }
   }
 }

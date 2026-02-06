@@ -46,7 +46,10 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
         ),
       ],
       body: StreamBuilder<QuerySnapshot>(
-        stream: NotificationService.streamUserNotifications(currentUser!.uid),
+        stream: FirebaseFirestore.instance
+            .collection('admin_notifications')
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -87,12 +90,16 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
             itemBuilder: (context, index) {
               final doc = docs[index];
               final data = doc.data() as Map<String, dynamic>;
-              final isRead = data['isRead'] ?? false;
+              final isRead =
+                  (data['readBy'] as List<dynamic>?)?.contains(
+                    currentUser?.uid,
+                  ) ??
+                  false;
               final createdAt = data['createdAt'] as Timestamp?;
 
               return _NotificationTile(
                 title: data['title'] ?? 'No Title',
-                body: data['body'] ?? 'No Body',
+                body: data['message'] ?? data['body'] ?? 'No Body',
                 createdAt: createdAt?.toDate(),
                 isRead: isRead,
                 onTap: () {
@@ -102,7 +109,7 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
                   _showNotificationDetails(
                     context,
                     data['title'] ?? 'No Title',
-                    data['body'] ?? 'No Body',
+                    data['message'] ?? data['body'] ?? 'No Body',
                     createdAt?.toDate(),
                   );
                 },

@@ -6,6 +6,8 @@ class Family {
   final String id;
   final String city; // New city field
   final String area; // masked location (neighborhood)
+  final String? address;
+  final String? phone;
   final int familySize;
   final int numberOfAdults;
   final int numberOfChildren;
@@ -16,10 +18,53 @@ class Family {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
+  // Location fields (Phase 1)
+  final GeoPoint? unverifiedLocation;
+  final String? locationCapturedBy;
+  final DateTime? locationCapturedAt;
+  final GeoPoint? verifiedLocation;
+  final DateTime? locationVerifiedAt;
+  final String? locationVerifiedBy;
+  final String? locationAddress;
+
+  // Review fields (Phase 2)
+  final List<String> reviewerIds;
+  final int approveCount;
+  final int rejectCount;
+  final int quorumThreshold;
+  final bool quorumReached;
+
+  // Pack assignment (Phase 3)
+  final String? assignedPackId;
+  final String? assignedPackName;
+
+  // Final Approver decision (Phase 3)
+  final String? finalApproverUid;
+  final String? finalApproverName;
+  final String? finalDecision; // 'accept' or 'reject'
+  final String? finalDecisionComment;
+  final DateTime? finalDecisionAt;
+
+  // Funding pool (Phase 4)
+  final double targetAmount;
+  final double raisedAmount;
+  final double remainingAmount;
+
+  // Fulfillment (Phase 5)
+  final String
+  fulfillmentStatus; // pending, ready_for_purchase, purchase_approved, delivered
+  final String? purchaseApprovedBy;
+  final DateTime? purchaseApprovedAt;
+  final String? deliveryProof; // URL
+  final String? deliveredBy;
+  final DateTime? deliveredAt;
+
   Family({
     required this.id,
     required this.city,
     required this.area,
+    this.address,
+    this.phone,
     required this.familySize,
     required this.numberOfAdults,
     required this.numberOfChildren,
@@ -29,6 +74,40 @@ class Family {
     this.remarks,
     this.createdAt,
     this.updatedAt,
+    // Location fields
+    this.unverifiedLocation,
+    this.locationCapturedBy,
+    this.locationCapturedAt,
+    this.verifiedLocation,
+    this.locationVerifiedAt,
+    this.locationVerifiedBy,
+    this.locationAddress,
+    // Review fields
+    this.reviewerIds = const [],
+    this.approveCount = 0,
+    this.rejectCount = 0,
+    this.quorumThreshold = 3,
+    this.quorumReached = false,
+    // Pack assignment
+    this.assignedPackId,
+    this.assignedPackName,
+    // Final Approver decision
+    this.finalApproverUid,
+    this.finalApproverName,
+    this.finalDecision,
+    this.finalDecisionComment,
+    this.finalDecisionAt,
+    // Funding pool
+    this.targetAmount = 0,
+    this.raisedAmount = 0,
+    this.remainingAmount = 0,
+    // Fulfillment
+    this.fulfillmentStatus = 'pending',
+    this.purchaseApprovedBy,
+    this.purchaseApprovedAt,
+    this.deliveryProof,
+    this.deliveredBy,
+    this.deliveredAt,
   });
 
   /// Factory constructor from Firestore document
@@ -51,8 +130,10 @@ class Family {
 
     return Family(
       id: doc.id,
-      city: data['city'] ?? '', // Default to empty if missing (legacy data)
+      city: data['city'] ?? '',
       area: data['area'] ?? 'Unknown Area',
+      address: data['address'],
+      phone: data['phone'],
       familySize: familySize,
       numberOfAdults: numberOfAdults,
       numberOfChildren: numberOfChildren,
@@ -66,6 +147,48 @@ class Family {
       remarks: data['remarks'],
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      // Location fields
+      unverifiedLocation: data['unverifiedLocation'],
+      locationCapturedBy: data['locationCapturedBy'],
+      locationCapturedAt: data['locationCapturedAt'] != null
+          ? (data['locationCapturedAt'] as Timestamp).toDate()
+          : null,
+      verifiedLocation: data['verifiedLocation'],
+      locationVerifiedAt: data['locationVerifiedAt'] != null
+          ? (data['locationVerifiedAt'] as Timestamp).toDate()
+          : null,
+      locationVerifiedBy: data['locationVerifiedBy'],
+      locationAddress: data['locationAddress'],
+      // Review fields
+      reviewerIds: data['reviewerIds'] != null
+          ? List<String>.from(data['reviewerIds'] as List)
+          : [],
+      approveCount: data['approveCount'] ?? 0,
+      rejectCount: data['rejectCount'] ?? 0,
+      quorumThreshold: data['quorumThreshold'] ?? 3,
+      quorumReached: data['quorumReached'] ?? false,
+      // Pack assignment
+      assignedPackId: data['assignedPackId'],
+      assignedPackName: data['assignedPackName'],
+      // Final Approver decision
+      finalApproverUid: data['finalApproverUid'],
+      finalApproverName: data['finalApproverName'],
+      finalDecision: data['finalDecision'],
+      finalDecisionComment: data['finalDecisionComment'],
+      finalDecisionAt: data['finalDecisionAt'] != null
+          ? (data['finalDecisionAt'] as Timestamp).toDate()
+          : null,
+      // Funding pool
+      targetAmount: (data['targetAmount'] ?? 0).toDouble(),
+      raisedAmount: (data['raisedAmount'] ?? 0).toDouble(),
+      remainingAmount: (data['remainingAmount'] ?? 0).toDouble(),
+      // Fulfillment
+      fulfillmentStatus: data['fulfillmentStatus'] ?? 'pending',
+      purchaseApprovedBy: data['purchaseApprovedBy'],
+      purchaseApprovedAt: (data['purchaseApprovedAt'] as Timestamp?)?.toDate(),
+      deliveryProof: data['deliveryProof'],
+      deliveredBy: data['deliveredBy'],
+      deliveredAt: (data['deliveredAt'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -119,6 +242,8 @@ class Family {
     String? id,
     String? city,
     String? area,
+    String? address,
+    String? phone,
     int? familySize,
     int? numberOfAdults,
     int? numberOfChildren,
@@ -132,6 +257,8 @@ class Family {
       id: id ?? this.id,
       city: city ?? this.city,
       area: area ?? this.area,
+      address: address ?? this.address,
+      phone: phone ?? this.phone,
       familySize: familySize ?? this.familySize,
       numberOfAdults: numberOfAdults ?? this.numberOfAdults,
       numberOfChildren: numberOfChildren ?? this.numberOfChildren,

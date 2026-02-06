@@ -2,10 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:ration_aid/models/family_model.dart';
 import 'package:ration_aid/services/audit_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
+import 'package:ration_aid/screens/Admin/widgets/family_voting_widget.dart';
 import 'edit_family_screen.dart';
 
 class FamilyDetailScreen extends StatefulWidget {
@@ -32,6 +34,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
   bool _isLoading = false;
 
   late Map<String, dynamic> _familyData;
+  Family? _family; // Family model object
   List<dynamic> _documents = [];
   List<String> _assistanceNeeds = [];
 
@@ -46,6 +49,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
   void initState() {
     super.initState();
     _familyData = widget.initialData;
+    _loadFamilyModel(); // Load Family model
     _status = _familyData['status'] ?? 'pending';
     _remarksController.text = _familyData['remarks'] ?? '';
     _documents = List<dynamic>.from(_familyData['documents'] ?? []);
@@ -60,6 +64,22 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
   void dispose() {
     _remarksController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadFamilyModel() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('families')
+          .doc(widget.familyId)
+          .get();
+      if (doc.exists && mounted) {
+        setState(() {
+          _family = Family.fromFirestore(doc);
+        });
+      }
+    } catch (e) {
+      // Silent fail, will use existing _familyData
+    }
   }
 
   Future<void> _loadDistributors() async {
@@ -453,6 +473,13 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                   ),
                   const SizedBox(height: 32),
 
+                  if (_family != null && _family!.targetAmount > 0) ...[
+                    _buildSectionHeader(context, 'Funding Progress'),
+                    const SizedBox(height: 16),
+                    FrostedPanel(child: _buildFundingSection(context)),
+                    const SizedBox(height: 32),
+                  ],
+
                   _buildSectionHeader(context, 'Contact & Location'),
                   const SizedBox(height: 16),
                   FrostedPanel(child: _buildContactInfo(context)),
@@ -468,9 +495,24 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                   FrostedPanel(child: _buildVolunteerSection(context)),
                   const SizedBox(height: 32),
 
-                  _buildSectionHeader(context, 'Verification Decision'),
-                  const SizedBox(height: 16),
-                  FrostedPanel(child: _buildDecisionSection(context)),
+                  // Show voting UI for pending_review status, otherwise show decision section
+                  if (_status == 'pending_review' && _family != null) ...[
+                    _buildSectionHeader(context, 'Family Review - Voting'),
+                    const SizedBox(height: 16),
+                    FrostedPanel(
+                      child: FamilyVotingWidget(
+                        family: _family!,
+                        onVoteSubmitted: () {
+                          // Reload family data after vote
+                          _loadFamilyModel();
+                        },
+                      ),
+                    ),
+                  ] else ...[
+                    _buildSectionHeader(context, 'Verification Decision'),
+                    const SizedBox(height: 16),
+                    FrostedPanel(child: _buildDecisionSection(context)),
+                  ],
                   const SizedBox(height: 32),
 
                   if (_documents.isNotEmpty) ...[
@@ -808,23 +850,51 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
   }
 
   Widget _buildDecisionSection(BuildContext context) {
+    // Determine which status chips to show based on current status
+    List<Map<String, String>> availableStatuses = [];
+
+    if (_status == 'pending' || _status == 'pending_review') {
+      // For pending families, show all options
+      availableStatuses = [
+        {'value': 'pending', 'label': 'Pending'},
+        {'value': 'accepted', 'label': 'Accept'},
+        {'value': 'rejected', 'label': 'Reject'},
+        {'value': 'discarded', 'label': 'Discard'},
+      ];
+    } else if (_status == 'accepted') {
+      // For accepted families, only show discard option
+      availableStatuses = [
+        {'value': 'accepted', 'label': 'Accepted'},
+        {'value': 'discarded', 'label': 'Discard'},
+      ];
+    } else if (_status == 'rejected') {
+      // For rejected families, only show discard option
+      availableStatuses = [
+        {'value': 'rejected', 'label': 'Rejected'},
+        {'value': 'discarded', 'label': 'Discard'},
+      ];
+    } else if (_status == 'discarded') {
+      // For discarded families, show read-only
+      availableStatuses = [
+        {'value': 'discarded', 'label': 'Discarded'},
+      ];
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: [
-            _statusChip('pending', 'Pending'),
-            _statusChip('accepted', 'Accept'),
-            _statusChip('rejected', 'Reject'),
-            _statusChip('discarded', 'Discard'),
-          ],
+          children: availableStatuses.map((statusData) {
+            return _statusChip(statusData['value']!, statusData['label']!);
+          }).toList(),
         ),
         const SizedBox(height: 16),
         TextField(
           controller: _remarksController,
           maxLines: 3,
+          enabled: _status != 'discarded', // Disable for discarded
           decoration: InputDecoration(
             labelText: 'Remarks / Reason',
             alignLabelWithHint: true,
@@ -836,7 +906,9 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: _isUpdatingStatus ? null : _updateStatus,
+            onPressed: _isUpdatingStatus || _status == 'discarded'
+                ? null
+                : _updateStatus,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryBlue,
               foregroundColor: Colors.white,
@@ -1212,6 +1284,142 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildFundingSection(BuildContext context) {
+    if (_family == null) return const SizedBox();
+
+    final theme = Theme.of(context);
+    final target = _family!.targetAmount;
+    final raised = _family!.raisedAmount;
+    final percent = (raised / target).clamp(0.0, 1.0);
+    final fullyFunded = raised >= target;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Raised Amount',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+                RichText(
+                  text: TextSpan(
+                    style: TextStyle(
+                      fontFamily: theme.textTheme.bodyLarge?.fontFamily,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                    children: [
+                      TextSpan(text: raised.toStringAsFixed(0)),
+                      TextSpan(
+                        text: ' PKR',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.green.withOpacity(0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  'Goal Amount',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+                RichText(
+                  text: TextSpan(
+                    style: TextStyle(
+                      fontFamily: theme.textTheme.bodyLarge?.fontFamily,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
+                    children: [
+                      TextSpan(text: target.toStringAsFixed(0)),
+                      TextSpan(
+                        text: ' PKR',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.primary.withOpacity(0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: LinearProgressIndicator(
+            value: percent,
+            minHeight: 12,
+            backgroundColor: theme.brightness == Brightness.dark
+                ? Colors.grey[800]
+                : Colors.grey[200],
+            color: fullyFunded ? Colors.green : Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '${(percent * 100).toInt()}% Funded',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: fullyFunded ? Colors.green : theme.colorScheme.primary,
+              ),
+            ),
+            if (fullyFunded)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'GOAL REACHED',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+              )
+            else
+              Text(
+                'Gap: ${(target - raised).toStringAsFixed(0)} PKR',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.orange[700],
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }

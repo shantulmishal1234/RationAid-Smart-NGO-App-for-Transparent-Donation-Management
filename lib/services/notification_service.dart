@@ -1,266 +1,160 @@
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-
-// Top-level function for background message handling
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  print('Handling background message: ${message.messageId}');
-}
 
 class NotificationService {
-  static final FirebaseMessaging _fcm = FirebaseMessaging.instance;
-  static final FlutterLocalNotificationsPlugin _localNotifications =
-      FlutterLocalNotificationsPlugin();
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Initialize notifications
+  /// Initialize the notification service
   static Future<void> initialize() async {
-    // Skip Firebase Messaging setup on web
-    if (kIsWeb) {
-      print('Web platform: Skipping Firebase Messaging initialization');
-      return;
-    }
-
-    try {
-      // Request permission
-      NotificationSettings settings = await _fcm.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-        provisional: false,
-      );
-
-      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-        print('User granted notification permission');
-      }
-
-      // Configure local notifications
-      const AndroidInitializationSettings androidSettings =
-          AndroidInitializationSettings('@mipmap/ic_launcher');
-
-      const DarwinInitializationSettings iosSettings =
-          DarwinInitializationSettings(
-            requestAlertPermission: true,
-            requestBadgePermission: true,
-            requestSoundPermission: true,
-          );
-
-      const InitializationSettings initSettings = InitializationSettings(
-        android: androidSettings,
-        iOS: iosSettings,
-      );
-
-      await _localNotifications.initialize(
-        initSettings,
-        onDidReceiveNotificationResponse: _onNotificationTapped,
-      );
-
-      // Create notification channel for Android
-      const AndroidNotificationChannel channel = AndroidNotificationChannel(
-        'ration_aid_channel',
-        'Ration Aid Notifications',
-        description: 'Notifications for Ration Aid app',
-        importance: Importance.high,
-      );
-
-      await _localNotifications
-          .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin
-          >()
-          ?.createNotificationChannel(channel);
-
-      // Set up background message handler
-      FirebaseMessaging.onBackgroundMessage(
-        _firebaseMessagingBackgroundHandler,
-      );
-
-      // Handle foreground messages
-      FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-
-      // Handle notification taps when app is in background
-      FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
-
-      // Get initial message if app was opened from terminated state
-      RemoteMessage? initialMessage = await _fcm.getInitialMessage();
-      if (initialMessage != null) {
-        _handleNotificationTap(initialMessage);
-      }
-
-      // Save FCM token
-      await _saveFCMToken();
-    } catch (e) {
-      print('Error initializing notifications: $e');
-      // Don't block app startup if notifications fail
-    }
+    // Placeholder for future initialization (e.g. FCM)
+    print('NotificationService initialized');
   }
 
-  // Save FCM token to Firestore
-  static Future<void> _saveFCMToken() async {
-    if (kIsWeb) return; // Skip on web
-
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        String? token = await _fcm.getToken();
-        if (token != null) {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .update({'fcmToken': token});
-          print('FCM Token saved: $token');
-        }
-      }
-    } catch (e) {
-      print('Error saving FCM token: $e');
-    }
-  }
-
-  // Handle foreground messages
-  static Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    if (kIsWeb) return;
-
-    print('Foreground message: ${message.messageId}');
-
-    // Save to Firestore
-    await _saveNotificationToFirestore(message);
-
-    // Show local notification
-    RemoteNotification? notification = message.notification;
-    if (notification != null) {
-      await _localNotifications.show(
-        notification.hashCode,
-        notification.title,
-        notification.body,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'ration_aid_channel',
-            'Ration Aid Notifications',
-            importance: Importance.high,
-            priority: Priority.high,
-            icon: '@mipmap/ic_launcher',
-          ),
-          iOS: DarwinNotificationDetails(),
-        ),
-        payload: message.data['route'],
-      );
-    }
-  }
-
-  // Handle notification tap
-  static void _handleNotificationTap(RemoteMessage message) {
-    print('Notification tapped: ${message.messageId}');
-    // TODO: Navigate to specific screen based on message.data['route']
-  }
-
-  // Handle local notification tap
-  static void _onNotificationTapped(NotificationResponse response) {
-    print('Local notification tapped: ${response.payload}');
-    // TODO: Navigate based on payload
-  }
-
-  // Save notification to Firestore
-  static Future<void> _saveNotificationToFirestore(
-    RemoteMessage message,
-  ) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        await FirebaseFirestore.instance.collection('notifications').add({
-          'userId': user.uid,
-          'title': message.notification?.title ?? '',
-          'body': message.notification?.body ?? '',
-          'data': message.data,
-          'isRead': false,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
-    } catch (e) {
-      print('Error saving notification: $e');
-    }
-  }
-
-  // Send notification to specific user (admin only)
-  static Future<void> sendToUser({
-    required String userId,
-    required String title,
-    required String body,
-    Map<String, String>? data,
-  }) async {
-    // Save to Firestore
-    await FirebaseFirestore.instance.collection('notifications').add({
-      'userId': userId,
-      'title': title,
-      'body': body,
-      'data': data ?? {},
-      'isRead': false,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
-    print('Notification saved for user: $userId');
-  }
-
-  // Send notification to role (admin only)
+  /// Send notification to a specific role (Legacy compatibility)
   static Future<void> sendToRole({
     required String role,
     required String title,
     required String body,
-    Map<String, String>? data,
+    Map<String, dynamic>? data,
   }) async {
-    // Get all users with this role
-    final usersSnapshot = await FirebaseFirestore.instance
-        .collection('users')
-        .where('roles', arrayContains: role)
-        .get();
-
-    // Send to each user
-    for (var doc in usersSnapshot.docs) {
-      await FirebaseFirestore.instance.collection('notifications').add({
-        'userId': doc.id,
-        'title': title,
-        'body': body,
-        'data': data ?? {},
-        'isRead': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+    // Map 'admin' role to broadcast admin notification
+    if (role == 'admin') {
+      await sendAdminNotification(
+        title: title,
+        message: body,
+        type: data?['type'] ?? 'general',
+        relatedId: data?['donationId'] ?? data?['familyId'],
+      );
     }
+  }
 
-    print(
-      'Notification sent to $role role: ${usersSnapshot.docs.length} users',
+  /// Send notification to a specific user (Direct)
+  static Future<void> sendToUser({
+    required String userId,
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+  }) async {
+    try {
+      await _firestore.collection('notifications').add({
+        'userId': userId,
+        'title': title,
+        'message': body,
+        'data': data,
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+        'type': 'direct_message',
+      });
+    } catch (e) {
+      print('Error sending direct notification: $e');
+    }
+  }
+
+  /// Send a notification to all admins
+  static Future<void> sendAdminNotification({
+    required String title,
+    required String message,
+    required String
+    type, // 'family_review', 'quorum_reached', 'fully_funded', 'delivery_pending'
+    String? relatedId, // familyId or donationId
+  }) async {
+    try {
+      await _firestore.collection('admin_notifications').add({
+        'title': title,
+        'message': message,
+        'type': type,
+        'relatedId': relatedId,
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+        'readBy': [], // List of admin UIDs who have read this
+      });
+    } catch (e) {
+      print('Error sending notification: $e');
+    }
+  }
+
+  /// Send notification specifically for a new family needing review
+  static Future<void> notifyNewFamily(String familyId, String location) async {
+    await sendAdminNotification(
+      title: 'New Family Submitted',
+      message: 'A new family in $location is waiting for review.',
+      type: 'family_review',
+      relatedId: familyId,
     );
   }
 
-  // Mark notification as read
+  /// Send notification for Quorum Reached
+  static Future<void> notifyQuorumReached(String familyId, int votes) async {
+    await sendAdminNotification(
+      title: 'Quorum Reached',
+      message: 'Family has received $votes votes. Ready for Final Approval.',
+      type: 'quorum_reached',
+      relatedId: familyId,
+    );
+  }
+
+  /// Send notification for Fully Funded
+  static Future<void> notifyFullyFunded(String familyId) async {
+    await sendAdminNotification(
+      title: 'Funding Target Met',
+      message: 'A family is now fully funded! Verify purchase now.',
+      type: 'fully_funded',
+      relatedId: familyId,
+    );
+  }
+
+  /// Mark notification as read for current user
   static Future<void> markAsRead(String notificationId) async {
-    await FirebaseFirestore.instance
-        .collection('notifications')
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    await _firestore
+        .collection('admin_notifications')
         .doc(notificationId)
-        .update({'isRead': true});
+        .update({
+          'readBy': FieldValue.arrayUnion([user.uid]),
+        });
   }
 
-  // Get unread count
-  static Stream<int> getUnreadCount(String userId) {
-    return FirebaseFirestore.instance
-        .collection('notifications')
-        .where('userId', isEqualTo: userId)
-        .where('isRead', isEqualTo: false)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.length);
+  /// Mark all as read
+  static Future<void> markAllAsRead() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final batch = _firestore.batch();
+    final snapshot = await _firestore.collection('admin_notifications').get();
+
+    for (var doc in snapshot.docs) {
+      batch.update(doc.reference, {
+        'readBy': FieldValue.arrayUnion([user.uid]),
+      });
+    }
+    await batch.commit();
   }
 
-  // Stream notifications for donor role (uses composite index)
-  static Stream<QuerySnapshot> streamDonorNotifications(String userId) {
-    return FirebaseFirestore.instance
-        .collection('notifications')
-        .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .snapshots();
+  /// Stream of unread notifications for the current user
+  /// Since 'isRead' is shared, we check if 'readBy' contains current uid
+  static Stream<int> getUnreadCountStream() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return Stream.value(0);
+
+    return _firestore.collection('admin_notifications').snapshots().map((
+      snapshot,
+    ) {
+      int count = 0;
+      for (var doc in snapshot.docs) {
+        final readBy = List<String>.from(doc.data()['readBy'] ?? []);
+        if (!readBy.contains(user.uid)) {
+          count++;
+        }
+      }
+      return count;
+    });
   }
 
-  // Stream all notifications for a specific user (uses composite index)
+  /// Stream notifications for a specific user (e.g. Donor)
   static Stream<QuerySnapshot> streamUserNotifications(String userId) {
-    return FirebaseFirestore.instance
+    return _firestore
         .collection('notifications')
         .where('userId', isEqualTo: userId)
         .orderBy('createdAt', descending: true)

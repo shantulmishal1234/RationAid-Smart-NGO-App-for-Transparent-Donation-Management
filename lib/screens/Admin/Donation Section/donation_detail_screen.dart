@@ -6,6 +6,7 @@ import 'package:ration_aid/services/audit_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
+import 'package:ration_aid/services/funding_service.dart';
 
 class DonationDetailScreen extends StatefulWidget {
   final String donationId;
@@ -106,6 +107,12 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
             ? 'No remarks provided'
             : _remarksController.text.trim(),
       );
+
+      // Trigger funding recalculation if verified and linked to a family
+      if (_status == 'verified' && d['familyId'] != null) {
+        // Run in background, don't await blocking UI
+        FundingService.recalculateFamilyFunding(d['familyId']);
+      }
 
       if (!mounted) return;
       Navigator.pop(context);

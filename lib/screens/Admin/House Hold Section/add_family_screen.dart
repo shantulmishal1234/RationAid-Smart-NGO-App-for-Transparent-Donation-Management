@@ -8,6 +8,9 @@ import 'package:ration_aid/services/cloudinary_service.dart';
 import 'package:ration_aid/services/notification_service.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
+import 'package:ration_aid/widgets/location_picker.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class AddFamilyScreen extends StatefulWidget {
   const AddFamilyScreen({super.key});
@@ -40,6 +43,10 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
   String? _uploadedFileName;
   bool _isUploadingDoc = false;
   bool _isSaving = false;
+
+  // Location capture
+  GeoPoint? _capturedLocation;
+  String? _capturedAddress;
 
   @override
   void dispose() {
@@ -150,36 +157,49 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
               },
             ];
 
-      final docRef = await FirebaseFirestore.instance
-          .collection('families')
-          .add({
-            'name': _familyNameController.text.trim(),
-            'cnic': _cnicController.text.trim(),
-            'adults': int.tryParse(_adultsController.text) ?? 0,
-            'children': int.tryParse(_childrenController.text) ?? 0,
-            'familySize': _totalFamilySize,
-            'city': _cityController.text.trim(),
-            'area': _areaController.text.trim(),
-            'address': _addressController.text.trim(),
-            'phone': _phoneController.text.trim(),
-            'assistanceNeeds': _assistanceNeeds.toList(),
-            'emergencyContact': _emergencyContactController.text.trim(),
-            'monthlyIncome': int.tryParse(_incomeController.text) ?? 0,
-            'remarks': _notesController.text.trim(),
-            'status': 'pending',
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-            'documents': documents,
-            'decisions': [],
-          });
+      final docRef = await FirebaseFirestore.instance.collection('families').add({
+        'name': _familyNameController.text.trim(),
+        'cnic': _cnicController.text.trim(),
+        'adults': int.tryParse(_adultsController.text) ?? 0,
+        'children': int.tryParse(_childrenController.text) ?? 0,
+        'familySize': _totalFamilySize,
+        'city': _cityController.text.trim(),
+        'area': _areaController.text.trim(),
+        'address': _addressController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'assistanceNeeds': _assistanceNeeds.toList(),
+        'emergencyContact': _emergencyContactController.text.trim(),
+        'monthlyIncome': int.tryParse(_incomeController.text) ?? 0,
+        'remarks': _notesController.text.trim(),
+        'status':
+            'pending_review', // Changed from 'pending' to indicate needs quorum review
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'documents': documents,
+        'decisions': [],
+        // Location fields
+        if (_capturedLocation != null) ...{
+          'unverifiedLocation': _capturedLocation,
+          'locationCapturedBy': FirebaseAuth.instance.currentUser?.uid,
+          'locationCapturedAt': FieldValue.serverTimestamp(),
+          'locationAddress': _capturedAddress,
+        },
+        // Review fields (initialize for quorum system)
+        'reviewerIds': [],
+        'approveCount': 0,
+        'rejectCount': 0,
+        'quorumThreshold': 3,
+        'quorumReached': false,
+        // Funding pool (initialize)
+        'targetAmount': 0.0,
+        'raisedAmount': 0.0,
+        'remainingAmount': 0.0,
+      });
 
       // Notify Admins
-      NotificationService.sendToRole(
-        role: 'admin',
-        title: 'New Family Registration',
-        body:
-            'Family ${_familyNameController.text.trim()} has been registered and is pending review.',
-        data: {'familyId': docRef.id, 'type': 'household'},
+      await NotificationService.notifyNewFamily(
+        docRef.id,
+        _cityController.text.trim(),
       );
 
       if (!mounted) return;
@@ -374,6 +394,109 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                             hint: 'House #, Street #, etc.',
                             maxLines: 1,
                           ),
+                          const SizedBox(height: 20),
+                          // GPS Location Capture
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.location_on,
+                                size: 20,
+                                color: theme.colorScheme.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'GPS Location (Required for Verification)',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.8),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => LocationPicker(
+                                  initialLocation: _capturedLocation != null
+                                      ? LatLng(
+                                          _capturedLocation!.latitude,
+                                          _capturedLocation!.longitude,
+                                        )
+                                      : null,
+                                  onLocationSelected: (location, address) {
+                                    setState(() {
+                                      _capturedLocation = GeoPoint(
+                                        location.latitude,
+                                        location.longitude,
+                                      );
+                                      _capturedAddress = address;
+                                    });
+                                  },
+                                ),
+                              );
+                            },
+                            icon: Icon(
+                              _capturedLocation != null
+                                  ? Icons.check_circle
+                                  : Icons.add_location_alt,
+                            ),
+                            label: Text(
+                              _capturedLocation != null
+                                  ? 'Location Captured ✓'
+                                  : 'Capture Location on Map',
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _capturedLocation != null
+                                  ? Colors.green
+                                  : theme.colorScheme.primary,
+                              side: BorderSide(
+                                color: _capturedLocation != null
+                                    ? Colors.green
+                                    : theme.colorScheme.primary,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                            ),
+                          ),
+                          if (_capturedAddress != null) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.green.withOpacity(0.3),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.check_circle,
+                                    size: 16,
+                                    color: Colors.green,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _capturedAddress!,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.green,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

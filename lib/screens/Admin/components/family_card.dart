@@ -12,6 +12,8 @@ class FamilyCard extends StatelessWidget {
   final String? assignedVolunteerName;
   final VoidCallback? onEdit;
   final int? serialNumber;
+  final double? targetAmount;
+  final double? raisedAmount;
 
   const FamilyCard({
     super.key,
@@ -25,6 +27,8 @@ class FamilyCard extends StatelessWidget {
     required this.onTap,
     this.onEdit,
     this.serialNumber,
+    this.targetAmount,
+    this.raisedAmount,
   });
 
   Color _statusColor() {
@@ -162,6 +166,41 @@ class FamilyCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (status == 'accepted' &&
+                      targetAmount != null &&
+                      targetAmount! > 0) ...[
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: 60,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: LinearProgressIndicator(
+                              value: ((raisedAmount ?? 0) / targetAmount!)
+                                  .clamp(0.0, 1.0),
+                              backgroundColor:
+                                  theme.brightness == Brightness.dark
+                                  ? Colors.grey[800]
+                                  : Colors.grey[200],
+                              color: Colors.green,
+                              minHeight: 3,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${(((raisedAmount ?? 0) / targetAmount!) * 100).toInt()}%',
+                            style: TextStyle(
+                              fontSize: 8,
+                              color: Colors.green,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (onEdit != null) ...[
                     const SizedBox(height: 6),
                     InkWell(

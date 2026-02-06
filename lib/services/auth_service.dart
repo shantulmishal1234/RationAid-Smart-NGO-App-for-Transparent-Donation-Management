@@ -66,9 +66,10 @@ class AuthService {
         password: password,
       );
 
-      await _firestore.collection('users').doc(userCred.user!.uid).update({
+      // Use set with merge to create document if it doesn't exist
+      await _firestore.collection('users').doc(userCred.user!.uid).set({
         'last_login': FieldValue.serverTimestamp(),
-      });
+      }, SetOptions(merge: true));
 
       return {
         'success': true,

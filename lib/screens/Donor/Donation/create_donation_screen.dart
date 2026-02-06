@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -63,6 +64,11 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
       _loadExistingDonation(widget.existingDonation!);
     } else {
       _selectedFamily = widget.selectedFamily;
+      // Pre-fill amount with remaining amount if available
+      if (_selectedFamily != null && _selectedFamily!.remainingAmount > 0) {
+        _amountController.text = _selectedFamily!.remainingAmount
+            .toStringAsFixed(0);
+      }
     }
   }
 
@@ -236,16 +242,43 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
       ),
       body: Form(
         key: _formKey,
-        child: TabBarView(
-          controller: _tabController,
-          children: [_buildCashDonationForm(), _buildInKindDonationForm()],
-        ),
+        child: _selectedFamily == null
+            ? TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildCashDonationForm(null),
+                  _buildInKindDonationForm(null),
+                ],
+              )
+            : StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('families')
+                    .doc(_selectedFamily!.id)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  // If stream is loading or has error, fall back to initial _selectedFamily
+                  // effectively showing the cached data while loading new data
+                  Family displayFamily = _selectedFamily!;
+
+                  if (snapshot.hasData && snapshot.data!.exists) {
+                    displayFamily = Family.fromFirestore(snapshot.data!);
+                  }
+
+                  return TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildCashDonationForm(displayFamily),
+                      _buildInKindDonationForm(displayFamily),
+                    ],
+                  );
+                },
+              ),
       ),
       bottomNavigationBar: _buildBottomActions(),
     );
   }
 
-  Widget _buildCashDonationForm() {
+  Widget _buildCashDonationForm(Family? family) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -293,6 +326,18 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
               ),
             ),
           ),
+          if (family != null && family.targetAmount > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, left: 4),
+              child: Text(
+                'Remaining need: PKR ${family.remainingAmount.toStringAsFixed(0)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.donorGreen,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           const SizedBox(height: 16),
 
           // Payment proof upload
@@ -314,7 +359,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
     );
   }
 
-  Widget _buildInKindDonationForm() {
+  Widget _buildInKindDonationForm(Family? family) {
     final theme = Theme.of(context);
 
     return SingleChildScrollView(
@@ -337,8 +382,8 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
           ),
           const SizedBox(height: 8),
 
-          if (_selectedFamily != null)
-            ..._selectedFamily!.needs.entries.map((entry) {
+          if (family != null)
+            ...family.needs.entries.map((entry) {
               final itemName = entry.key;
               final neededQty = entry.value;
               final currentQty = _selectedItems[itemName] ?? 0;
@@ -492,6 +537,12 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
           if (selected != null) {
             setState(() {
               _selectedFamily = selected;
+              // Auto-fill amount if empty and family has remaining need
+              if (_amountController.text.isEmpty &&
+                  _selectedFamily!.remainingAmount > 0) {
+                _amountController.text = _selectedFamily!.remainingAmount
+                    .toStringAsFixed(0);
+              }
             });
           }
         },
