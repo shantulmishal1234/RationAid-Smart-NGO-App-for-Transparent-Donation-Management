@@ -11,9 +11,9 @@ Admin Module: ✅ Fully developed
 
 Current Work:
 
- Donor Module (in progress)
+ Donor Module (completed But still performing changes according to addition of new modules)
 
- Purchaser Module (in progress)
+ Purchaser Module (in progress Currently )
 
  Continuous refinement and optimization of the Admin module
 
