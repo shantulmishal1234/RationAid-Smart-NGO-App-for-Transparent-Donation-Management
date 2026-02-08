@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ration_aid/models/donation_model.dart';
 import 'package:ration_aid/services/audit_service.dart';
+import 'package:ration_aid/services/funding_service.dart'; // Added
 import 'package:ration_aid/services/notification_service.dart';
 
 /// Service for managing donations in Firestore
@@ -65,6 +66,11 @@ class DonationService {
           .collection('donations')
           .add(donationWithDonorInfo.toFirestore());
 
+      // Trigger funding recalculation immediately
+      if (donation.familyId.isNotEmpty) {
+        await FundingService.recalculateFamilyFunding(donation.familyId);
+      }
+
       // Log audit trail
       await AuditService.logDonationAction(
         action: 'create_donation',
@@ -106,10 +112,12 @@ class DonationService {
       final currentData = currentDoc.data();
       final beforeStatus = currentData?['status'] ?? '';
 
-      await _firestore
-          .collection('donations')
-          .doc(donationId)
-          .update(donation.toFirestore());
+      await _firestore.doc(donationId).update(donation.toFirestore());
+
+      // Trigger funding recalculation immediately
+      if (donation.familyId.isNotEmpty) {
+        await FundingService.recalculateFamilyFunding(donation.familyId);
+      }
 
       // Log audit trail
       await AuditService.logDonationAction(
@@ -345,6 +353,12 @@ class DonationService {
         'status': 'under_verification',
         'updatedAt': Timestamp.now(),
       });
+
+      // Trigger funding recalculation
+      final familyId = data?['familyId'] as String?;
+      if (familyId != null && familyId.isNotEmpty) {
+        await FundingService.recalculateFamilyFunding(familyId);
+      }
 
       // Log audit trail
       await AuditService.logDonationAction(

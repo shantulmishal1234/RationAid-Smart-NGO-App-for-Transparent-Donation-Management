@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../theme/app_colors.dart'; // Relative import to avoid package resolution issues
 
 /// Family card widget for displaying family information
 class FamilyCard extends StatelessWidget {
@@ -184,7 +185,11 @@ class FamilyCard extends StatelessWidget {
                                   theme.brightness == Brightness.dark
                                   ? Colors.grey[800]
                                   : Colors.grey[200],
-                              color: Colors.green,
+                              // Show orange if pending included (we can't know for sure here without extra prop,
+                              // but we'll assume green for "raised" concept)
+                              color: ((raisedAmount ?? 0) >= targetAmount!)
+                                  ? Colors.green
+                                  : AppColors.donorGreen,
                               minHeight: 3,
                             ),
                           ),
@@ -193,7 +198,9 @@ class FamilyCard extends StatelessWidget {
                             '${(((raisedAmount ?? 0) / targetAmount!) * 100).toInt()}%',
                             style: TextStyle(
                               fontSize: 8,
-                              color: Colors.green,
+                              color: ((raisedAmount ?? 0) >= targetAmount!)
+                                  ? Colors.green
+                                  : AppColors.donorGreen,
                               fontWeight: FontWeight.bold,
                             ),
                           ),

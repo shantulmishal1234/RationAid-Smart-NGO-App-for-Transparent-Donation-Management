@@ -159,6 +159,12 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                   _buildHeader(d),
                   const SizedBox(height: 32),
 
+                  // Beneficiary Info
+                  _buildSectionHeader('Beneficiary'),
+                  const SizedBox(height: 12),
+                  FrostedPanel(child: _buildBeneficiaryInfo(d['familyId'])),
+                  const SizedBox(height: 32),
+
                   // Timestamps
                   _buildSectionHeader('Timestamps'),
                   const SizedBox(height: 12),
@@ -247,95 +253,169 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     final amount = (d['amount'] ?? 0).toDouble();
     final currency = d['currency'] ?? 'PKR';
     final method = d['method'] ?? 'cash';
+    final pickupAddress = d['pickupAddress'] as String?;
+    final contactNumber = d['contactNumber'] as String?;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
       children: [
-        CircleAvatar(
-          radius: 28,
-          backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
-          child: Text(
-            donorName.isNotEmpty ? donorName[0].toUpperCase() : '?',
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: AppColors.primaryBlue,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+              child: Text(
+                donorName.isNotEmpty ? donorName[0].toUpperCase() : '?',
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryBlue,
+                ),
+              ),
             ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                donorName,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                d['donorEmail'] ?? '',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      '$amount $currency',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: theme.colorScheme.primary,
-                      ),
+                  Text(
+                    donorName,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: theme.colorScheme.onSurface,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(height: 4),
                   Text(
-                    'via $method',
+                    d['donorEmail'] ?? '',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurface.withOpacity(0.5),
-                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '$amount $currency',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'via $method',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: _statusColor(_status).withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _statusColor(_status).withOpacity(0.3),
+                ),
+              ),
+              child: Text(
+                _statusLabel(_status).toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: _statusColor(_status),
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ],
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: _statusColor(_status).withOpacity(0.15),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: _statusColor(_status).withOpacity(0.3)),
-          ),
-          child: Text(
-            _statusLabel(_status).toUpperCase(),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: _statusColor(_status),
-              letterSpacing: 0.5,
+        if (pickupAddress != null || contactNumber != null) ...[
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(16),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: theme.colorScheme.primary.withOpacity(0.1),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Contact & Pickup',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (contactNumber != null)
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.phone,
+                        size: 16,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        contactNumber,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                if (contactNumber != null && pickupAddress != null)
+                  const SizedBox(height: 8),
+                if (pickupAddress != null)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.location_on,
+                        size: 16,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          pickupAddress,
+                          style: TextStyle(color: theme.colorScheme.onSurface),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
             ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -434,6 +514,50 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildBeneficiaryInfo(String? familyId) {
+    if (familyId == null ||
+        familyId.isEmpty ||
+        familyId == 'general_relief_fund') {
+      return _infoRow('Donation For', 'General Relief Fund');
+    }
+
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('families')
+          .doc(familyId)
+          .get(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+
+        if (snapshot.hasError || !snapshot.hasData || !snapshot.data!.exists) {
+          return _infoRow('Donation For', 'Unknown Family ($familyId)');
+        }
+
+        final data = snapshot.data!.data() as Map<String, dynamic>;
+        final area = data['area'] ?? 'Unknown Area';
+        final city = data['city'] ?? 'Unknown City';
+        final adults = data['numberOfAdults'] ?? 0;
+        final children = data['numberOfChildren'] ?? 0;
+
+        return Column(
+          children: [
+            _infoRow('Family', '$area, $city'),
+            const SizedBox(height: 8),
+            _infoRow('Members', '$adults Adults, $children Children'),
+          ],
+        );
+      },
     );
   }
 

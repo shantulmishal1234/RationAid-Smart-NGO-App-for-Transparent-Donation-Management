@@ -47,19 +47,21 @@ class AdminQueries {
     final base = FirebaseFirestore.instance.collection('users');
 
     switch (filter) {
-      case 'purchasers':
+      case 'admin':
+        return base.where('roles', arrayContains: 'admin').snapshots();
+      case 'purchaser':
         return base.where('roles', arrayContains: 'purchaser').snapshots();
-      case 'distributors':
+      case 'distributor':
         return base.where('roles', arrayContains: 'distributor').snapshots();
-      case 'donors':
+      case 'donor':
         return base.where('roles', arrayContains: 'donor').snapshots();
       case 'all':
       default:
-        // Show all: purchasers, distributors, and donors
+        // Show all staff and donors
         return base
             .where(
               'roles',
-              arrayContainsAny: ['purchaser', 'distributor', 'donor'],
+              arrayContainsAny: ['admin', 'purchaser', 'distributor', 'donor'],
             )
             .snapshots();
     }

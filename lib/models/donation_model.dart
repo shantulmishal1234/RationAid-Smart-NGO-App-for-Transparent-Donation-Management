@@ -154,6 +154,8 @@ class Donation {
   final String? donationNote; // optional note from donor
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? pickupAddress; // New field for In-Kind contact
+  final String? contactNumber; // New field for In-Kind contact
 
   // Tracking fields
   final List<StatusHistoryEntry> statusHistory;
@@ -182,6 +184,8 @@ class Donation {
     this.donationNote,
     required this.createdAt,
     required this.updatedAt,
+    this.pickupAddress,
+    this.contactNumber,
     this.statusHistory = const [],
     this.estimatedDelivery,
     this.driverName,
@@ -229,6 +233,8 @@ class Donation {
       donationNote: data['donationNote'],
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      pickupAddress: data['pickupAddress'],
+      contactNumber: data['contactNumber'],
       statusHistory: history,
       estimatedDelivery: (data['estimatedDelivery'] as Timestamp?)?.toDate(),
       driverName: data['driverName'],
@@ -258,6 +264,8 @@ class Donation {
       'donationNote': donationNote,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      'pickupAddress': pickupAddress,
+      'contactNumber': contactNumber,
       'statusHistory': statusHistory.map((e) => e.toMap()).toList(),
       'estimatedDelivery': estimatedDelivery != null
           ? Timestamp.fromDate(estimatedDelivery!)
@@ -326,6 +334,8 @@ class Donation {
     String? donationNote,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? pickupAddress,
+    String? contactNumber,
   }) {
     return Donation(
       id: id ?? this.id,
@@ -342,6 +352,8 @@ class Donation {
       donationNote: donationNote ?? this.donationNote,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      pickupAddress: pickupAddress ?? this.pickupAddress,
+      contactNumber: contactNumber ?? this.contactNumber,
     );
   }
 }

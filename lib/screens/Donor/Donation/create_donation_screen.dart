@@ -41,6 +41,8 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
   DonationType _donationType = DonationType.cash;
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _noteController = TextEditingController();
+  final TextEditingController _contactController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
   bool _isAnonymous = false;
   String? _paymentProofUrl;
   bool _isUploading = false;
@@ -88,6 +90,12 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
     if (donation.items != null) {
       _selectedItems.addAll(donation.items!);
     }
+    if (donation.contactNumber != null) {
+      _contactController.text = donation.contactNumber!;
+    }
+    if (donation.pickupAddress != null) {
+      _addressController.text = donation.pickupAddress!;
+    }
     // Note: Family will be loaded separately via FutureBuilder
   }
 
@@ -96,6 +104,8 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
     _tabController.dispose();
     _amountController.dispose();
     _noteController.dispose();
+    _contactController.dispose();
+    _addressController.dispose();
     super.dispose();
   }
 
@@ -158,6 +168,14 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
         );
         return;
       }
+      if (_contactController.text.isEmpty || _addressController.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please provide contact number and pickup address'),
+          ),
+        );
+        return;
+      }
     }
 
     setState(() => _isSaving = true);
@@ -188,6 +206,12 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
         paymentProofUrl: _paymentProofUrl,
         donationNote: _noteController.text.isNotEmpty
             ? _noteController.text
+            : null,
+        pickupAddress: _donationType == DonationType.inKind
+            ? _addressController.text
+            : null,
+        contactNumber: _donationType == DonationType.inKind
+            ? _contactController.text
             : null,
         createdAt: widget.existingDonation?.createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
@@ -248,6 +272,14 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                 children: [
                   _buildCashDonationForm(null),
                   _buildInKindDonationForm(null),
+                ],
+              )
+            : (_selectedFamily!.id == 'general_relief_fund')
+            ? TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildCashDonationForm(_selectedFamily),
+                  _buildInKindDonationForm(_selectedFamily),
                 ],
               )
             : StreamBuilder<DocumentSnapshot>(
@@ -354,6 +386,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
 
           // Optional fields
           _buildOptionalFields(),
+          const SizedBox(height: 100), // Bottom padding for scrolling
         ],
       ),
     );
@@ -485,8 +518,105 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
 
           const SizedBox(height: 16),
 
+          const SizedBox(height: 16),
+
+          // Contact Information
+          Text(
+            'Pickup Information *',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 16,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Contact Number
+          TextFormField(
+            controller: _contactController,
+            keyboardType: TextInputType.phone,
+            style: TextStyle(color: theme.colorScheme.onSurface),
+            decoration: InputDecoration(
+              labelText: 'Contact Number',
+              hintText: '03XX-XXXXXXX',
+              prefixIcon: Icon(Icons.phone, color: AppColors.donorGreen),
+              filled: true,
+              fillColor:
+                  theme.inputDecorationTheme.fillColor ??
+                  (Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey[800]
+                      : Colors.white),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey[700]!
+                      : Colors.grey[300]!,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey[700]!
+                      : Colors.grey[300]!,
+                ),
+              ),
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter contact number';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 12),
+
+          // Pickup Address
+          TextFormField(
+            controller: _addressController,
+            maxLines: 2,
+            style: TextStyle(color: theme.colorScheme.onSurface),
+            decoration: InputDecoration(
+              labelText: 'Pickup Address',
+              hintText: 'Enter full address for pickup',
+              prefixIcon: Icon(Icons.location_on, color: AppColors.donorGreen),
+              filled: true,
+              fillColor:
+                  theme.inputDecorationTheme.fillColor ??
+                  (Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey[800]
+                      : Colors.white),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey[700]!
+                      : Colors.grey[300]!,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey[700]!
+                      : Colors.grey[300]!,
+                ),
+              ),
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter pickup address';
+              }
+              return null;
+            },
+          ),
+
+          const SizedBox(height: 16),
+
           // Optional fields
           _buildOptionalFields(),
+          const SizedBox(height: 100), // Bottom padding for scrolling
         ],
       ),
     );
@@ -505,14 +635,22 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
           ),
         ),
         subtitle: _selectedFamily != null
-            ? Text(
-                '${_selectedFamily!.numberOfAdults} Adults • ${_selectedFamily!.numberOfChildren} Children',
-                style: TextStyle(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withOpacity(0.7),
-                ),
-              )
+            ? (_selectedFamily!.id == 'general_relief_fund')
+                  ? Text(
+                      'Emergency Support Fund',
+                      style: TextStyle(
+                        color: AppColors.donorGreen,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : Text(
+                      '${_selectedFamily!.numberOfAdults} Adults • ${_selectedFamily!.numberOfChildren} Children',
+                      style: TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.7),
+                      ),
+                    )
             : Text(
                 'Tap to choose a family',
                 style: TextStyle(

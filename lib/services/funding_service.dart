@@ -7,6 +7,7 @@ class FundingService {
 
   /// Recalculate funding for a specific family based on verified donations
   static Future<void> recalculateFamilyFunding(String familyId) async {
+    if (familyId == 'general_relief_fund') return; // Skip for General Relief
     try {
       // 1. Get the family document
       final familyDoc = await _firestore
@@ -21,47 +22,78 @@ class FundingService {
               .toDouble();
 
       // 2. Get all VERIFIED donations for this family
+      // 2. Get all VERIFIED and PENDING donations for this family
       final donationsSnapshot = await _firestore
           .collection('donations')
           .where('familyId', isEqualTo: familyId)
           .where(
             'status',
-            isEqualTo: 'verified',
-          ) // Only count verified donations
+            whereIn: ['verified', 'under_verification', 'pending'],
+          ) // Count verified AND pending
           .get();
 
-      // 3. Sum up the amounts
+      // 3. Sum up the amounts - Include Verified and Pending
       double raisedAmount = 0;
+      double pendingAmount = 0;
+      final Map<String, int> pendingNeeds = {};
+
       for (var doc in donationsSnapshot.docs) {
-        final amount = (doc.data()['amount'] ?? 0).toDouble();
-        raisedAmount += amount;
+        final data = doc.data();
+        final amount = (data['amount'] ?? 0).toDouble();
+        final status = data['status'];
+        final type = data['donationType'];
+        final items = data['items'] as Map<String, dynamic>?;
+
+        // Cash donations
+        if (type == 'cash' || type == null) {
+          if (status == 'verified') {
+            raisedAmount += amount;
+          } else if (status == 'under_verification' || status == 'pending') {
+            pendingAmount += amount;
+          }
+        }
+        // In-Kind donations (only pending/under_verification count towards pendingNeeds)
+        // Verified in-kind donations are already removed from family.needs by _processInKindDonation
+        else if (type == 'inKind' && items != null) {
+          if (status == 'under_verification' || status == 'pending') {
+            items.forEach((item, quantity) {
+              final qty = (quantity as num).toInt();
+              pendingNeeds[item] = (pendingNeeds[item] ?? 0) + qty;
+            });
+          }
+        }
       }
 
       // 4. Determine status
       String fundingStatus = 'pending';
-      if (raisedAmount >= targetAmount && targetAmount > 0) {
+      final totalFunded = raisedAmount + pendingAmount;
+
+      if (totalFunded >= targetAmount && targetAmount > 0) {
         fundingStatus = 'fully_funded';
-      } else if (raisedAmount > 0) {
+      } else if (totalFunded > 0) {
         fundingStatus = 'partially_funded';
       }
 
       // 5. Update family document
       final currentFulfillment = familyData['fulfillmentStatus'] ?? 'pending';
-      String newFulfillment = currentFulfillment;
 
-      // Auto-advance to ready_for_purchase if funded and currently pending
+      // Auto-advance to ready_for_purchase if funded (verified + pending) and currently pending
+      // Note: Actual purchase should only happen when verified raisedAmount >= target
+      // But we mark it fully_funded in UI to stop more donations
       if (fundingStatus == 'fully_funded' && currentFulfillment == 'pending') {
-        newFulfillment = 'ready_for_purchase';
-        // Notify Admins
-        await NotificationService.notifyFullyFunded(familyId);
+        // Keep fulfillment as pending until verified, but funding status updates
       }
 
       await _firestore.collection('families').doc(familyId).update({
         'targetAmount': targetAmount,
         'raisedAmount': raisedAmount,
-        'remainingAmount': (targetAmount - raisedAmount).clamp(0, targetAmount),
+        'pendingAmount': pendingAmount,
+        'remainingAmount': (targetAmount - raisedAmount).clamp(
+          0,
+          targetAmount,
+        ), // Internal remaining (only verified counts)
+        'pendingNeeds': pendingNeeds,
         'fundingStatus': fundingStatus,
-        'fulfillmentStatus': newFulfillment,
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
@@ -125,9 +157,9 @@ class FundingService {
       if (familyId.isNotEmpty) {
         if (donationType == 'in_kind' && items != null) {
           await _processInKindDonation(familyId, Map<String, int>.from(items));
-        } else {
-          await recalculateFamilyFunding(familyId);
         }
+        // Always recalculate to update pending amounts and needs
+        await recalculateFamilyFunding(familyId);
       }
     } catch (e) {
       print('Error verifying donation: $e');
@@ -140,6 +172,7 @@ class FundingService {
     String familyId,
     Map<String, int> donatedItems,
   ) async {
+    if (familyId == 'general_relief_fund') return; // Skip for General Relief
     try {
       final familyRef = _firestore.collection('families').doc(familyId);
 

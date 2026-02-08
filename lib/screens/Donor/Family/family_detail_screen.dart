@@ -190,15 +190,37 @@ class FamilyDetailScreen extends StatelessWidget {
                                           : Colors.grey[200],
                                       borderRadius: BorderRadius.circular(8),
                                     ),
-                                    child: Text(
-                                      'Qty: ${entry.value}',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 13,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurface,
-                                      ),
+                                    child: Row(
+                                      children: [
+                                        Text(
+                                          'Qty: ${entry.value}',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurface,
+                                          ),
+                                        ),
+                                        if (updatedFamily.pendingNeeds
+                                                .containsKey(entry.key) &&
+                                            updatedFamily.pendingNeeds[entry
+                                                    .key]! >
+                                                0)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              left: 4,
+                                            ),
+                                            child: Text(
+                                              '(${updatedFamily.pendingNeeds[entry.key]} pending)',
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.orange,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   ),
                                 ],
@@ -243,22 +265,22 @@ class FamilyDetailScreen extends StatelessWidget {
                                 ),
                                 decoration: BoxDecoration(
                                   color:
-                                      (updatedFamily.raisedAmount >=
+                                      (updatedFamily.totalFunded >=
                                           updatedFamily.targetAmount)
                                       ? Colors.green.withOpacity(0.1)
                                       : Colors.orange.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  (updatedFamily.raisedAmount >=
+                                  (updatedFamily.totalFunded >=
                                           updatedFamily.targetAmount)
-                                      ? 'Fully Funded'
+                                      ? 'Goal Reached'
                                       : 'In Progress',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
                                     color:
-                                        (updatedFamily.raisedAmount >=
+                                        (updatedFamily.totalFunded >=
                                             updatedFamily.targetAmount)
                                         ? Colors.green
                                         : Colors.orange,
@@ -272,7 +294,7 @@ class FamilyDetailScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                             child: LinearProgressIndicator(
                               value:
-                                  (updatedFamily.raisedAmount /
+                                  (updatedFamily.totalFunded /
                                           updatedFamily.targetAmount)
                                       .clamp(0.0, 1.0),
                               backgroundColor: Colors.grey[200],
@@ -296,13 +318,26 @@ class FamilyDetailScreen extends StatelessWidget {
                                       ).colorScheme.onSurface.withOpacity(0.6),
                                     ),
                                   ),
-                                  Text(
-                                    'PKR ${updatedFamily.raisedAmount.toStringAsFixed(0)}',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.donorGreen,
-                                    ),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'PKR ${updatedFamily.totalFunded.toStringAsFixed(0)}',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.donorGreen,
+                                        ),
+                                      ),
+                                      if (updatedFamily.pendingAmount > 0)
+                                        Text(
+                                          ' (inc. pending)',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.orange,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -344,7 +379,7 @@ class FamilyDetailScreen extends StatelessWidget {
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed:
-                        (updatedFamily.raisedAmount >=
+                        (updatedFamily.totalFunded >=
                                 updatedFamily.targetAmount &&
                             updatedFamily.needs.isEmpty)
                         ? null
@@ -357,10 +392,13 @@ class FamilyDetailScreen extends StatelessWidget {
                           },
                     icon: const Icon(Icons.volunteer_activism),
                     label: Text(
-                      (updatedFamily.raisedAmount >=
+                      (updatedFamily.totalFunded >=
                                   updatedFamily.targetAmount &&
                               updatedFamily.needs.isEmpty)
                           ? 'Fully Supported'
+                          : (updatedFamily.totalFunded >=
+                                updatedFamily.targetAmount)
+                          ? 'Goal Reached (Pending)'
                           : (updatedFamily.raisedAmount > 0)
                           ? 'Donate Remaining Amount'
                           : 'Donate to this Family',

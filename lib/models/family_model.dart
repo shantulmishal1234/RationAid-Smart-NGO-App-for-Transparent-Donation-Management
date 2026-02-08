@@ -48,7 +48,10 @@ class Family {
   // Funding pool (Phase 4)
   final double targetAmount;
   final double raisedAmount;
+  final double pendingAmount;
   final double remainingAmount;
+  final Map<String, int>
+  pendingNeeds; // New field for immediate In-Kind updates
 
   // Fulfillment (Phase 5)
   final String
@@ -100,7 +103,9 @@ class Family {
     // Funding pool
     this.targetAmount = 0,
     this.raisedAmount = 0,
+    this.pendingAmount = 0,
     this.remainingAmount = 0,
+    this.pendingNeeds = const {},
     // Fulfillment
     this.fulfillmentStatus = 'pending',
     this.purchaseApprovedBy,
@@ -181,7 +186,11 @@ class Family {
       // Funding pool
       targetAmount: (data['targetAmount'] ?? 0).toDouble(),
       raisedAmount: (data['raisedAmount'] ?? 0).toDouble(),
+      pendingAmount: (data['pendingAmount'] ?? 0).toDouble(),
       remainingAmount: (data['remainingAmount'] ?? 0).toDouble(),
+      pendingNeeds: data['pendingNeeds'] != null
+          ? Map<String, int>.from(data['pendingNeeds'] as Map)
+          : {},
       // Fulfillment
       fulfillmentStatus: data['fulfillmentStatus'] ?? 'pending',
       purchaseApprovedBy: data['purchaseApprovedBy'],
@@ -236,6 +245,10 @@ class Family {
   List<String> get neededItemNames {
     return needs.keys.toList();
   }
+
+  /// Helper: Get total funded amount (raised + pending)
+  /// This is used for immediate UI updates so donors see their impact instantly
+  double get totalFunded => raisedAmount + pendingAmount;
 
   /// Copy with method (rarely needed for read-only model)
   Family copyWith({
