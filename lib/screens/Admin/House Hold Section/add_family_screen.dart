@@ -11,6 +11,7 @@ import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 import 'package:ration_aid/widgets/location_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:ration_aid/services/assistance_pack_service.dart';
 
 class AddFamilyScreen extends StatefulWidget {
   const AddFamilyScreen({super.key});
@@ -146,6 +147,35 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
     setState(() => _isSaving = true);
 
     try {
+      // Auto-assign pack logic
+      String? assignedPackId;
+      String? assignedPackName;
+      double? assignedPackBudget;
+      Map<String, int> initialNeeds = {};
+      double initialTargetAmount = 0.0;
+
+      if (_assistanceNeeds.contains('Food')) {
+        try {
+          final pack = await AssistancePackService.findMatchingPack(
+            _totalFamilySize,
+          );
+          if (pack != null) {
+            assignedPackId = pack.id;
+            assignedPackName = pack.name;
+            assignedPackBudget = pack.budgetAmount;
+            initialTargetAmount = pack.budgetAmount;
+
+            // Populate needs map from pack items
+            for (var item in pack.items) {
+              // Creating a descriptive key since needs map value must be int
+              initialNeeds['${item.name} (${item.quantity})'] = 1;
+            }
+          }
+        } catch (e) {
+          print('Error finding pack: $e');
+        }
+      }
+
       final List<Map<String, dynamic>> documents = _uploadedDocUrl == null
           ? []
           : [
@@ -157,44 +187,52 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
               },
             ];
 
-      final docRef = await FirebaseFirestore.instance.collection('families').add({
-        'name': _familyNameController.text.trim(),
-        'cnic': _cnicController.text.trim(),
-        'adults': int.tryParse(_adultsController.text) ?? 0,
-        'children': int.tryParse(_childrenController.text) ?? 0,
-        'familySize': _totalFamilySize,
-        'city': _cityController.text.trim(),
-        'area': _areaController.text.trim(),
-        'address': _addressController.text.trim(),
-        'phone': _phoneController.text.trim(),
-        'assistanceNeeds': _assistanceNeeds.toList(),
-        'emergencyContact': _emergencyContactController.text.trim(),
-        'monthlyIncome': int.tryParse(_incomeController.text) ?? 0,
-        'remarks': _notesController.text.trim(),
-        'status':
-            'pending_review', // Changed from 'pending' to indicate needs quorum review
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'documents': documents,
-        'decisions': [],
-        // Location fields
-        if (_capturedLocation != null) ...{
-          'unverifiedLocation': _capturedLocation,
-          'locationCapturedBy': FirebaseAuth.instance.currentUser?.uid,
-          'locationCapturedAt': FieldValue.serverTimestamp(),
-          'locationAddress': _capturedAddress,
-        },
-        // Review fields (initialize for quorum system)
-        'reviewerIds': [],
-        'approveCount': 0,
-        'rejectCount': 0,
-        'quorumThreshold': 3,
-        'quorumReached': false,
-        // Funding pool (initialize)
-        'targetAmount': 0.0,
-        'raisedAmount': 0.0,
-        'remainingAmount': 0.0,
-      });
+      final docRef = await FirebaseFirestore.instance
+          .collection('families')
+          .add({
+            'name': _familyNameController.text.trim(),
+            'cnic': _cnicController.text.trim(),
+            'adults': int.tryParse(_adultsController.text) ?? 0,
+            'children': int.tryParse(_childrenController.text) ?? 0,
+            'familySize': _totalFamilySize,
+            'city': _cityController.text.trim(),
+            'area': _areaController.text.trim(),
+            'address': _addressController.text.trim(),
+            'phone': _phoneController.text.trim(),
+            'assistanceNeeds': _assistanceNeeds.toList(),
+            'emergencyContact': _emergencyContactController.text.trim(),
+            'monthlyIncome': int.tryParse(_incomeController.text) ?? 0,
+            'remarks': _notesController.text.trim(),
+            'status': 'pending_review',
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+            'documents': documents,
+            'decisions': [],
+            // Pack Assignment
+            'assignedPackId': assignedPackId,
+            'assignedPackName': assignedPackName,
+            'assignedPackBudget': assignedPackBudget,
+            // Needs Map
+            'needs': initialNeeds,
+            // Location fields
+            if (_capturedLocation != null) ...{
+              'unverifiedLocation': _capturedLocation,
+              'locationCapturedBy': FirebaseAuth.instance.currentUser?.uid,
+              'locationCapturedAt': FieldValue.serverTimestamp(),
+              'locationAddress': _capturedAddress,
+            },
+            // Review fields
+            'reviewerIds': [],
+            'approveCount': 0,
+            'rejectCount': 0,
+            'quorumThreshold': 3,
+            'quorumReached': false,
+            // Funding pool
+            'targetAmount': initialTargetAmount,
+            'raisedAmount': 0.0,
+            'remainingAmount':
+                initialTargetAmount, // Init remaining with target
+          });
 
       // Notify Admins
       await NotificationService.notifyNewFamily(
@@ -723,7 +761,6 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
 
   Widget _buildUploadZone() {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return InkWell(
       onTap: _isUploadingDoc ? null : _pickAndUploadDocument,

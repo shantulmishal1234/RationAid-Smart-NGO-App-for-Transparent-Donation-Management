@@ -193,28 +193,35 @@ class _DashboardSectionState extends State<DashboardSection> {
 
               // Secondary stats (kept as-is, but text not about verification bar)
               FrostedPanel(
-                child: const Row(
-                  children: [
-                    Expanded(
-                      child: StatCard(
-                        title: 'Donations',
-                        value: '92',
-                        subtitle: '12 to review today',
-                        icon: Icons.volunteer_activism,
-                        color: Color(0xFFFFA726),
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: StatCard(
-                        title: 'Deliveries',
-                        value: '58',
-                        subtitle: '9 scheduled for today',
-                        icon: Icons.local_shipping,
-                        color: Color(0xFF7E57C2),
-                      ),
-                    ),
-                  ],
+                child: FutureBuilder<Map<String, int>>(
+                  future: _statsFuture,
+                  builder: (context, snapshot) {
+                    final data = snapshot.data ?? {};
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: StatCard(
+                            title: 'Donations',
+                            value: (data['donations_total'] ?? 0).toString(),
+                            subtitle:
+                                '${data['donations_to_review'] ?? 0} to review',
+                            icon: Icons.volunteer_activism,
+                            color: const Color(0xFFFFA726),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: StatCard(
+                            title: 'Stock Available',
+                            value: (data['stock_available'] ?? 0).toString(),
+                            subtitle: 'Verified packs in inventory',
+                            icon: Icons.inventory_2,
+                            color: const Color(0xFF7E57C2),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
 

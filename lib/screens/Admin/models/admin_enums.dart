@@ -15,6 +15,7 @@ enum AdminSection {
   // Phase 5
   purchaseApproval,
   deliveryVerification,
+  inventoryIssues,
 }
 
 /// Enum for household view modes (cards or table)

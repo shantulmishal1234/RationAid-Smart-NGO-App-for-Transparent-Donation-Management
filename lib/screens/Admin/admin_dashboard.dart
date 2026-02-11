@@ -16,6 +16,7 @@ import 'package:ration_aid/screens/Admin/FinalApprover/final_approver_screen.dar
 import 'package:ration_aid/screens/Admin/AssistancePacks/pack_management_screen.dart';
 import 'package:ration_aid/screens/Admin/Verification/purchase_approval_screen.dart';
 import 'package:ration_aid/screens/Admin/Verification/delivery_verification_screen.dart';
+import 'package:ration_aid/screens/Admin/Verification/inventory_issues_screen.dart';
 
 import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 
@@ -160,6 +161,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
       case AdminSection.deliveryVerification:
         return const DeliveryVerificationScreen();
+
+      case AdminSection.inventoryIssues:
+        return const InventoryIssuesScreen();
     }
   }
 }

@@ -157,7 +157,7 @@ class _DeliveryVerificationScreenState
               stream: FirebaseFirestore.instance
                   .collection('families')
                   .where('status', isEqualTo: 'accepted')
-                  .where('fulfillmentStatus', isEqualTo: 'purchase_approved')
+                  .where('fulfillmentStatus', isEqualTo: 'stocked')
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {

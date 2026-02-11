@@ -121,14 +121,21 @@ class AdminHelpers {
       if (cached != null) return cached;
     }
 
-    // Run both sets of counts in parallel
+    // Run all sets of counts in parallel
     final results = await Future.wait([
       loadFamilyCounts(forceRefresh: forceRefresh),
       loadMemberCounts(forceRefresh: forceRefresh),
+      _procurementRef
+          .where('status', whereIn: ['verified', 'stocked'])
+          .count()
+          .get(),
+      loadDonationOverview(forceRefresh: forceRefresh),
     ]);
 
-    final familyData = results[0];
-    final memberData = results[1];
+    final familyData = results[0] as Map<String, int>;
+    final memberData = results[1] as Map<String, int>;
+    final stockCount = (results[2] as AggregateQuerySnapshot).count ?? 0;
+    final donationData = results[3] as Map<String, int>;
 
     final data = {
       'fam_total': familyData['total'] ?? 0,
@@ -137,12 +144,21 @@ class AdminHelpers {
       'mem_total': memberData['total'] ?? 0,
       'mem_admins': memberData['admins'] ?? 0,
       'mem_volunteers': memberData['volunteers'] ?? 0,
+      'stock_available': stockCount,
+      'donations_total': donationData['total'] ?? 0,
+      'donations_to_review':
+          (donationData['pending'] ?? 0) +
+          (donationData['under_verification'] ?? 0),
     };
 
     // Cache the combined results
     AdminCache.set(CacheKeys.dashboardStats, data);
     return data;
   }
+
+  static final _procurementRef = FirebaseFirestore.instance.collection(
+    'procurement_requests',
+  );
 
   /// Load donation overview statistics - PARALLEL execution
   static Future<Map<String, int>> loadDonationOverview({

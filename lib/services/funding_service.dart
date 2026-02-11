@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ration_aid/models/donation_model.dart';
 import 'package:ration_aid/services/notification_service.dart';
+import 'package:ration_aid/services/procurement_service.dart';
 
 class FundingService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -74,28 +75,25 @@ class FundingService {
         fundingStatus = 'partially_funded';
       }
 
-      // 5. Update family document
-      final currentFulfillment = familyData['fulfillmentStatus'] ?? 'pending';
-
-      // Auto-advance to ready_for_purchase if funded (verified + pending) and currently pending
-      // Note: Actual purchase should only happen when verified raisedAmount >= target
-      // But we mark it fully_funded in UI to stop more donations
-      if (fundingStatus == 'fully_funded' && currentFulfillment == 'pending') {
-        // Keep fulfillment as pending until verified, but funding status updates
-      }
-
+      // 5. Update family document first with all new stats
       await _firestore.collection('families').doc(familyId).update({
         'targetAmount': targetAmount,
         'raisedAmount': raisedAmount,
         'pendingAmount': pendingAmount,
-        'remainingAmount': (targetAmount - raisedAmount).clamp(
-          0,
-          targetAmount,
-        ), // Internal remaining (only verified counts)
+        'remainingAmount': (targetAmount - raisedAmount).clamp(0, targetAmount),
         'pendingNeeds': pendingNeeds,
         'fundingStatus': fundingStatus,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      // 6. Trigger Procurement if needed (After DB update so service reads correct data)
+      final currentFulfillment = familyData['fulfillmentStatus'] ?? 'pending';
+
+      if (fundingStatus == 'fully_funded' && currentFulfillment == 'pending') {
+        // The family is newly fully funded.
+        // Calling checkAndGenerateRequest will now read the updated values we just wrote.
+        await ProcurementService.checkAndGenerateRequest(familyId);
+      }
     } catch (e) {
       print('Error recalculating funding for family $familyId: $e');
       rethrow;

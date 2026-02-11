@@ -1,10 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:ration_aid/models/family_model.dart';
-import 'package:ration_aid/services/audit_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ration_aid/models/procurement_model.dart';
+import 'package:ration_aid/services/procurement_service.dart';
+import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
-import 'package:ration_aid/services/notification_service.dart';
+import 'package:intl/intl.dart';
 
 class PurchaseApprovalScreen extends StatefulWidget {
   const PurchaseApprovalScreen({super.key});
@@ -13,222 +13,267 @@ class PurchaseApprovalScreen extends StatefulWidget {
   State<PurchaseApprovalScreen> createState() => _PurchaseApprovalScreenState();
 }
 
+/// Formerly StockVerificationSection
+/// Now verifies PENDING STOCK (Purchased but not yet in inventory)
 class _PurchaseApprovalScreenState extends State<PurchaseApprovalScreen> {
-  bool _isProcessing = false;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// Approve purchase for a family
-  Future<void> _approvePurchase(Family family) async {
-    final confirm = await showDialog<bool>(
+  void _showVerificationDialog(ProcurementRequest request) {
+    final currencyFormat = NumberFormat.currency(
+      locale: 'en_PK',
+      symbol: 'Rs. ',
+      decimalDigits: 0,
+    );
+    final totalSpent = currencyFormat.format(request.totalSpent);
+    final date = DateFormat.yMMMd().format(
+      request.purchasedAt ?? DateTime.now(),
+    );
+
+    showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Approve Purchase?'),
-        content: Text(
-          'Confirm that you are authorizing the purchase of '
-          '${family.assignedPackName ?? "Assigned Pack"} '
-          'for ${family.numberOfAdults + family.numberOfChildren} members '
-          'at a cost of PKR ${family.targetAmount.toStringAsFixed(0)}.',
+        title: const Text('Verify Purchase & Stock In'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Pack: ${request.packName}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text('Family Area: ${request.familyAddress}'),
+                Text('Purchaser: ${request.purchaserName}'),
+                Text('Date: $date'),
+                const Divider(),
+                Text(
+                  'Total Spent: $totalSpent',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Receipt:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                if (request.receiptUrl != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: GestureDetector(
+                      onTap: () {
+                        // View full image dialog could go here
+                      },
+                      child: Image.network(
+                        request.receiptUrl!,
+                        height: 200,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          height: 100,
+                          color: Colors.grey[200],
+                          child: const Center(
+                            child: Text('Failed to load receipt'),
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  const Text(
+                    'No Receipt Uploaded',
+                    style: TextStyle(color: Colors.red),
+                  ),
+
+                const SizedBox(height: 12),
+                const Text(
+                  'Items:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                ...request.items
+                    .map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(item.name),
+                            Text(currencyFormat.format(item.actualCost)),
+                          ],
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ],
+            ),
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              _showRejectDialog(request);
+            },
+            child: const Text('Reject', style: TextStyle(color: Colors.red)),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text('Approve'),
+            onPressed: () async {
+              try {
+                await ProcurementService.adminVerifyPurchase(request.id);
+                if (context.mounted) Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Stock Verified & Added to Inventory'),
+                  ),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('Error: $e')));
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Approve & Stock In'),
           ),
         ],
       ),
     );
+  }
 
-    if (confirm != true) return;
-
-    setState(() => _isProcessing = true);
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-
-      await FirebaseFirestore.instance
-          .collection('families')
-          .doc(family.id)
-          .update({
-            'fulfillmentStatus': 'purchase_approved',
-            'purchaseApprovedBy': user?.uid,
-            'purchaseApprovedByName':
-                user?.displayName ?? user?.email ?? 'Admin',
-            'purchaseApprovedAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-
-      await AuditService.logFamilyAction(
-        action: 'Purchase Approved',
-        familyId: family.id,
-        familyName:
-            'Family of ${family.familySize}', // Using size as proxy for name if needed
-        details: 'Amount: ${family.targetAmount}',
-      );
-
-      // Notify Admins about pending delivery
-      await NotificationService.sendAdminNotification(
-        title: 'Purchase Approved',
-        message: 'Purchase for a family has been approved. Pending delivery.',
-        type: 'delivery_pending',
-        relatedId: family.id,
-      );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Purchase approved successfully'),
-            backgroundColor: Colors.green,
+  void _showRejectDialog(ProcurementRequest request) {
+    final reasonController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reject Purchase'),
+        content: TextField(
+          controller: reasonController,
+          decoration: const InputDecoration(
+            labelText: 'Reason for Rejection',
+            hintText: 'e.g., Receipt unclear, cost mismatch',
+            border: OutlineInputBorder(),
           ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (reasonController.text.isEmpty) return;
+              try {
+                await ProcurementService.adminRejectPurchase(
+                  request.id,
+                  reasonController.text,
+                );
+                if (context.mounted) Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Purchase Rejected')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('Error: $e')));
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return AdminScaffold(
-      title: 'Purchase Approval',
+      title: 'Stock Verification', // Updated title
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('families')
-            .where('status', isEqualTo: 'accepted')
-            .where('fundingStatus', isEqualTo: 'fully_funded')
-            .where('fulfillmentStatus', isEqualTo: 'ready_for_purchase')
+        stream: _firestore
+            .collection('procurement_requests')
+            .where('status', isEqualTo: 'purchased')
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-          if (!snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final docs = snapshot.data!.docs;
+          final docs = snapshot.data?.docs ?? [];
+
           if (docs.isEmpty) {
-            return const Center(
+            return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
                     Icons.check_circle_outline,
                     size: 64,
-                    color: Colors.grey,
+                    color: Colors.grey[300],
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   Text(
-                    'No pending purchases',
-                    style: TextStyle(color: Colors.grey),
+                    'No pending verifications',
+                    style: TextStyle(color: Colors.grey[500], fontSize: 16),
                   ),
                 ],
               ),
             );
           }
 
-          return ListView.builder(
+          return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: docs.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              final doc = docs[index];
-              final family = Family.fromFirestore(doc);
-
-              return _buildPurchaseCard(family);
+              final request = ProcurementRequest.fromFirestore(docs[index]);
+              return FrostedPanel(
+                child: ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.assignment_turned_in,
+                      color: Colors.blue,
+                    ),
+                  ),
+                  title: Text(
+                    request.packName,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    'Spent: Rs. ${request.totalSpent.toStringAsFixed(0)}',
+                  ),
+                  trailing: ElevatedButton(
+                    onPressed: () => _showVerificationDialog(request),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    child: const Text('Verify'),
+                  ),
+                ),
+              );
             },
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildPurchaseCard(Family family) {
-    return Card(
-      // Using standard card or FrostedPanel
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Pack ID: ${family.assignedPackId ?? "N/A"}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    'Review',
-                    style: TextStyle(
-                      color: Colors.amber,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _row('Assigned Pack', family.assignedPackName ?? 'Standard Pack'),
-            _row('Cost', 'PKR ${family.targetAmount.toStringAsFixed(0)}'),
-            _row('Family Size', '${family.familySize} Members'),
-            _row('Area', '${family.area}, ${family.city}'),
-
-            const Divider(height: 24),
-
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _isProcessing
-                    ? null
-                    : () => _approvePurchase(family),
-                icon: const Icon(Icons.check, size: 18),
-                label: Text(
-                  _isProcessing ? 'Processing...' : 'Approve Purchase',
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _row(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(color: Colors.grey)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
-        ],
       ),
     );
   }

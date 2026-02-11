@@ -50,6 +50,7 @@ class Family {
   final double raisedAmount;
   final double pendingAmount;
   final double remainingAmount;
+  final double spentAmount; // Track amount spent on fulfillment
   final Map<String, int>
   pendingNeeds; // New field for immediate In-Kind updates
 
@@ -105,6 +106,7 @@ class Family {
     this.raisedAmount = 0,
     this.pendingAmount = 0,
     this.remainingAmount = 0,
+    this.spentAmount = 0,
     this.pendingNeeds = const {},
     // Fulfillment
     this.fulfillmentStatus = 'pending',
@@ -188,6 +190,7 @@ class Family {
       raisedAmount: (data['raisedAmount'] ?? 0).toDouble(),
       pendingAmount: (data['pendingAmount'] ?? 0).toDouble(),
       remainingAmount: (data['remainingAmount'] ?? 0).toDouble(),
+      spentAmount: (data['spentAmount'] ?? 0).toDouble(),
       pendingNeeds: data['pendingNeeds'] != null
           ? Map<String, int>.from(data['pendingNeeds'] as Map)
           : {},

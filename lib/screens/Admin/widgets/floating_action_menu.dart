@@ -71,6 +71,12 @@ class _FloatingActionMenuState extends State<FloatingActionMenu>
       'section': AdminSection.deliveryVerification,
       'color': const Color(0xFFFF5722),
     },
+    {
+      'icon': Icons.warning_amber_rounded,
+      'label': 'Inventory Issues',
+      'section': AdminSection.inventoryIssues,
+      'color': const Color(0xFFE91E63),
+    },
   ];
 
   @override
