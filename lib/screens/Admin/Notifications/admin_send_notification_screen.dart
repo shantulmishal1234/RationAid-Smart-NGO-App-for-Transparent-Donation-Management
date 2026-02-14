@@ -452,32 +452,62 @@ class _AdminSendNotificationScreenState
       final body = _bodyController.text.trim();
 
       if (_targetType == 'role') {
-        // Broadcast to admins (since role logic is simplified for now)
-        // In a real app we would filter by user role, but for Phase 6 we focus on Admin Notifications
-        await NotificationService.sendAdminNotification(
-          title: title,
-          message: body,
-          type: 'manual_broadcast',
-        );
+        if (_selectedRole == 'purchaser') {
+          // Broadcast to all purchasers
+          await NotificationService.notifyAllPurchasers(
+            title: title,
+            message: body,
+            actionType: 'admin_broadcast',
+          );
 
-        await AuditService.logSystemAction(
-          action: 'Notification sent to role',
-          details: 'Sent to role: $_selectedRole - Title: $title',
-        );
+          await AuditService.logSystemAction(
+            action: 'Broadcast to Purchasers',
+            details: 'Title: $title',
+          );
+        } else if (_selectedRole == 'admin') {
+          // Broadcast to admins
+          await NotificationService.sendAdminNotification(
+            title: title,
+            message: body,
+            type: 'manual_broadcast',
+          );
+
+          await AuditService.logSystemAction(
+            action: 'Broadcast to Admins',
+            details: 'Title: $title',
+          );
+        } else {
+          // Other roles - fall back to admin notification for now or extend service
+          // Here we just notify admin that a message was "sent" to a role not yet supported for direct
+          // or we can implement notifyAllDonors etc later.
+          await NotificationService.sendAdminNotification(
+            title: 'Broadcast to $_selectedRole: $title',
+            message: body,
+            type: 'manual_broadcast_placeholder',
+          );
+
+          await AuditService.logSystemAction(
+            action: 'Broadcast to Role ($_selectedRole)',
+            details: 'Title: $title (Not fully implemented for this role)',
+          );
+        }
       } else {
-        // Direct user message logic is not part of core Admin Notification Center yet
-        // We will default to broadcasting to admins for test, or we could implement sendToUser in NotificationService
-        // For compliance with Phase 6 (Admin Alerts), we treat this as a system alert:
-        await NotificationService.sendAdminNotification(
-          title: 'Direct Message: $title',
-          message: 'To User (${_selectedUserId}): $body',
-          type: 'manual_dm',
-        );
+        // Direct user message
+        if (_selectedUserId != null) {
+          // We use the generic sendToUser which creates a notification in 'notifications' collection
+          // This works for any user who listens to their 'userId' in that collection (Purchaser, Donor, etc)
+          await NotificationService.sendToUser(
+            userId: _selectedUserId!,
+            title: title,
+            body: body,
+            data: {'type': 'admin_message', 'sentBy': 'admin'},
+          );
 
-        await AuditService.logSystemAction(
-          action: 'Notification sent to user',
-          details: 'Sent to user: $_selectedUserId - Title: $title',
-        );
+          await AuditService.logSystemAction(
+            action: 'Direct Message to User',
+            details: 'User: $_selectedUserId - Title: $title',
+          );
+        }
       }
 
       if (mounted) {

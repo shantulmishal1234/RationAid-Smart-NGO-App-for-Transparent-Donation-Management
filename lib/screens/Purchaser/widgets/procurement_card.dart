@@ -19,7 +19,6 @@ class ProcurementCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final currencyFormat = NumberFormat.currency(
       locale: 'en_PK',
       symbol: 'Rs. ',
@@ -28,212 +27,286 @@ class ProcurementCard extends StatelessWidget {
 
     final isOverdue = DateTime.now().difference(request.createdAt).inDays > 7;
 
+    // Determine Status Color
+    Color statusColor;
+    String statusLabel;
+
+    switch (request.status) {
+      case ProcurementStatus.pending:
+        if (isOverdue) {
+          statusColor = Colors.red;
+          statusLabel = 'Overdue';
+        } else {
+          statusColor = Colors.orange;
+          statusLabel = 'Pending';
+        }
+        break;
+      case ProcurementStatus.purchased:
+        statusColor = Colors.blue;
+        statusLabel = 'Under Review';
+        break;
+      case ProcurementStatus.verified:
+        statusColor = Colors.green;
+        statusLabel = 'Verified';
+        break;
+      case ProcurementStatus.rejected:
+        statusColor = Colors.red;
+        statusLabel = 'Rejected';
+        break;
+      case ProcurementStatus.stocked:
+        statusColor = Colors.teal;
+        statusLabel = 'In Stock';
+        break;
+      case ProcurementStatus.delivered:
+        statusColor = Colors.purple;
+        statusLabel = 'Delivered';
+        break;
+    }
+
     return Container(
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: theme.cardColor,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.6)),
         boxShadow: [
           BoxShadow(
-            color: isDark
-                ? Colors.black.withOpacity(0.3)
-                : Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
-        border: Border.all(
-          color: theme.dividerColor.withOpacity(isDark ? 0.1 : 0.05),
-        ),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          borderRadius: BorderRadius.circular(12),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: request.status == ProcurementStatus.rejected
-                            ? Colors.red.withOpacity(0.1)
-                            : AppColors.purchaserOrange.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        request.status == ProcurementStatus.rejected
-                            ? Icons.report_problem_outlined
-                            : Icons.shopping_cart_outlined,
-                        color: request.status == ProcurementStatus.rejected
-                            ? Colors.red
-                            : AppColors.purchaserOrange,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            request.packName,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                // 1. Left Color Strip
+                Container(width: 6, color: statusColor),
+
+                // 2. Main Content
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Header: Pack Name & Status Badge
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    request.packName,
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 15,
+                                        ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.location_on,
+                                        size: 13,
+                                        color: theme.iconTheme.color
+                                            ?.withOpacity(0.5),
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Expanded(
+                                        child: Text(
+                                          request.familyAddress,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: theme
+                                                    .textTheme
+                                                    .bodySmall
+                                                    ?.color
+                                                    ?.withOpacity(0.7),
+                                                fontSize: 11,
+                                              ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.location_on_outlined,
-                                size: 14,
-                                color: theme.colorScheme.onSurface.withOpacity(
-                                  0.6,
+                            const SizedBox(width: 8),
+                            // Compact Status Badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: statusColor.withOpacity(0.2),
+                                  width: 0.5,
                                 ),
                               ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  request.familyAddress,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurface
-                                        .withOpacity(0.6),
+                              child: Text(
+                                statusLabel,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: statusColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Compact Items Preview (Single Line)
+                        if (request.items.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.scaffoldBackgroundColor.withOpacity(
+                                0.5,
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              request.items
+                                  .map((e) => '${e.name} (${e.quantity})')
+                                  .join(', '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurface.withOpacity(
+                                  0.8,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                        // Admin Remarks (if rejected)
+                        if (request.status == ProcurementStatus.rejected &&
+                            request.adminRemarks != null)
+                          Container(
+                            margin: const EdgeInsets.only(top: 8),
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.05),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: Colors.red.withOpacity(0.2),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.info_outline,
+                                  size: 14,
+                                  color: Colors.red,
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    request.adminRemarks!,
+                                    style: TextStyle(
+                                      color: Colors.red[800],
+                                      fontSize: 11,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
+                              ],
+                            ),
+                          ),
+
+                        const SizedBox(height: 8),
+
+                        // Footer: Time & Value & Action
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.schedule,
+                                      size: 12,
+                                      color: theme.hintColor,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      _getTimeAgo(request.createdAt),
+                                      style: TextStyle(
+                                        color: theme.hintColor,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 1),
+                                Text(
+                                  currencyFormat.format(request.budgetLimit),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(
+                              height: 32,
+                              child: ElevatedButton(
+                                onPressed: onTap,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      request.status ==
+                                          ProcurementStatus.rejected
+                                      ? Colors.red
+                                      : AppColors.purchaserOrange,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                child: Text(actionLabel),
                               ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    _buildStatusChip(theme),
-                  ],
-                ),
-
-                if (isOverdue && request.status == ProcurementStatus.pending)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.withOpacity(0.2)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.access_time,
-                            size: 14,
-                            color: Colors.red,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Action Required: Overdue',
-                            style: TextStyle(
-                              color: Colors.red[700],
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                if (request.status == ProcurementStatus.rejected &&
-                    request.adminRemarks != null)
-                  Container(
-                    margin: const EdgeInsets.only(top: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.red.withOpacity(0.2)),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(
-                          Icons.info_outline,
-                          size: 16,
-                          color: Colors.red,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            request.adminRemarks!,
-                            style: TextStyle(
-                              color: Colors.red[800],
-                              fontSize: 13,
-                            ),
-                          ),
+                          ],
                         ),
                       ],
                     ),
                   ),
-
-                const SizedBox(height: 16),
-                const Divider(height: 1),
-                const SizedBox(height: 12),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Estimated Cost',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface.withOpacity(0.5),
-                          ),
-                        ),
-                        Text(
-                          currencyFormat.format(request.budgetLimit),
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    ElevatedButton(
-                      onPressed: onTap,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            request.status == ProcurementStatus.rejected
-                            ? Colors.red
-                            : AppColors.purchaserOrange,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 0,
-                        ), // Compact button
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: Text(
-                        actionLabel,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
@@ -243,43 +316,22 @@ class ProcurementCard extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusChip(ThemeData theme) {
-    Color color;
-    String label;
+  String _getTimeAgo(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
 
-    switch (request.status) {
-      case ProcurementStatus.purchased:
-        color = Colors.blue;
-        label = 'Review';
-        break;
-      case ProcurementStatus.rejected:
-        color = Colors.red;
-        label = 'Rejected';
-        break;
-      case ProcurementStatus.verified:
-        color = Colors.green;
-        label = 'Verified';
-        break;
-      default:
-        color = Colors.orange;
-        label = 'Pending';
+    if (difference.inDays > 30) {
+      return '${(difference.inDays / 30).floor()}mo ago';
+    } else if (difference.inDays > 7) {
+      return '${(difference.inDays / 7).floor()}w ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
     }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
   }
 }

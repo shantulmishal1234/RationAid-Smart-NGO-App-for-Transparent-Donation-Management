@@ -71,8 +71,12 @@ class _PurchaserBottomNavState extends State<PurchaserBottomNav>
         return 2;
       case PurchaserSection.history:
         return 3;
-      case PurchaserSection.profile:
+      case PurchaserSection.reports:
         return 4;
+      case PurchaserSection.notifications:
+        return 5;
+      case PurchaserSection.profile:
+        return 6;
     }
   }
 
@@ -91,7 +95,7 @@ class _PurchaserBottomNavState extends State<PurchaserBottomNav>
     final currentIndex = _getSectionIndex(widget.currentSection);
     final screenWidth = MediaQuery.of(context).size.width;
     final barWidth = screenWidth - 32;
-    final itemWidth = barWidth / 5; // divided by 5 items
+    final itemWidth = barWidth / 7; // divided by 7 items
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final adjustedNotchX = _getAdjustedNotchX(
@@ -188,10 +192,22 @@ class _PurchaserBottomNavState extends State<PurchaserBottomNav>
                         index: 3,
                       ),
                       _buildNavItem(
+                        icon: Icons.analytics_outlined,
+                        label: 'Reports',
+                        section: PurchaserSection.reports,
+                        index: 4,
+                      ),
+                      _buildNavItem(
+                        icon: Icons.notifications_outlined,
+                        label: 'Alerts',
+                        section: PurchaserSection.notifications,
+                        index: 5,
+                      ),
+                      _buildNavItem(
                         icon: Icons.person_outline,
                         label: 'Profile',
                         section: PurchaserSection.profile,
-                        index: 4,
+                        index: 6,
                       ),
                     ],
                   ),

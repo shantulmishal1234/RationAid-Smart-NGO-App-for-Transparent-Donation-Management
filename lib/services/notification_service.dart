@@ -160,4 +160,83 @@ class NotificationService {
         .orderBy('createdAt', descending: true)
         .snapshots();
   }
+
+  /// Stream notifications for Purchaser role (Specific + Broadcasts)
+  static Stream<QuerySnapshot> streamPurchaserNotifications(String userId) {
+    return _firestore
+        .collection('notifications')
+        .where('userId', whereIn: [userId, 'all'])
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
+  /// Send notification to a specific Purchaser
+  static Future<void> sendPurchaserNotification({
+    required String userId,
+    required String title,
+    required String message,
+    String? actionType,
+    String? actionId,
+  }) async {
+    try {
+      await _firestore.collection('notifications').add({
+        'userId': userId,
+        'role': 'purchaser',
+        'title': title,
+        'message': message,
+        'actionType': actionType,
+        'actionId': actionId,
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+      });
+    } catch (e) {
+      print('Error sending purchaser notification: $e');
+    }
+  }
+
+  /// Send broadcast notification to ALL Purchasers
+  static Future<void> notifyAllPurchasers({
+    required String title,
+    required String message,
+    String? actionType,
+    String? actionId,
+  }) async {
+    try {
+      await _firestore.collection('notifications').add({
+        'userId': 'all',
+        'role': 'purchaser',
+        'title': title,
+        'message': message,
+        'actionType': actionType,
+        'actionId': actionId,
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+      });
+    } catch (e) {
+      print('Error sending broadcast purchaser notification: $e');
+    }
+  }
+
+  /// Mark Purchaser notification as read
+  static Future<void> markPurchaserNotificationAsRead(
+    String notificationId,
+  ) async {
+    try {
+      await _firestore.collection('notifications').doc(notificationId).update({
+        'isRead': true,
+      });
+    } catch (e) {
+      print('Error marking notification as read: $e');
+    }
+  }
+
+  /// Get unread count for Purchaser
+  static Stream<int> getPurchaserUnreadCountStream(String userId) {
+    return _firestore
+        .collection('notifications')
+        .where('userId', whereIn: [userId, 'all'])
+        .where('isRead', isEqualTo: false)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
+  }
 }

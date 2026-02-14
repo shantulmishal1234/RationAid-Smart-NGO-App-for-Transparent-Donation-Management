@@ -3,6 +3,7 @@ import 'package:ration_aid/models/procurement_model.dart';
 import 'package:ration_aid/models/family_model.dart';
 import 'package:ration_aid/models/assistance_pack_model.dart';
 import 'package:ration_aid/services/audit_service.dart';
+import 'package:ration_aid/services/notification_service.dart';
 
 class ProcurementService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -73,6 +74,16 @@ class ProcurementService {
       await _firestore.collection('families').doc(familyId).update({
         'fulfillmentStatus': 'ready_for_purchase',
       });
+
+      // Notify all purchasers
+      await NotificationService.notifyAllPurchasers(
+        title: 'New Request Available 📦',
+        message:
+            'A new pack "${pack.name}" is ready for purchase in ${family.area}.',
+        actionType: 'new_request',
+        actionId:
+            family.id, // Using family ID as action ID to maybe filter/highlight
+      );
     } catch (e) {
       print('Error generating procurement request: $e');
       rethrow;
@@ -171,6 +182,18 @@ class ProcurementService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+      // Send notification to purchaser
+      if (request.purchaserId != null) {
+        await NotificationService.sendPurchaserNotification(
+          userId: request.purchaserId!,
+          title: 'Purchase Approved ✓',
+          message:
+              'Your purchase for "${request.packName}" has been verified and added to inventory.',
+          actionType: 'procurement_verified',
+          actionId: requestId,
+        );
+      }
+
       await AuditService.logAction(
         action: 'verify_purchase',
         entityType: 'procurement',
@@ -189,10 +212,25 @@ class ProcurementService {
     String reason,
   ) async {
     try {
+      final doc = await _firestore.collection(_collection).doc(requestId).get();
+      final request = ProcurementRequest.fromFirestore(doc);
+
       await _firestore.collection(_collection).doc(requestId).update({
         'status': 'rejected',
         'adminRemarks': reason,
       });
+
+      // Send notification to purchaser
+      if (request.purchaserId != null) {
+        await NotificationService.sendPurchaserNotification(
+          userId: request.purchaserId!,
+          title: 'Purchase Declined ✗',
+          message:
+              'Your purchase for "${request.packName}" was rejected. Reason: $reason',
+          actionType: 'procurement_rejected',
+          actionId: requestId,
+        );
+      }
 
       await AuditService.logAction(
         action: 'reject_purchase',

@@ -4,14 +4,20 @@ import 'package:ration_aid/models/procurement_model.dart';
 import 'package:ration_aid/services/procurement_service.dart';
 import 'package:ration_aid/services/cloudinary_service.dart';
 import 'package:ration_aid/screens/Purchaser/widgets/purchaser_scaffold.dart';
+import 'package:ration_aid/screens/Purchaser/widgets/receipt_viewer_screen.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:io';
 
 class PurchaseEntryScreen extends StatefulWidget {
   final ProcurementRequest request;
+  final bool isReadOnly;
 
-  const PurchaseEntryScreen({super.key, required this.request});
+  const PurchaseEntryScreen({
+    super.key,
+    required this.request,
+    this.isReadOnly = false,
+  });
 
   @override
   State<PurchaseEntryScreen> createState() => _PurchaseEntryScreenState();
@@ -30,6 +36,10 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
   void initState() {
     super.initState();
     _items = widget.request.items.map((e) => e.copyWith()).toList();
+    // Calculate total if viewing existing purchase
+    if (widget.isReadOnly) {
+      _totalSpent = widget.request.totalSpent;
+    }
   }
 
   Future<void> _pickReceipt() async {
@@ -117,9 +127,10 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isEditable = !widget.isReadOnly;
 
     return PurchaserScaffold(
-      title: 'Enter Purchase Details',
+      title: widget.isReadOnly ? 'Purchase Details' : 'Enter Purchase Details',
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Form(
@@ -127,6 +138,57 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Status Banner for read-only mode
+              if (widget.isReadOnly)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: _getStatusColor(
+                      widget.request.status,
+                    ).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _getStatusColor(
+                        widget.request.status,
+                      ).withOpacity(0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _getStatusIcon(widget.request.status),
+                        color: _getStatusColor(widget.request.status),
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _getStatusTitle(widget.request.status),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: _getStatusColor(widget.request.status),
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _getStatusMessage(widget.request.status),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurface.withOpacity(
+                                  0.7,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               // Summary Card
               Container(
                 width: double.infinity,
@@ -233,45 +295,72 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                         ),
                         Expanded(
                           flex: 2,
-                          child: TextFormField(
-                            initialValue: item.actualCost > 0
-                                ? item.actualCost.toString()
-                                : '',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                            decoration: InputDecoration(
-                              labelText: 'Cost',
-                              prefixText: 'Rs. ',
-                              isDense: true,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: theme.dividerColor,
+                          child: isEditable
+                              ? TextFormField(
+                                  initialValue: item.actualCost > 0
+                                      ? item.actualCost.toString()
+                                      : '',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  decoration: InputDecoration(
+                                    labelText: 'Cost',
+                                    prefixText: 'Rs. ',
+                                    isDense: true,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide(
+                                        color: theme.dividerColor,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(
+                                        color: AppColors.purchaserOrange,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  onChanged: (val) {
+                                    final cost = double.tryParse(val) ?? 0.0;
+                                    _items[index] = item.copyWith(
+                                      actualCost: cost,
+                                      isPurchased: cost > 0,
+                                    );
+                                    _calculateTotal();
+                                  },
+                                  validator: (val) =>
+                                      (val == null || val.isEmpty)
+                                      ? 'Req'
+                                      : null,
+                                )
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Actual Cost',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: theme.colorScheme.onSurface
+                                            .withOpacity(0.6),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Rs. ${item.actualCost.toStringAsFixed(0)}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                        color: Colors.green,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: const BorderSide(
-                                  color: AppColors.purchaserOrange,
-                                  width: 2,
-                                ),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 12,
-                              ),
-                            ),
-                            keyboardType: TextInputType.number,
-                            onChanged: (val) {
-                              final cost = double.tryParse(val) ?? 0.0;
-                              _items[index] = item.copyWith(
-                                actualCost: cost,
-                                isPurchased: cost > 0,
-                              );
-                              _calculateTotal();
-                            },
-                            validator: (val) =>
-                                (val == null || val.isEmpty) ? 'Req' : null,
-                          ),
                         ),
                       ],
                     ),
@@ -320,6 +409,83 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                         ),
                       ],
                     ),
+
+                    // Budget Utilization Bar
+                    const SizedBox(height: 16),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Budget Utilization',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurface.withOpacity(
+                                  0.6,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '${(_totalSpent / widget.request.budgetLimit * 100).toStringAsFixed(0)}%',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: _totalSpent > widget.request.budgetLimit
+                                    ? Colors.red
+                                    : _totalSpent >
+                                          widget.request.budgetLimit * 0.9
+                                    ? Colors.orange
+                                    : Colors.green,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: (_totalSpent / widget.request.budgetLimit)
+                                .clamp(0.0, 1.0),
+                            minHeight: 8,
+                            backgroundColor: theme.dividerColor.withOpacity(
+                              0.2,
+                            ),
+                            valueColor: AlwaysStoppedAnimation(
+                              _totalSpent > widget.request.budgetLimit
+                                  ? Colors.red
+                                  : _totalSpent >
+                                        widget.request.budgetLimit * 0.9
+                                  ? Colors.orange
+                                  : Colors.green,
+                            ),
+                          ),
+                        ),
+                        if (_totalSpent > widget.request.budgetLimit)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.warning_amber_rounded,
+                                  size: 14,
+                                  color: Colors.red,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Over budget by Rs ${(_totalSpent - widget.request.budgetLimit).toStringAsFixed(0)}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
                     const Divider(height: 32),
                     const Text(
                       'Upload Receipt',
@@ -329,91 +495,446 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    InkWell(
-                      onTap: _pickReceipt,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
+                    if (isEditable)
+                      _receiptImage == null
+                          ? InkWell(
+                              onTap: _pickReceipt,
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                height: 180,
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  color: theme.scaffoldBackgroundColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: theme.dividerColor,
+                                    style: BorderStyle.solid,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.cloud_upload_outlined,
+                                      size: 40,
+                                      color: AppColors.purchaserOrange
+                                          .withOpacity(0.7),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'Tap to upload receipt image',
+                                      style: TextStyle(
+                                        color: theme.colorScheme.onSurface
+                                            .withOpacity(0.5),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : Column(
+                              children: [
+                                Stack(
+                                  children: [
+                                    InkWell(
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => ReceiptViewerScreen(
+                                              localImage: _receiptImage,
+                                              title: 'Receipt Preview',
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Container(
+                                        height: 180,
+                                        width: double.infinity,
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          border: Border.all(
+                                            color: AppColors.purchaserOrange,
+                                            width: 2,
+                                          ),
+                                          image: DecorationImage(
+                                            image: FileImage(_receiptImage!),
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    // Gradient overlay for better button visibility
+                                    Positioned.fill(
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topRight,
+                                            end: Alignment.bottomLeft,
+                                            colors: [
+                                              Colors.black.withOpacity(0.4),
+                                              Colors.transparent,
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    // Action buttons
+                                    Positioned(
+                                      top: 8,
+                                      right: 8,
+                                      child: Row(
+                                        children: [
+                                          // View full screen
+                                          Container(
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withOpacity(
+                                                0.6,
+                                              ),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: IconButton(
+                                              icon: const Icon(
+                                                Icons.fullscreen,
+                                                color: Colors.white,
+                                              ),
+                                              onPressed: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) =>
+                                                        ReceiptViewerScreen(
+                                                          localImage:
+                                                              _receiptImage,
+                                                          title:
+                                                              'Receipt Preview',
+                                                        ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          // Remove
+                                          Container(
+                                            decoration: BoxDecoration(
+                                              color: Colors.red.withOpacity(
+                                                0.8,
+                                              ),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: IconButton(
+                                              icon: const Icon(
+                                                Icons.close,
+                                                color: Colors.white,
+                                              ),
+                                              onPressed: () => setState(
+                                                () => _receiptImage = null,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    // Tap to view hint
+                                    Positioned(
+                                      bottom: 12,
+                                      left: 0,
+                                      right: 0,
+                                      child: Center(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withOpacity(
+                                              0.7,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.touch_app,
+                                                size: 14,
+                                                color: Colors.white,
+                                              ),
+                                              SizedBox(width: 6),
+                                              Text(
+                                                'Tap to view full screen',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 11,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                // Change receipt button
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: _pickReceipt,
+                                    icon: const Icon(
+                                      Icons.image_outlined,
+                                      size: 18,
+                                    ),
+                                    label: const Text('Change Receipt'),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor:
+                                          AppColors.purchaserOrange,
+                                      side: const BorderSide(
+                                        color: AppColors.purchaserOrange,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                    else if (widget.request.receiptUrl != null)
+                      InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ReceiptViewerScreen(
+                                networkUrl: widget.request.receiptUrl,
+                                title: 'Submitted Receipt',
+                              ),
+                            ),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Stack(
+                          children: [
+                            Container(
+                              height: 180,
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: theme.scaffoldBackgroundColor,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.green,
+                                  width: 2,
+                                ),
+                                image: DecorationImage(
+                                  image: NetworkImage(
+                                    widget.request.receiptUrl!,
+                                  ),
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                            // Verified badge
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.check_circle,
+                                      size: 12,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'SUBMITTED',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            // Tap to view hint
+                            Positioned(
+                              bottom: 12,
+                              left: 0,
+                              right: 0,
+                              child: Center(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.7),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.touch_app,
+                                        size: 14,
+                                        color: Colors.white,
+                                      ),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        'Tap to view full screen',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      Container(
                         height: 180,
                         width: double.infinity,
                         decoration: BoxDecoration(
-                          color: theme.scaffoldBackgroundColor,
+                          color: theme.scaffoldBackgroundColor.withOpacity(0.5),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: _receiptImage == null
-                                ? theme.dividerColor
-                                : AppColors.purchaserOrange,
-                            style: _receiptImage == null
-                                ? BorderStyle.solid
-                                : BorderStyle.solid,
-                            width: 1.5,
-                          ),
-                          image: _receiptImage != null
-                              ? DecorationImage(
-                                  image: FileImage(_receiptImage!),
-                                  fit: BoxFit.cover,
-                                )
-                              : null,
+                          border: Border.all(color: theme.dividerColor),
                         ),
-                        child: _receiptImage == null
-                            ? Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.cloud_upload_outlined,
-                                    size: 40,
-                                    color: AppColors.purchaserOrange
-                                        .withOpacity(0.7),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'Tap to upload receipt image',
-                                    style: TextStyle(
-                                      color: theme.colorScheme.onSurface
-                                          .withOpacity(0.5),
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : null,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.receipt_outlined,
+                              size: 40,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No receipt uploaded',
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface.withOpacity(
+                                  0.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
 
               const SizedBox(height: 32),
 
-              // Submit Button
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _submitPurchase,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.purchaserOrange,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              // Submit Button (only in editable mode)
+              if (isEditable)
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _submitPurchase,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.purchaserOrange,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 4,
+                      shadowColor: AppColors.purchaserOrange.withOpacity(0.4),
                     ),
-                    elevation: 4,
-                    shadowColor: AppColors.purchaserOrange.withOpacity(0.4),
-                  ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          'Submit for Review',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                    child: _isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                            'Submit for Review',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
+                  ),
                 ),
-              ),
               const SizedBox(height: 40),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Color _getStatusColor(ProcurementStatus status) {
+    switch (status) {
+      case ProcurementStatus.purchased:
+        return Colors.blue;
+      case ProcurementStatus.verified:
+        return Colors.green;
+      case ProcurementStatus.rejected:
+        return Colors.red;
+      default:
+        return AppColors.purchaserOrange;
+    }
+  }
+
+  IconData _getStatusIcon(ProcurementStatus status) {
+    switch (status) {
+      case ProcurementStatus.purchased:
+        return Icons.hourglass_empty;
+      case ProcurementStatus.verified:
+        return Icons.check_circle;
+      case ProcurementStatus.rejected:
+        return Icons.cancel;
+      default:
+        return Icons.shopping_cart;
+    }
+  }
+
+  String _getStatusTitle(ProcurementStatus status) {
+    switch (status) {
+      case ProcurementStatus.purchased:
+        return '⏳ Under Admin Review';
+      case ProcurementStatus.verified:
+        return '✓ Verified & Approved';
+      case ProcurementStatus.rejected:
+        return '✗ Rejected';
+      default:
+        return 'Purchase Required';
+    }
+  }
+
+  String _getStatusMessage(ProcurementStatus status) {
+    switch (status) {
+      case ProcurementStatus.purchased:
+        return 'Your purchase is being reviewed by admin. You cannot edit this submission.';
+      case ProcurementStatus.verified:
+        return 'This purchase has been approved by admin and added to inventory.';
+      case ProcurementStatus.rejected:
+        return widget.request.adminRemarks ?? 'This purchase was rejected.';
+      default:
+        return '';
+    }
   }
 }

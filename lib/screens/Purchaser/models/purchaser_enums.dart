@@ -1,1 +1,9 @@
-enum PurchaserSection { dashboard, procurement, inventory, history, profile }
+enum PurchaserSection {
+  dashboard,
+  procurement,
+  inventory,
+  history,
+  notifications,
+  reports,
+  profile,
+}

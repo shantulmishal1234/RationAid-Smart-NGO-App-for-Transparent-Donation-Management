@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/models/procurement_model.dart';
 import 'package:ration_aid/services/procurement_service.dart';
 import 'package:ration_aid/screens/Purchaser/widgets/procurement_card.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:intl/intl.dart';
+import 'package:ration_aid/widgets/frosted_panel.dart';
+import 'package:ration_aid/services/report_pdf_service.dart';
 
 class HistoryView extends StatefulWidget {
   const HistoryView({super.key});
@@ -14,142 +17,773 @@ class HistoryView extends StatefulWidget {
 
 class _HistoryViewState extends State<HistoryView> {
   String _filterStatus = 'All'; // All, Verified, Rejected
-  final List<String> _filters = ['All', 'Verified', 'Rejected'];
+
+  // Search state
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  Timer? _debounce;
+
+  // Date state
+  DateTimeRange? _selectedDateRange;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      setState(() {
+        _searchQuery = query.toLowerCase();
+      });
+    });
+  }
+
+  Future<void> _showCustomRangePicker() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+      initialDateRange: _selectedDateRange,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppColors.purchaserOrange,
+              onPrimary: Colors.white,
+              surface: Theme.of(context).cardColor,
+              onSurface: Theme.of(context).textTheme.bodyLarge!.color!,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _selectedDateRange = picked);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Filter Chips
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          color: Theme.of(context).cardColor,
-          child: Row(
-            children: _filters.map((filter) {
-              final isSelected = _filterStatus == filter;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: FilterChip(
-                  label: Text(filter),
-                  selected: isSelected,
-                  onSelected: (selected) {
-                    setState(() {
-                      _filterStatus = filter;
-                    });
-                  },
-                  backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                  selectedColor: AppColors.purchaserOrange.withOpacity(0.2),
-                  labelStyle: TextStyle(
-                    color: isSelected
-                        ? AppColors.purchaserOrange
-                        : Colors.grey[600],
-                    fontWeight: isSelected
-                        ? FontWeight.bold
-                        : FontWeight.normal,
+    final theme = Theme.of(context);
+    final dateFormat = DateFormat('MMM dd, yyyy');
+
+    return StreamBuilder<List<ProcurementRequest>>(
+      stream: ProcurementService.getAllRequestsStream(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final allRequests = snapshot.data ?? [];
+
+        // 1. Base Filter: Only finalize (Verified or Rejected)
+        var historyRequests = allRequests.where((r) {
+          return r.status == ProcurementStatus.verified ||
+              r.status == ProcurementStatus.rejected;
+        }).toList();
+
+        // 2. Stats Calculation (Before View Filters)
+        // Unused: final totalAllTime = historyRequests.length;
+        final totalValueAllTime = historyRequests.fold<double>(
+          0,
+          (sum, r) => sum + r.totalSpent,
+        );
+        final verifiedCountAllTime = historyRequests
+            .where((r) => r.status == ProcurementStatus.verified)
+            .length;
+        final rejectedCountAllTime = historyRequests
+            .where((r) => r.status == ProcurementStatus.rejected)
+            .length;
+
+        // 3. Apply View Filters (Status)
+        if (_filterStatus != 'All') {
+          historyRequests = historyRequests.where((r) {
+            if (_filterStatus == 'Verified')
+              return r.status == ProcurementStatus.verified;
+            if (_filterStatus == 'Rejected')
+              return r.status == ProcurementStatus.rejected;
+            return true;
+          }).toList();
+        }
+
+        // 4. Apply Date Filter
+        if (_selectedDateRange != null) {
+          historyRequests = historyRequests.where((r) {
+            final dateToCheck = r.verifiedAt ?? r.createdAt;
+            // Inclusive check
+            return dateToCheck.isAfter(
+                  _selectedDateRange!.start.subtract(
+                    const Duration(seconds: 1),
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    side: BorderSide(
-                      color: isSelected
-                          ? AppColors.purchaserOrange
-                          : Colors.grey[300]!,
+                ) &&
+                dateToCheck.isBefore(
+                  _selectedDateRange!.end.add(const Duration(days: 1)),
+                );
+          }).toList();
+        }
+
+        // 5. Apply Search
+        if (_searchQuery.isNotEmpty) {
+          historyRequests = historyRequests.where((r) {
+            return r.packName.toLowerCase().contains(_searchQuery);
+          }).toList();
+        }
+
+        // Sort by date desc (newest first)
+        historyRequests.sort((a, b) {
+          final dateA = a.verifiedAt ?? a.createdAt;
+          final dateB = b.verifiedAt ?? b.createdAt;
+          return dateB.compareTo(dateA);
+        });
+
+        // Filtered Stats
+        final filteredCount = historyRequests.length;
+        // Unused: final filteredValue = historyRequests.fold...
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // --- Header ---
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: Text(
+                  'Purchase History',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.onSurface,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+
+            // --- Quick Stats Dashboard (Inventory Style) ---
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      theme.cardColor,
+                      theme.cardColor.withOpacity(0.95),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: theme.dividerColor.withOpacity(0.5),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    // Total Value
+                    Expanded(
+                      child: _buildStatItem(
+                        theme,
+                        'Rs ${(totalValueAllTime / 1000).toStringAsFixed(1)}K',
+                        'Total Spent',
+                        AppColors.purchaserOrange,
+                      ),
+                    ),
+                    Container(
+                      height: 32,
+                      width: 1,
+                      color: theme.dividerColor.withOpacity(0.5),
+                    ),
+                    // Verified
+                    Expanded(
+                      child: _buildStatItem(
+                        theme,
+                        verifiedCountAllTime.toString(),
+                        'Verified',
+                        Colors.green,
+                      ),
+                    ),
+                    Container(
+                      height: 32,
+                      width: 1,
+                      color: theme.dividerColor.withOpacity(0.5),
+                    ),
+                    // Rejected
+                    Expanded(
+                      child: _buildStatItem(
+                        theme,
+                        rejectedCountAllTime.toString(),
+                        'Rejected',
+                        Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // --- Smart Toolbar (Search + Filters) ---
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  // Search Bar
+                  Expanded(
+                    child: SizedBox(
+                      height: 46,
+                      child: TextField(
+                        controller: _searchController,
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontSize: 14,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Search history...',
+                          hintStyle: TextStyle(
+                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                            fontSize: 14,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.search,
+                            size: 20,
+                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                          filled: true,
+                          fillColor: theme.cardColor,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 0,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: theme.dividerColor.withOpacity(0.6),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: theme.dividerColor.withOpacity(0.6),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: AppColors.purchaserOrange,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        onChanged: _onSearchChanged,
+                      ),
                     ),
                   ),
-                  showCheckmark: false,
-                ),
-              );
-            }).toList(),
+                  const SizedBox(width: 8),
+
+                  // Status Filter Button
+                  _buildFilterButton(
+                    theme: theme,
+                    icon: _filterStatus == 'All'
+                        ? Icons.filter_list
+                        : Icons.filter_list_alt,
+                    tooltip: 'Filter Status',
+                    isActive: _filterStatus != 'All',
+                    onTap: () {}, // Handled by PopupMenu
+                    child: PopupMenuButton<String>(
+                      offset: const Offset(0, 48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      tooltip: 'Filter Status',
+                      onSelected: (value) =>
+                          setState(() => _filterStatus = value),
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'All',
+                          child: Text('All Status'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'Verified',
+                          child: Text('Verified Only'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'Rejected',
+                          child: Text('Rejected Only'),
+                        ),
+                      ],
+                      child: Icon(
+                        _filterStatus == 'All'
+                            ? Icons.filter_list
+                            : Icons.filter_list_alt,
+                        size: 20,
+                        color: _filterStatus == 'All'
+                            ? theme.colorScheme.onSurface.withOpacity(0.7)
+                            : AppColors.purchaserOrange,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // Date Filter Button
+                  _buildFilterButton(
+                    theme: theme,
+                    icon: Icons.calendar_month_outlined,
+                    tooltip: 'Filter Date',
+                    isActive: _selectedDateRange != null,
+                    onTap: () {},
+                    child: PopupMenuButton<String>(
+                      offset: const Offset(0, 48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      tooltip: 'Filter Date',
+                      onSelected: (value) {
+                        if (value == 'clear')
+                          setState(() => _selectedDateRange = null);
+                        else if (value == 'custom')
+                          _showCustomRangePicker();
+                        else {
+                          final now = DateTime.now();
+                          DateTime start = now;
+                          if (value == 'today')
+                            start = DateTime(now.year, now.month, now.day);
+                          else if (value == '7days')
+                            start = now.subtract(const Duration(days: 6));
+                          else if (value == '30days')
+                            start = now.subtract(const Duration(days: 29));
+                          else if (value == 'month')
+                            start = DateTime(now.year, now.month, 1);
+
+                          final end = DateTime(
+                            now.year,
+                            now.month,
+                            now.day,
+                            23,
+                            59,
+                            59,
+                          );
+                          setState(
+                            () => _selectedDateRange = DateTimeRange(
+                              start: start,
+                              end: end,
+                            ),
+                          );
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'today',
+                          child: Text('Today'),
+                        ),
+                        const PopupMenuItem(
+                          value: '7days',
+                          child: Text('Last 7 Days'),
+                        ),
+                        const PopupMenuItem(
+                          value: '30days',
+                          child: Text('Last 30 Days'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'month',
+                          child: Text('This Month'),
+                        ),
+                        const PopupMenuDivider(),
+                        const PopupMenuItem(
+                          value: 'custom',
+                          child: Text('Custom Range...'),
+                        ),
+                        if (_selectedDateRange != null)
+                          const PopupMenuItem(
+                            value: 'clear',
+                            child: Text(
+                              'Clear Filter',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                      ],
+                      child: Icon(
+                        Icons.calendar_month_outlined,
+                        size: 20,
+                        color: _selectedDateRange == null
+                            ? theme.colorScheme.onSurface.withOpacity(0.7)
+                            : AppColors.purchaserOrange,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Result Count Text
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Showing $filteredCount records',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  ),
+                  if (_selectedDateRange != null)
+                    Text(
+                      '${dateFormat.format(_selectedDateRange!.start)} - ${dateFormat.format(_selectedDateRange!.end)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.purchaserOrange,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // --- Main List ---
+            Expanded(
+              child: FrostedPanel(
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                padding: EdgeInsets.zero,
+                child: historyRequests.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No records found',
+                          style: TextStyle(color: theme.disabledColor),
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: () async {
+                          await Future.delayed(
+                            const Duration(milliseconds: 500),
+                          );
+                        },
+                        child: ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
+                          itemCount: historyRequests.length + 1,
+                          separatorBuilder: (_, __) => const SizedBox(
+                            height: 12,
+                          ), // Match Inventory spacing
+                          itemBuilder: (context, index) {
+                            if (index == historyRequests.length) {
+                              // Export Button at bottom
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 20,
+                                ),
+                                child: Center(
+                                  child: TextButton.icon(
+                                    onPressed: () {
+                                      ReportPdfService.generateAndOpenReport(
+                                        historyRequests,
+                                        _selectedDateRange,
+                                      );
+                                    },
+                                    icon: const Icon(
+                                      Icons.picture_as_pdf,
+                                      size: 18,
+                                    ),
+                                    label: const Text('Export List (PDF)'),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: theme.primaryColor,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+
+                            final request = historyRequests[index];
+                            return ProcurementCard(
+                              request: request,
+                              actionLabel: 'Details',
+                              onTap: () =>
+                                  _showEnhancedDetails(context, request),
+                            );
+                          },
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildStatItem(
+    ThemeData theme,
+    String value,
+    String label,
+    Color color,
+  ) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: color,
           ),
         ),
-
-        Expanded(
-          child: StreamBuilder<List<ProcurementRequest>>(
-            stream: ProcurementService.getAllRequestsStream(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              final allRequests = snapshot.data ?? [];
-
-              // Filter logic for History: show only finalized items (Verified, Rejected)
-              // Or maybe show everything?
-              // Request says "Past purchases".
-              // "Pending" and "Purchased" (Under Review) are active, not history.
-              // So history = verified or rejected (final states).
-
-              final historyRequests = allRequests.where((r) {
-                final isFinal =
-                    r.status == ProcurementStatus.verified ||
-                    r.status == ProcurementStatus.rejected;
-                if (!isFinal) return false;
-
-                if (_filterStatus == 'All') return true;
-                if (_filterStatus == 'Verified')
-                  return r.status == ProcurementStatus.verified;
-                if (_filterStatus == 'Rejected')
-                  return r.status == ProcurementStatus.rejected;
-                return true;
-              }).toList();
-
-              if (historyRequests.isEmpty) {
-                return const Center(child: Text('No history found'));
-              }
-
-              return ListView.separated(
-                padding: const EdgeInsets.all(16),
-                itemCount: historyRequests.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final request = historyRequests[index];
-                  return ProcurementCard(
-                    request: request,
-                    actionLabel: 'Details',
-                    onTap: () {
-                      // Show details dialog or screen
-                      _showDetailsDialog(context, request);
-                    },
-                  );
-                },
-              );
-            },
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],
     );
   }
 
-  void _showDetailsDialog(BuildContext context, ProcurementRequest request) {
-    showDialog(
+  Widget _buildFilterButton({
+    required ThemeData theme,
+    required IconData icon,
+    required String tooltip,
+    required bool isActive,
+    required VoidCallback onTap,
+    required Widget child,
+  }) {
+    return Container(
+      height: 46,
+      width: 46,
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isActive
+              ? AppColors.purchaserOrange
+              : theme.dividerColor.withOpacity(0.6),
+        ),
+      ),
+      child: Center(child: child),
+    );
+  }
+
+  void _showEnhancedDetails(BuildContext context, ProcurementRequest request) {
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(request.packName),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
           children: [
-            if (request.verifiedAt != null)
-              Text(
-                'Verified: ${DateFormat.yMMMd().format(request.verifiedAt!)}',
+            // Handle
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(top: 12, bottom: 20),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
               ),
-            if (request.totalSpent > 0)
-              Text('Total Spent: Rs. ${request.totalSpent.toStringAsFixed(0)}'),
-            if (request.adminRemarks != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'Admin Note: ${request.adminRemarks}',
-                  style: const TextStyle(color: Colors.red),
-                ),
+            ),
+
+            // Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      request.packName,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: request.status == ProcurementStatus.verified
+                          ? Colors.green.withOpacity(0.1)
+                          : Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      request.status.toString().split('.').last.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: request.status == ProcurementStatus.verified
+                            ? Colors.green
+                            : Colors.red,
+                      ),
+                    ),
+                  ),
+                ],
               ),
+            ),
+            const Divider(height: 30),
+
+            // Content
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                children: [
+                  // Stats Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Total Amount',
+                              style: TextStyle(
+                                color: Theme.of(context).hintColor,
+                              ),
+                            ),
+                            Text(
+                              'Rs ${request.totalSpent.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              'Date',
+                              style: TextStyle(
+                                color: Theme.of(context).hintColor,
+                              ),
+                            ),
+                            Text(
+                              DateFormat(
+                                'MMM dd, yyyy',
+                              ).format(request.verifiedAt ?? request.createdAt),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Items Table
+                  Text(
+                    'Purchased Items',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: Theme.of(context).dividerColor.withOpacity(0.5),
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: request.items.map((item) {
+                        return Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                item.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text(
+                                '${item.quantity}  -  Rs ${item.actualCost.toStringAsFixed(0)}',
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+
+                  if (request.adminRemarks != null &&
+                      request.adminRemarks!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 24),
+                      child: FrostedPanel(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Admin Remarks',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(request.adminRemarks!),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  const SizedBox(height: 30),
+                  if (request.receiptUrl != null &&
+                      request.receiptUrl!.isNotEmpty)
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        // Show full screen image
+                        showDialog(
+                          context: context,
+                          builder: (_) =>
+                              Dialog(child: Image.network(request.receiptUrl!)),
+                        );
+                      },
+                      icon: const Icon(Icons.receipt),
+                      label: const Text('View Receipt'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
   }

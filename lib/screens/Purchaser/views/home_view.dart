@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:ration_aid/models/procurement_model.dart';
 import 'package:ration_aid/services/procurement_service.dart';
-import 'package:ration_aid/screens/Admin/widgets/stat_card.dart';
-import 'package:ration_aid/screens/Purchaser/models/purchaser_enums.dart'; // Ensure correct import if needed
+import 'package:ration_aid/services/notification_service.dart';
+import 'package:ration_aid/theme/app_colors.dart';
+import 'package:ration_aid/widgets/frosted_panel.dart';
+import 'package:ration_aid/screens/Purchaser/models/purchaser_enums.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 
 class PurchaserHomeView extends StatelessWidget {
   final ValueChanged<PurchaserSection> onSectionChange;
@@ -11,253 +16,470 @@ class PurchaserHomeView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<ProcurementRequest>>(
-      stream:
-          ProcurementService.getPendingRequestsStream(), // Get all actionable requests
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    final theme = Theme.of(context);
+    final user = FirebaseAuth.instance.currentUser;
 
-        final requests = snapshot.data ?? [];
+    if (user == null) {
+      return const Center(child: Text('Please log in'));
+    }
 
-        // Calculate Stats
-        final pendingCount = requests
-            .where((r) => r.status == ProcurementStatus.pending)
-            .length;
-        final underReviewCount = requests
-            .where((r) => r.status == ProcurementStatus.purchased)
-            .length;
-        final rejectedCount = requests
-            .where((r) => r.status == ProcurementStatus.rejected)
-            .length;
-
-        // Find Urgent Items (Example logic: Pending > 3 days old or marked urgent if field existed)
-        // For now, let's say rejected items are "Urgent" to retry, or oldest pending.
-        final urgentItems = requests
-            .where(
-              (r) =>
-                  r.status == ProcurementStatus.rejected ||
-                  (r.status == ProcurementStatus.pending &&
-                      DateTime.now().difference(r.createdAt).inDays > 3),
-            )
-            .take(3)
-            .toList();
-
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Welcome Header
-              Text(
-                'Dashboard',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Stats Grid
-              GridView.count(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                shrinkWrap: true,
-                childAspectRatio: 1.4,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  StatCard(
-                    title: 'Pending',
-                    value: pendingCount.toString(),
-                    subtitle: 'To Purchase',
-                    icon: Icons.shopping_cart_outlined,
-                    color: Colors.orange,
-                  ),
-                  StatCard(
-                    title: 'Under Review',
-                    value: underReviewCount.toString(),
-                    subtitle: 'Awaiting Approval',
-                    icon: Icons.hourglass_top_outlined,
-                    color: Colors.blue,
-                  ),
-                  StatCard(
-                    title: 'Action Needed',
-                    value: rejectedCount.toString(),
-                    subtitle: 'Rejected / Retry',
-                    icon: Icons.report_problem_outlined,
-                    color: Colors.red,
-                  ),
-                  StatCard(
-                    title: 'Budget Limit',
-                    value: 'View', // Placeholder as budget is per request
-                    subtitle: 'See details in tasks',
-                    icon: Icons.attach_money,
-                    color: Colors.green,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 24),
-
-              // High Priority / Action Needed
-              if (urgentItems.isNotEmpty) ...[
-                Row(
+    return RefreshIndicator(
+      onRefresh: () async {
+        await Future.delayed(const Duration(seconds: 1));
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.stars_rounded, color: Colors.orange),
-                    const SizedBox(width: 8),
                     Text(
-                      'Action Required',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+                      'Welcome back,',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                    ),
+                    Text(
+                      user.displayName?.split(' ').first ?? 'Purchaser',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: theme.colorScheme.onSurface,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: urgentItems.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final item = urgentItems[index];
-                    return _buildUrgentItemCard(context, item);
-                  },
-                ),
-                const SizedBox(height: 24),
-              ],
-
-              // Quick Actions
-              Text(
-                'Quick Actions',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildQuickActionButton(
-                      context,
-                      'View Pending Requests',
-                      Icons.list_alt,
-                      Colors.blue,
-                      () => onSectionChange(PurchaserSection.procurement),
-                    ),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.purchaserOrange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildQuickActionButton(
-                      context,
-                      'Check Inventory',
-                      Icons.inventory_2_outlined,
-                      Colors.green,
-                      () => onSectionChange(PurchaserSection.inventory),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildUrgentItemCard(
-    BuildContext context,
-    ProcurementRequest request,
-  ) {
-    final theme = Theme.of(context);
-    final isRejected = request.status == ProcurementStatus.rejected;
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isRejected
-              ? Colors.red.withOpacity(0.3)
-              : Colors.orange.withOpacity(0.3),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isRejected
-                  ? Colors.red.withOpacity(0.1)
-                  : Colors.orange.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              isRejected ? Icons.report_problem : Icons.access_time_filled,
-              color: isRejected ? Colors.red : Colors.orange,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  request.packName,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  isRejected ? 'Declined by Admin' : 'Overdue Pending',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isRejected ? Colors.red : Colors.orange[800],
+                  child: const Icon(
+                    Icons.dashboard_rounded,
+                    color: AppColors.purchaserOrange,
                   ),
                 ),
               ],
             ),
-          ),
-          Icon(Icons.chevron_right, color: theme.dividerColor),
-        ],
-      ),
-    );
-  }
+            const SizedBox(height: 24),
 
-  Widget _buildQuickActionButton(
-    BuildContext context,
-    String label,
-    IconData icon,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.2)),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(height: 8),
+            // 1. Main Stats & Financial Overview
+            StreamBuilder<List<ProcurementRequest>>(
+              stream: ProcurementService.getAllRequestsStream(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: LinearProgressIndicator());
+                }
+                final requests = snapshot.data!;
+                return _buildStatsandFinance(context, requests, theme);
+              },
+            ),
+
+            const SizedBox(height: 24),
+
+            // 2. Recent Activity Feed
             Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: color,
-                fontSize: 13,
+              'Recent Activity',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
               ),
+            ),
+            const SizedBox(height: 12),
+            StreamBuilder<QuerySnapshot>(
+              stream: NotificationService.streamPurchaserNotifications(
+                user.uid,
+              ),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return FrostedPanel(
+                    padding: const EdgeInsets.all(24),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.notifications_none,
+                            size: 40,
+                            color: theme.disabledColor,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'No recent activity',
+                            style: TextStyle(color: theme.disabledColor),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                final docs = snapshot.data!.docs.take(5).toList();
+
+                return Column(
+                  children: docs.map((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    return _buildActivityItem(context, data, theme);
+                  }).toList(),
+                );
+              },
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildStatsandFinance(
+    BuildContext context,
+    List<ProcurementRequest> requests,
+    ThemeData theme,
+  ) {
+    // Stats Logic
+    final pendingCount = requests
+        .where((r) => r.status == ProcurementStatus.pending)
+        .length;
+    final inReviewCount = requests
+        .where((r) => r.status == ProcurementStatus.purchased)
+        .length;
+    final rejectedCount = requests
+        .where((r) => r.status == ProcurementStatus.rejected)
+        .length;
+
+    // Urgent Logic
+    final urgentItems = requests.where((r) {
+      final isPendingOld =
+          r.status == ProcurementStatus.pending &&
+          DateTime.now().difference(r.createdAt).inDays > 3;
+      return r.status == ProcurementStatus.rejected || isPendingOld;
+    }).toList();
+
+    // Financial Logic (Monthly)
+    final now = DateTime.now();
+    final verifiedRequests = requests.where(
+      (r) =>
+          r.status == ProcurementStatus.verified ||
+          r.status == ProcurementStatus.purchased,
+    ); // Purchased also counts as committed
+    final monthlySpent = verifiedRequests
+        .where(
+          (r) =>
+              r.purchasedAt != null &&
+              r.purchasedAt!.month == now.month &&
+              r.purchasedAt!.year == now.year,
+        )
+        .fold<double>(0, (sum, r) => sum + r.totalSpent);
+
+    return Column(
+      children: [
+        // Stats Row
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [theme.cardColor, theme.cardColor.withOpacity(0.95)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStatItem(
+                context,
+                'To Buy',
+                '$pendingCount',
+                AppColors.purchaserOrange,
+              ),
+              _buildStatItem(
+                context,
+                'In Review',
+                '$inReviewCount',
+                Colors.blue,
+              ),
+              _buildStatItem(context, 'Rejected', '$rejectedCount', Colors.red),
+            ],
+          ),
+        ),
+
+        // Urgent Tasks Section (If any)
+        if (urgentItems.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.redAccent,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Urgent Attention',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          FrostedPanel(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              children: urgentItems
+                  .take(3)
+                  .map((item) => _buildUrgentItemRow(context, item, theme))
+                  .toList(),
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 24),
+
+        // Financial Overview Card
+        FrostedPanel(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Monthly Spending',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    DateFormat('MMMM yyyy').format(now),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.disabledColor,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'Rs. ${(monthlySpent / 1000).toStringAsFixed(1)}K',
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: Colors.green,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      'spent this month',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value:
+                      0.7, // Functionally placeholder/aesthetic for now as no hard limit
+                  backgroundColor: theme.dividerColor.withOpacity(0.2),
+                  color: Colors.green,
+                  minHeight: 8,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Includes pending approvals + verified purchases.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.disabledColor,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatItem(
+    BuildContext context,
+    String label,
+    String value,
+    Color color,
+  ) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUrgentItemRow(
+    BuildContext context,
+    ProcurementRequest request,
+    ThemeData theme,
+  ) {
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.1),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.priority_high, size: 16, color: Colors.red),
+      ),
+      title: Text(
+        request.packName,
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+      ),
+      subtitle: Text(
+        request.status == ProcurementStatus.rejected
+            ? 'Rejected: ${request.adminRemarks ?? "Check details"}'
+            : 'Pending > 3 Days',
+      ),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+      onTap: () => onSectionChange(PurchaserSection.procurement),
+    );
+  }
+
+  Widget _buildActivityItem(
+    BuildContext context,
+    Map<String, dynamic> data,
+    ThemeData theme,
+  ) {
+    final title = data['title'] ?? 'Notification';
+    final message = data['message'] ?? '';
+    final timestamp =
+        (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+    final isNew = !(data['isRead'] ?? false);
+
+    IconData icon;
+    Color color;
+
+    if (title.contains('Verified') || title.contains('Approved')) {
+      icon = Icons.check_circle_outline;
+      color = Colors.green;
+    } else if (title.contains('Rejected') || title.contains('Declined')) {
+      icon = Icons.highlight_off;
+      color = Colors.red;
+    } else if (title.contains('New Request')) {
+      icon = Icons.add_shopping_cart;
+      color = AppColors.purchaserOrange;
+    } else {
+      icon = Icons.notifications_outlined;
+      color = Colors.blue;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: theme.cardColor.withOpacity(isNew ? 1.0 : 0.6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isNew ? color.withOpacity(0.3) : Colors.transparent,
+          width: 1,
+        ),
+        boxShadow: isNew
+            ? [
+                BoxShadow(
+                  color: color.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : [],
+      ),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: isNew ? FontWeight.bold : FontWeight.w500,
+            fontSize: 14,
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (message.isNotEmpty)
+              Text(
+                message,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                ),
+              ),
+            const SizedBox(height: 4),
+            Text(
+              _getTimeAgo(timestamp),
+              style: TextStyle(fontSize: 10, color: theme.disabledColor),
+            ),
+          ],
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      ),
+    );
+  }
+
+  String _getTimeAgo(DateTime time) {
+    final diff = DateTime.now().difference(time);
+    if (diff.inDays > 0) return '${diff.inDays}d ago';
+    if (diff.inHours > 0) return '${diff.inHours}h ago';
+    if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
+    return 'Just now';
   }
 }

@@ -7,6 +7,8 @@ import 'package:ration_aid/screens/Purchaser/views/home_view.dart';
 import 'package:ration_aid/screens/Purchaser/views/procurement_view.dart';
 import 'package:ration_aid/screens/Purchaser/views/inventory_view.dart';
 import 'package:ration_aid/screens/Purchaser/views/history_view.dart'; // Ensure this matches filename
+import 'package:ration_aid/screens/Purchaser/views/notifications_view.dart';
+import 'package:ration_aid/screens/Purchaser/views/reports_view.dart';
 
 class PurchaserDashboard extends StatefulWidget {
   const PurchaserDashboard({super.key});
@@ -23,6 +25,8 @@ class _PurchaserDashboardState extends State<PurchaserDashboard> {
     PurchaserSection.procurement: 'Procurement',
     PurchaserSection.inventory: 'Inventory & Stock',
     PurchaserSection.history: 'Purchase History',
+    PurchaserSection.notifications: 'Notifications',
+    PurchaserSection.reports: 'Reports & Analytics',
     PurchaserSection.profile: 'My Profile',
   };
 
@@ -68,6 +72,13 @@ class _PurchaserDashboardState extends State<PurchaserDashboard> {
         return const InventoryView();
       case PurchaserSection.history:
         return const HistoryView();
+      case PurchaserSection.notifications:
+        return PurchaserNotificationsView(
+          onSectionChange: (section) =>
+              setState(() => _currentSection = section),
+        );
+      case PurchaserSection.reports:
+        return const ReportsView();
       case PurchaserSection.profile:
         return const PurchaserProfileSection();
     }
