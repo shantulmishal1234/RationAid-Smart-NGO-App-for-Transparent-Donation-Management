@@ -31,6 +31,7 @@ class _DonationsSectionState extends State<DonationsSection> {
   String _donationSearch = '';
   Timer? _debounce;
   late Future<Map<String, int>> _overviewFuture;
+  DonationTypeFilter _typeFilter = DonationTypeFilter.all;
 
   @override
   void initState() {
@@ -382,6 +383,50 @@ class _DonationsSectionState extends State<DonationsSection> {
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
+
+              // Type Filter Menu (New)
+              Container(
+                height: 48,
+                width: 48,
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.dividerColor.withOpacity(0.6),
+                  ),
+                ),
+                child: PopupMenuButton<DonationTypeFilter>(
+                  icon: Icon(
+                    Icons.category_outlined,
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    size: 22,
+                  ),
+                  tooltip: 'Filter by Type',
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  onSelected: (value) {
+                    setState(() {
+                      _typeFilter = value;
+                    });
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: DonationTypeFilter.all,
+                      child: Text('All Types'),
+                    ),
+                    const PopupMenuItem(
+                      value: DonationTypeFilter.generalFund,
+                      child: Text('General Relief Fund'),
+                    ),
+                    const PopupMenuItem(
+                      value: DonationTypeFilter.family,
+                      child: Text('Family Donations'),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -393,7 +438,10 @@ class _DonationsSectionState extends State<DonationsSection> {
             margin: const EdgeInsets.symmetric(horizontal: 16),
             padding: EdgeInsets.zero,
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: AdminQueries.donationsQuery(widget.donationFilter),
+              stream: AdminQueries.donationsQuery(
+                widget.donationFilter,
+                typeFilter: _typeFilter,
+              ),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -469,6 +517,11 @@ class _DonationsSectionState extends State<DonationsSection> {
                     final data = docs[index].data();
                     final id = docs[index].id;
 
+                    final donationType = data['donationType'] ?? 'cash';
+                    final method = donationType == 'inKind'
+                        ? 'In-Kind'
+                        : 'Cash';
+
                     return DonationCard(
                       id: id,
                       serialNumber: index + 1,
@@ -476,7 +529,7 @@ class _DonationsSectionState extends State<DonationsSection> {
                       donorEmail: data['donorEmail'] ?? '',
                       amount: (data['amount'] ?? 0).toDouble(),
                       currency: data['currency'] ?? 'PKR',
-                      method: data['method'] ?? 'cash',
+                      method: method,
                       status: data['status'] ?? 'pending',
                       onTap: () {
                         Navigator.push(

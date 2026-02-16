@@ -61,6 +61,14 @@ class ProcurementCard extends StatelessWidget {
         statusColor = Colors.purple;
         statusLabel = 'Delivered';
         break;
+      case ProcurementStatus.issue_reported:
+        statusColor = Colors.orange;
+        statusLabel = 'Issue Reported';
+        break;
+      case ProcurementStatus.written_off:
+        statusColor = Colors.grey;
+        statusLabel = 'Written Off';
+        break;
     }
 
     return Container(

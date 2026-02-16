@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import 'package:ration_aid/services/notification_service.dart';
 import 'package:ration_aid/screens/Admin/Notifications/admin_send_notification_screen.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
-import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 
 class NotificationsCenterScreen extends StatefulWidget {
   const NotificationsCenterScreen({super.key});
@@ -21,102 +20,142 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     if (currentUser == null) {
-      return const AdminScaffold(
-        title: 'Notifications',
-        body: Center(child: Text('Please login to view notifications')),
-      );
+      return Center(child: Text('Please login to view notifications'));
     }
 
-    return AdminScaffold(
-      title: 'Notifications',
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.send),
-          tooltip: 'Send Notification',
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const AdminSendNotificationScreen(),
-              ),
-            );
-          },
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        iconTheme: IconThemeData(color: theme.colorScheme.onSurface),
+        title: Text(
+          'Notifications',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: theme.colorScheme.onSurface,
+            letterSpacing: 0.5,
+          ),
         ),
-      ],
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('admin_notifications')
-            .orderBy('createdAt', descending: true)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-
-          final docs = snapshot.data?.docs ?? [];
-
-          if (docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.notifications_none,
-                    size: 64,
-                    color: theme.disabledColor,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No notifications yet',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: theme.disabledColor,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: docs.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final doc = docs[index];
-              final data = doc.data() as Map<String, dynamic>;
-              final isRead =
-                  (data['readBy'] as List<dynamic>?)?.contains(
-                    currentUser?.uid,
-                  ) ??
-                  false;
-              final createdAt = data['createdAt'] as Timestamp?;
-
-              return _NotificationTile(
-                title: data['title'] ?? 'No Title',
-                body: data['message'] ?? data['body'] ?? 'No Body',
-                createdAt: createdAt?.toDate(),
-                isRead: isRead,
-                onTap: () {
-                  if (!isRead) {
-                    NotificationService.markAsRead(doc.id);
-                  }
-                  _showNotificationDetails(
-                    context,
-                    data['title'] ?? 'No Title',
-                    data['message'] ?? data['body'] ?? 'No Body',
-                    createdAt?.toDate(),
-                  );
-                },
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.send),
+            tooltip: 'Send Notification',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AdminSendNotificationScreen(),
+                ),
               );
             },
-          );
-        },
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [const Color(0xFF121212), const Color(0xFF1E1E1E)]
+                : [const Color(0xFFE1F5FE), const Color(0xFFE0F7FA)],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: FrostedPanel(
+                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                  padding: EdgeInsets.zero,
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('admin_notifications')
+                        .orderBy('createdAt', descending: true)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      if (snapshot.hasError) {
+                        return Center(child: Text('Error: ${snapshot.error}'));
+                      }
+
+                      final docs = snapshot.data?.docs ?? [];
+
+                      if (docs.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.notifications_none,
+                                size: 64,
+                                color: theme.disabledColor,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No notifications yet',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  color: theme.disabledColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      return ListView.separated(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: docs.length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final doc = docs[index];
+                          final data = doc.data() as Map<String, dynamic>;
+                          final isRead =
+                              (data['readBy'] as List<dynamic>?)?.contains(
+                                currentUser?.uid,
+                              ) ??
+                              false;
+                          final createdAt = data['createdAt'] as Timestamp?;
+
+                          return _NotificationTile(
+                            title: data['title'] ?? 'No Title',
+                            body: data['message'] ?? data['body'] ?? 'No Body',
+                            createdAt: createdAt?.toDate(),
+                            isRead: isRead,
+                            onTap: () {
+                              if (!isRead) {
+                                NotificationService.markAsRead(doc.id);
+                              }
+                              _showNotificationDetails(
+                                context,
+                                data['title'] ?? 'No Title',
+                                data['message'] ?? data['body'] ?? 'No Body',
+                                createdAt?.toDate(),
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -178,8 +217,13 @@ class _NotificationTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
-      child: FrostedPanel(
+      child: Container(
         padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: theme.dividerColor.withValues(alpha: 0.6)),
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -187,8 +231,8 @@ class _NotificationTile extends StatelessWidget {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: isRead
-                    ? theme.disabledColor.withOpacity(0.1)
-                    : theme.primaryColor.withOpacity(0.1),
+                    ? theme.disabledColor.withValues(alpha: 0.1)
+                    : theme.primaryColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -214,8 +258,9 @@ class _NotificationTile extends StatelessWidget {
                                 ? FontWeight.normal
                                 : FontWeight.bold,
                             color: isRead
-                                ? theme.textTheme.bodyMedium?.color
-                                      ?.withOpacity(0.7)
+                                ? theme.textTheme.bodyMedium?.color?.withValues(
+                                    alpha: 0.7,
+                                  )
                                 : theme.textTheme.bodyMedium?.color,
                           ),
                         ),
@@ -236,7 +281,9 @@ class _NotificationTile extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.textTheme.bodySmall?.color?.withOpacity(0.8),
+                      color: theme.textTheme.bodySmall?.color?.withValues(
+                        alpha: 0.8,
+                      ),
                     ),
                   ),
                 ],

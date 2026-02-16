@@ -16,26 +16,30 @@ class DonorDashboardSection extends StatefulWidget {
 
 class _DonorDashboardSectionState extends State<DonorDashboardSection> {
   final DonationService _donationService = DonationService();
-  late Future<Map<String, int>> _statsFuture;
+  late Stream<Donation?> _activeDonationStream;
+  late Stream<Map<String, int>> _statsStream;
 
   @override
   void initState() {
     super.initState();
-    _loadStats();
+    _setupStreams();
   }
 
-  void _loadStats() {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId != null) {
-      _statsFuture = _donationService.getDonorStats(userId);
+  void _setupStreams() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      _activeDonationStream = _donationService.streamActiveDonation(user.uid);
+      _statsStream = _donationService.streamDonorStats(user.uid);
+    } else {
+      _activeDonationStream = Stream.value(null);
+      _statsStream = Stream.value({});
     }
   }
 
   Future<void> _onRefresh() async {
     setState(() {
-      _loadStats();
+      _setupStreams();
     });
-    await _statsFuture;
   }
 
   @override
@@ -112,9 +116,24 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
                 ],
               ),
               const SizedBox(height: 18),
+
+              // Active Donation Card (Live Tracking)
+              StreamBuilder<Donation?>(
+                stream: _activeDonationStream,
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData || snapshot.data == null) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: _ActiveDonationCard(donation: snapshot.data!),
+                  );
+                },
+              ),
+
               _FrostedPanel(
-                child: FutureBuilder<Map<String, int>>(
-                  future: _statsFuture,
+                child: StreamBuilder<Map<String, int>>(
+                  stream: _statsStream,
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Row(
@@ -450,8 +469,8 @@ class _RecentDonationTile extends StatelessWidget {
                 children: [
                   Text(
                     donation.donationType == DonationType.cash
-                        ? 'Cash Donation'
-                        : 'In-Kind Donation',
+                        ? 'Cash • ${donation.familyId == 'general_relief_fund' ? 'General Relief' : 'Family Support'}'
+                        : 'In-Kind • ${donation.familyId == 'general_relief_fund' ? 'General Relief' : 'Family Support'}',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                       color: theme.colorScheme.onSurface,
@@ -515,5 +534,174 @@ class _RecentDonationTile extends StatelessWidget {
       case DonationStatus.rejected:
         return Colors.red;
     }
+  }
+}
+
+class _ActiveDonationCard extends StatelessWidget {
+  final Donation donation;
+
+  const _ActiveDonationCard({required this.donation});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Determine gradient based on status
+    List<Color> gradientColors;
+    IconData icon;
+    String title;
+    String subtitle;
+
+    switch (donation.status) {
+      case DonationStatus.outForDelivery:
+        gradientColors = [const Color(0xFF00BCD4), const Color(0xFF0097A7)];
+        icon = Icons.local_shipping;
+        title = 'Out for Delivery';
+        subtitle = 'Your donation is on its way!';
+        break;
+      case DonationStatus.inProcess:
+        gradientColors = [Colors.blue, Colors.blue.shade700];
+        icon = Icons.inventory;
+        title = 'Processing';
+        subtitle = 'Being prepared for delivery';
+        break;
+      case DonationStatus.verified:
+        gradientColors = [Colors.green, Colors.green.shade700];
+        icon = Icons.verified;
+        title = 'Verified';
+        subtitle = 'Approved for donation';
+        break;
+      case DonationStatus.pending:
+      case DonationStatus.underVerification:
+        gradientColors = [Colors.orange, Colors.orange.shade800];
+        icon = Icons.access_time;
+        title = 'Under Review';
+        subtitle = 'Pending verification';
+        break;
+      default:
+        gradientColors = [Colors.grey, Colors.grey.shade700];
+        icon = Icons.info;
+        title = 'Status Update';
+        subtitle = donation.status.displayName;
+    }
+
+    return InkWell(
+      onTap: () {
+        Navigator.pushNamed(context, '/donation-tracking', arguments: donation);
+      },
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: gradientColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+              color: gradientColors.first.withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            // Background pattern opacity
+            Positioned(
+              right: -20,
+              top: -20,
+              child: Icon(
+                icon,
+                size: 100,
+                color: Colors.white.withOpacity(0.1),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.circle, size: 8, color: Colors.white),
+                            SizedBox(width: 6),
+                            Text(
+                              'LIVE UPDATE',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Just now indicator if needed
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Icon(icon, color: Colors.white, size: 28),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              subtitle,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white.withOpacity(0.9),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.arrow_forward,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -24,6 +24,9 @@ enum HouseholdViewMode { cards, table }
 /// Enum for donation status filters
 enum DonationStatusFilter { all, pending, underReview, verified, rejected }
 
+/// Enum for donation type filters
+enum DonationTypeFilter { all, generalFund, family }
+
 /// Color constants used throughout the Admin Dashboard
 class AdminColors {
   static const Color primaryBlue = Color(0xFF5CB9DD);

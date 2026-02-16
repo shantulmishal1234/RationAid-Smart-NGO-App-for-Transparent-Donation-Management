@@ -7,22 +7,40 @@ class FundingService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   /// Recalculate funding for a specific family based on verified donations
+  /// Recalculate funding for a specific family based on verified donations
   static Future<void> recalculateFamilyFunding(String familyId) async {
-    if (familyId == 'general_relief_fund') return; // Skip for General Relief
+    // Note: We now process 'general_relief_fund' too!
+
     try {
       // 1. Get the family document
-      final familyDoc = await _firestore
+      DocumentSnapshot familyDoc = await _firestore
           .collection('families')
           .doc(familyId)
           .get();
-      if (!familyDoc.exists) return;
 
-      final familyData = familyDoc.data()!;
+      // Special handling for General Relief Fund if it doesn't exist yet
+      if (!familyDoc.exists && familyId == 'general_relief_fund') {
+        await _firestore.collection('families').doc(familyId).set({
+          'area': 'General Relief Fund',
+          'city': 'All',
+          'targetAmount': 10000000.0, // Arbitrary high target for visuals
+          'raisedAmount': 0.0,
+          'status': 'accepted',
+          'familySize': 0,
+          'numberOfAdults': 0,
+          'numberOfChildren': 0,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        familyDoc = await _firestore.collection('families').doc(familyId).get();
+      } else if (!familyDoc.exists) {
+        return; // Normal family not found
+      }
+
+      final familyData = familyDoc.data() as Map<String, dynamic>;
       final double targetAmount =
           (familyData['assignedPackBudget'] ?? familyData['targetAmount'] ?? 0)
               .toDouble();
 
-      // 2. Get all VERIFIED donations for this family
       // 2. Get all VERIFIED and PENDING donations for this family
       final donationsSnapshot = await _firestore
           .collection('donations')
@@ -54,7 +72,7 @@ class FundingService {
           }
         }
         // In-Kind donations (only pending/under_verification count towards pendingNeeds)
-        // Verified in-kind donations are already removed from family.needs by _processInKindDonation
+        // For General Relief, we typically don't track specific "needs" decrement, but we track pending items
         else if (type == 'inKind' && items != null) {
           if (status == 'under_verification' || status == 'pending') {
             items.forEach((item, quantity) {
@@ -69,30 +87,41 @@ class FundingService {
       String fundingStatus = 'pending';
       final totalFunded = raisedAmount + pendingAmount;
 
-      if (totalFunded >= targetAmount && targetAmount > 0) {
+      if (targetAmount > 0 && totalFunded >= targetAmount) {
         fundingStatus = 'fully_funded';
       } else if (totalFunded > 0) {
         fundingStatus = 'partially_funded';
       }
 
+      // For General Relief, status is always just 'collecting' or 'active', but let's keep standard fields
+      if (familyId == 'general_relief_fund') {
+        fundingStatus = 'active_pool';
+      }
+
       // 5. Update family document first with all new stats
       await _firestore.collection('families').doc(familyId).update({
-        'targetAmount': targetAmount,
         'raisedAmount': raisedAmount,
         'pendingAmount': pendingAmount,
         'remainingAmount': (targetAmount - raisedAmount).clamp(0, targetAmount),
         'pendingNeeds': pendingNeeds,
         'fundingStatus': fundingStatus,
         'updatedAt': FieldValue.serverTimestamp(),
+        // Ensure standard fields exist for General Relief if missing
+        if (familyId == 'general_relief_fund') ...{
+          'targetAmount': targetAmount, // Persist the target
+        },
       });
 
-      // 6. Trigger Procurement if needed (After DB update so service reads correct data)
-      final currentFulfillment = familyData['fulfillmentStatus'] ?? 'pending';
+      // 6. Trigger Procurement if needed
+      // Skip procurement for General Relief Fund as it's a pool, not a specific family pack
+      if (familyId != 'general_relief_fund') {
+        final currentFulfillment = familyData['fulfillmentStatus'] ?? 'pending';
 
-      if (fundingStatus == 'fully_funded' && currentFulfillment == 'pending') {
-        // The family is newly fully funded.
-        // Calling checkAndGenerateRequest will now read the updated values we just wrote.
-        await ProcurementService.checkAndGenerateRequest(familyId);
+        if (fundingStatus == 'fully_funded' &&
+            currentFulfillment == 'pending') {
+          // The family is newly fully funded.
+          await ProcurementService.checkAndGenerateRequest(familyId);
+        }
       }
     } catch (e) {
       print('Error recalculating funding for family $familyId: $e');

@@ -4,6 +4,8 @@ import 'package:ration_aid/models/procurement_model.dart';
 import 'package:ration_aid/services/procurement_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/widgets/frosted_panel.dart';
+// ignore: unused_import
+import 'package:firebase_auth/firebase_auth.dart' as import_firebase_auth;
 
 enum InventoryFilter { all, lowStock, highValue }
 
@@ -783,13 +785,56 @@ class _InventoryViewState extends State<InventoryView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Pack Details',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface.withOpacity(0.8),
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Pack Details',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.8,
+                              ),
+                            ),
+                          ),
+                          // Compact Report Button
+                          SizedBox(
+                            height: 32,
+                            child: OutlinedButton.icon(
+                              onPressed: () => _showReportIssueDialog(
+                                context,
+                                packName,
+                                requests,
+                              ),
+                              icon: Icon(
+                                Icons.report_problem_outlined,
+                                size: 14,
+                                color: theme.colorScheme.error,
+                              ),
+                              label: Text(
+                                'Report Issue',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.error,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                side: BorderSide(
+                                  color: theme.colorScheme.error.withOpacity(
+                                    0.5,
+                                  ),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
 
@@ -874,6 +919,7 @@ class _InventoryViewState extends State<InventoryView> {
                             )
                             .toList(),
                       ),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
@@ -922,6 +968,159 @@ class _InventoryViewState extends State<InventoryView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showReportIssueDialog(
+    BuildContext context,
+    String packName,
+    List<ProcurementRequest> requests,
+  ) {
+    if (requests.isEmpty) return;
+
+    // Filter only eligible requests (verified/stocked/issue_reported)
+    final eligibleRequests = requests
+        .where(
+          (r) =>
+              r.status == ProcurementStatus.verified ||
+              r.status == ProcurementStatus.issue_reported,
+        )
+        .toList();
+
+    if (eligibleRequests.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No verified stock available to report issues on.'),
+        ),
+      );
+      return;
+    }
+
+    // Sort by date (newest first)
+    eligibleRequests.sort(
+      (a, b) => (b.verifiedAt ?? DateTime.now()).compareTo(
+        a.verifiedAt ?? DateTime.now(),
+      ),
+    );
+
+    // Use the first eligible request for now
+    final targetRequest = eligibleRequests.first;
+
+    final reasonController = TextEditingController();
+    String issueType = 'Damaged'; // Default
+    final issueTypes = [
+      'Damaged',
+      'Expired',
+      'Missing Items',
+      'Quality Issue',
+      'Other',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.report_problem, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Report Issue'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Reporting issue for: $packName',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text(
+                'Batch Date: ${targetRequest.verifiedAt != null ? targetRequest.verifiedAt.toString().split(' ')[0] : 'N/A'}',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: issueType,
+                decoration: InputDecoration(
+                  labelText: 'Issue Type',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+                items: issueTypes
+                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                    .toList(),
+                onChanged: (val) => setState(() => issueType = val!),
+              ),
+              SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                decoration: InputDecoration(
+                  labelText: 'Description / Reason',
+                  hintText: 'Describe the issue...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                if (reasonController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Please provide a reason')),
+                  );
+                  return;
+                }
+
+                try {
+                  Navigator.pop(context); // Close dialog
+                  // Show loading
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Reporting issue...')));
+
+                  final user =
+                      import_firebase_auth.FirebaseAuth.instance.currentUser;
+
+                  await ProcurementService.reportIssue(
+                    requestId: targetRequest.id,
+                    issueType: issueType,
+                    reason: reasonController.text.trim(),
+                    reportedBy: user?.displayName ?? 'Purchaser',
+                    packName: packName,
+                  );
+
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Issue reported successfully')),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  }
+                }
+              },
+              child: Text('Submit Report'),
+            ),
+          ],
+        ),
       ),
     );
   }

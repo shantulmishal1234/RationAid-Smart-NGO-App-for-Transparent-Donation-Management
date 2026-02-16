@@ -370,4 +370,97 @@ class DonationService {
       throw Exception('Failed to submit for verification: $e');
     }
   }
+
+  /// Stream donation statistics for a donor
+  Stream<Map<String, int>> streamDonorStats(String donorId) {
+    return _firestore
+        .collection('donations')
+        .where('donorId', isEqualTo: donorId)
+        .snapshots()
+        .map((snapshot) {
+          final donations = snapshot.docs
+              .map((doc) => Donation.fromFirestore(doc))
+              .toList();
+
+          final familiesSupported = donations
+              .map((d) => d.familyId)
+              .toSet()
+              .length;
+
+          final activeDonations = donations
+              .where(
+                (d) =>
+                    d.status == DonationStatus.verified ||
+                    d.status == DonationStatus.inProcess ||
+                    d.status == DonationStatus.outForDelivery,
+              )
+              .length;
+
+          final completedDeliveries = donations
+              .where(
+                (d) =>
+                    d.status == DonationStatus.delivered ||
+                    d.status == DonationStatus.closed,
+              )
+              .length;
+
+          return {
+            'total': donations.length,
+            'families': familiesSupported,
+            'active': activeDonations,
+            'completed': completedDeliveries,
+          };
+        });
+  }
+
+  /// Stream a single donation by ID
+  Stream<Donation?> streamDonation(String donationId) {
+    return _firestore.collection('donations').doc(donationId).snapshots().map((
+      doc,
+    ) {
+      if (!doc.exists) return null;
+      return Donation.fromFirestore(doc);
+    });
+  }
+
+  /// Stream the latest active donation for a donor
+  /// Active means pending, under verification, verified, in process, or out for delivery
+  Stream<Donation?> streamActiveDonation(String donorId) {
+    return _firestore
+        .collection('donations')
+        .where('donorId', isEqualTo: donorId)
+        .snapshots()
+        .map((snapshot) {
+          if (snapshot.docs.isEmpty) return null;
+
+          final activeStatuses = const [
+            'pending',
+            'under_verification',
+            'verified',
+            'in_process',
+            'out_for_delivery',
+          ];
+
+          // Filter for active donations client-side
+          final activeDocs = snapshot.docs.where((doc) {
+            final data = doc.data();
+            final status = data['status'] as String?;
+            return status != null && activeStatuses.contains(status);
+          }).toList();
+
+          if (activeDocs.isEmpty) return null;
+
+          // client-side sort
+          activeDocs.sort((a, b) {
+            final t1 = a.data()['updatedAt'] as Timestamp?;
+            final t2 = b.data()['updatedAt'] as Timestamp?;
+            if (t1 == null && t2 == null) return 0;
+            if (t1 == null) return 1;
+            if (t2 == null) return -1;
+            return t2.compareTo(t1); // Descending
+          });
+
+          return Donation.fromFirestore(activeDocs.first);
+        });
+  }
 }

@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ration_aid/models/procurement_model.dart';
 import 'package:ration_aid/services/procurement_service.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
-import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
+// Removed AdminScaffold import
 import 'package:intl/intl.dart';
 
 class PurchaseApprovalScreen extends StatefulWidget {
@@ -198,83 +198,146 @@ class _PurchaseApprovalScreenState extends State<PurchaseApprovalScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AdminScaffold(
-      title: 'Stock Verification', // Updated title
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _firestore
-            .collection('procurement_requests')
-            .where('status', isEqualTo: 'purchased')
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-          final docs = snapshot.data?.docs ?? [];
-
-          if (docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.check_circle_outline,
-                    size: 64,
-                    color: Colors.grey[300],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No pending verifications',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 16),
-                  ),
-                ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Header
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Center(
+            child: Text(
+              'Stock Verification',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: theme.colorScheme.onSurface,
+                letterSpacing: 0.5,
               ),
-            );
-          }
+            ),
+          ),
+        ),
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: docs.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final request = ProcurementRequest.fromFirestore(docs[index]);
-              return FrostedPanel(
-                child: ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
-                      shape: BoxShape.circle,
+        Expanded(
+          child: FrostedPanel(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            padding: EdgeInsets.zero,
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _firestore
+                  .collection('procurement_requests')
+                  .where('status', isEqualTo: 'purchased')
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final docs = snapshot.data?.docs ?? [];
+
+                if (docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.check_circle_outline,
+                          size: 64,
+                          color: theme.disabledColor,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No pending verifications',
+                          style: TextStyle(
+                            color: theme.disabledColor,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
                     ),
-                    child: const Icon(
-                      Icons.assignment_turned_in,
-                      color: Colors.blue,
-                    ),
-                  ),
-                  title: Text(
-                    request.packName,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text(
-                    'Spent: Rs. ${request.totalSpent.toStringAsFixed(0)}',
-                  ),
-                  trailing: ElevatedButton(
-                    onPressed: () => _showVerificationDialog(request),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: docs.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final request = ProcurementRequest.fromFirestore(
+                      docs[index],
+                    );
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: theme.cardColor,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: theme.dividerColor.withValues(alpha: 0.6),
+                        ),
                       ),
-                    ),
-                    child: const Text('Verify'),
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        leading: CircleAvatar(
+                          backgroundColor: isDark
+                              ? Colors.blue.withValues(alpha: 0.2)
+                              : Colors.blue.withValues(alpha: 0.1),
+                          child: const Icon(
+                            Icons.assignment_turned_in,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        title: Text(
+                          request.packName,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 4),
+                            Text(
+                              'Spent: Rs. ${request.totalSpent.toStringAsFixed(0)}',
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.8,
+                                ),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Text(
+                              'By: ${request.purchaserName}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        trailing: ElevatedButton(
+                          onPressed: () => _showVerificationDialog(request),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                          ),
+                          child: const Text('Verify'),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

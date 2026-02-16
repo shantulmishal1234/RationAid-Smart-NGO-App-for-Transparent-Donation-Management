@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -12,6 +14,7 @@ import 'package:ration_aid/services/donation_service.dart';
 
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/screens/Donor/widgets/donor_scaffold.dart';
+import 'package:ration_aid/screens/Donor/Donation/donation_success_screen.dart';
 
 /// Create Donation Screen - Complete donation creation flow
 /// Supports both Cash and In-Kind donations
@@ -48,6 +51,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
   bool _isUploading = false;
   final Map<String, int> _selectedItems = {}; // For in-kind donations
   bool _isSaving = false;
+  StreamSubscription<DocumentSnapshot>? _familySubscription;
 
   @override
   void initState() {
@@ -58,6 +62,10 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
         _donationType = _tabController.index == 0
             ? DonationType.cash
             : DonationType.inKind;
+
+        if (_donationType == DonationType.inKind && _selectedFamily != null) {
+          _adjustSelectedItems(_selectedFamily!);
+        }
       });
     });
 
@@ -70,6 +78,85 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
       if (_selectedFamily != null && _selectedFamily!.remainingAmount > 0) {
         _amountController.text = _selectedFamily!.remainingAmount
             .toStringAsFixed(0);
+      }
+    }
+    _setupFamilyStream();
+  }
+
+  void _setupFamilyStream() {
+    _familySubscription?.cancel();
+
+    if (_selectedFamily == null ||
+        _selectedFamily!.id == 'general_relief_fund') {
+      return;
+    }
+
+    _familySubscription = FirebaseFirestore.instance
+        .collection('families')
+        .doc(_selectedFamily!.id)
+        .snapshots()
+        .listen((snapshot) {
+          if (snapshot.exists) {
+            final updatedFamily = Family.fromFirestore(snapshot);
+            _adjustSelectedItems(updatedFamily);
+            if (mounted) {
+              setState(() {
+                _selectedFamily = updatedFamily;
+              });
+            }
+          }
+        });
+  }
+
+  void _adjustSelectedItems(Family updatedFamily) {
+    if (_donationType != DonationType.inKind) return;
+
+    final List<String> adjustedItems = [];
+    bool needsUpdate = false;
+
+    _selectedItems.forEach((item, qty) {
+      final needed = updatedFamily.needs[item] ?? 0;
+      if (qty > needed) {
+        adjustedItems.add('$item ($qty -> $needed)');
+        needsUpdate = true;
+      }
+    });
+
+    if (needsUpdate && mounted) {
+      setState(() {
+        // Create a copy of keys to avoid concurrent modification during iteration if we used forEach
+        final keys = List<String>.from(_selectedItems.keys);
+        for (final item in keys) {
+          final currentQty = _selectedItems[item]!;
+          final needed = updatedFamily.needs[item] ?? 0;
+
+          if (needed == 0) {
+            _selectedItems.remove(item);
+          } else if (currentQty > needed) {
+            _selectedItems[item] = needed;
+          }
+        }
+      });
+
+      if (adjustedItems.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '⚠️ Needs updated by another donor!',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text('Adjusted: ${adjustedItems.join(", ")}'),
+              ],
+            ),
+            backgroundColor: Colors.orange[800],
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }
@@ -101,6 +188,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
 
   @override
   void dispose() {
+    _familySubscription?.cancel();
     _tabController.dispose();
     _amountController.dispose();
     _noteController.dispose();
@@ -237,7 +325,14 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
             ),
           ),
         );
-        Navigator.pop(context);
+
+        // Navigate to success screen instead of just popping
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DonationSuccessScreen(donation: donation),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -266,45 +361,13 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
       ),
       body: Form(
         key: _formKey,
-        child: _selectedFamily == null
-            ? TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildCashDonationForm(null),
-                  _buildInKindDonationForm(null),
-                ],
-              )
-            : (_selectedFamily!.id == 'general_relief_fund')
-            ? TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildCashDonationForm(_selectedFamily),
-                  _buildInKindDonationForm(_selectedFamily),
-                ],
-              )
-            : StreamBuilder<DocumentSnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('families')
-                    .doc(_selectedFamily!.id)
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  // If stream is loading or has error, fall back to initial _selectedFamily
-                  // effectively showing the cached data while loading new data
-                  Family displayFamily = _selectedFamily!;
-
-                  if (snapshot.hasData && snapshot.data!.exists) {
-                    displayFamily = Family.fromFirestore(snapshot.data!);
-                  }
-
-                  return TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildCashDonationForm(displayFamily),
-                      _buildInKindDonationForm(displayFamily),
-                    ],
-                  );
-                },
-              ),
+        child: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildCashDonationForm(_selectedFamily),
+            _buildInKindDonationForm(_selectedFamily),
+          ],
+        ),
       ),
       bottomNavigationBar: _buildBottomActions(),
     );
@@ -323,11 +386,12 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
           _buildFamilySelectionCard(),
           const SizedBox(height: 16),
 
-          // Amount field (optional)
+          // Amount field
           Text(
-            'Donation Amount (Optional)',
+            'Donation Amount',
             style: TextStyle(
               fontWeight: FontWeight.w600,
+              fontSize: 16,
               color: theme.colorScheme.onSurface,
             ),
           ),
@@ -336,26 +400,37 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
             controller: _amountController,
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            style: TextStyle(color: theme.colorScheme.onSurface),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.donorGreen,
+            ),
             decoration: InputDecoration(
-              hintText: 'Enter amount in PKR',
+              hintText: '0',
               prefixText: 'Rs. ',
+              prefixStyle: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
+              ),
               filled: true,
-              fillColor:
-                  theme.inputDecorationTheme.fillColor ??
-                  (isDark ? Colors.grey[800] : Colors.white),
+              fillColor: isDark ? Colors.grey[800] : Colors.grey[50],
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
-                ),
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(
+                  color: AppColors.donorGreen,
+                  width: 2,
                 ),
               ),
+              contentPadding: const EdgeInsets.all(20),
             ),
           ),
           if (family != null && family.targetAmount > 0)
@@ -394,6 +469,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
 
   Widget _buildInKindDonationForm(Family? family) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -425,7 +501,12 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                 margin: const EdgeInsets.only(bottom: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
+                  side: currentQty > 0
+                      ? BorderSide(color: AppColors.donorGreen, width: 2)
+                      : BorderSide.none,
                 ),
+                elevation: currentQty > 0 ? 4 : 1,
+                shadowColor: AppColors.donorGreen.withOpacity(0.3),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Column(
@@ -433,73 +514,98 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                     children: [
                       Row(
                         children: [
-                          Icon(
-                            Icons.inventory_2,
-                            color: AppColors.donorGreen,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              itemName,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15,
-                                color: theme.colorScheme.onSurface,
-                              ),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: currentQty > 0
+                                  ? AppColors.donorGreen.withOpacity(0.1)
+                                  : theme.dividerColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.inventory_2,
+                              color: currentQty > 0
+                                  ? AppColors.donorGreen
+                                  : theme.iconTheme.color?.withOpacity(0.5),
+                              size: 20,
                             ),
                           ),
-                          Text(
-                            'Needed: $neededQty',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: theme.colorScheme.onSurface.withOpacity(
-                                0.6,
-                              ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  itemName,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                    color: theme.colorScheme.onSurface,
+                                  ),
+                                ),
+                                Text(
+                                  'Needed: $neededQty',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.colorScheme.onSurface
+                                        .withOpacity(0.6),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          IconButton(
-                            onPressed: currentQty > 0
-                                ? () {
-                                    setState(() {
-                                      if (currentQty == 1) {
-                                        _selectedItems.remove(itemName);
-                                      } else {
-                                        _selectedItems[itemName] =
-                                            currentQty - 1;
-                                      }
-                                    });
-                                  }
-                                : null,
-                            icon: const Icon(Icons.remove_circle_outline),
-                            color: AppColors.donorGreen,
+                      Container(
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: theme.dividerColor.withOpacity(0.2),
                           ),
-                          Expanded(
-                            child: Text(
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _QuantityButton(
+                              icon: Icons.remove,
+                              onTap: currentQty > 0
+                                  ? () {
+                                      setState(() {
+                                        if (currentQty == 1) {
+                                          _selectedItems.remove(itemName);
+                                        } else {
+                                          _selectedItems[itemName] =
+                                              currentQty - 1;
+                                        }
+                                      });
+                                    }
+                                  : null,
+                              color: AppColors.donorGreen,
+                            ),
+                            Text(
                               currentQty.toString(),
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: theme.colorScheme.onSurface,
+                                fontWeight: FontWeight.bold,
+                                color: currentQty > 0
+                                    ? AppColors.donorGreen
+                                    : theme.colorScheme.onSurface,
                               ),
                             ),
-                          ),
-                          IconButton(
-                            onPressed: () {
-                              setState(() {
-                                _selectedItems[itemName] = currentQty + 1;
-                              });
-                            },
-                            icon: const Icon(Icons.add_circle_outline),
-                            color: AppColors.donorGreen,
-                          ),
-                        ],
+                            _QuantityButton(
+                              icon: Icons.add,
+                              onTap: () {
+                                setState(() {
+                                  _selectedItems[itemName] = currentQty + 1;
+                                });
+                              },
+                              color: AppColors.donorGreen,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -522,14 +628,14 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
 
           // Contact Information
           Text(
-            'Pickup Information *',
+            'Pickup Information',
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 16,
               color: theme.colorScheme.onSurface,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
 
           // Contact Number
           TextFormField(
@@ -539,27 +645,22 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
             decoration: InputDecoration(
               labelText: 'Contact Number',
               hintText: '03XX-XXXXXXX',
-              prefixIcon: Icon(Icons.phone, color: AppColors.donorGreen),
+              prefixIcon: const Icon(Icons.phone, color: AppColors.donorGreen),
               filled: true,
-              fillColor:
-                  theme.inputDecorationTheme.fillColor ??
-                  (Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey[800]
-                      : Colors.white),
+              fillColor: isDark ? Colors.grey[800] : Colors.grey[50],
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey[700]!
-                      : Colors.grey[300]!,
-                ),
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey[700]!
-                      : Colors.grey[300]!,
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(
+                  color: AppColors.donorGreen,
+                  width: 2,
                 ),
               ),
             ),
@@ -570,7 +671,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
               return null;
             },
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
 
           // Pickup Address
           TextFormField(
@@ -580,27 +681,25 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
             decoration: InputDecoration(
               labelText: 'Pickup Address',
               hintText: 'Enter full address for pickup',
-              prefixIcon: Icon(Icons.location_on, color: AppColors.donorGreen),
+              prefixIcon: const Icon(
+                Icons.location_on,
+                color: AppColors.donorGreen,
+              ),
               filled: true,
-              fillColor:
-                  theme.inputDecorationTheme.fillColor ??
-                  (Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey[800]
-                      : Colors.white),
+              fillColor: isDark ? Colors.grey[800] : Colors.grey[50],
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey[700]!
-                      : Colors.grey[300]!,
-                ),
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey[700]!
-                      : Colors.grey[300]!,
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(
+                  color: AppColors.donorGreen,
+                  width: 2,
                 ),
               ),
             ),
@@ -623,67 +722,123 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
   }
 
   Widget _buildFamilySelectionCard() {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        leading: const Icon(Icons.family_restroom, color: AppColors.donorGreen),
-        title: Text(
-          _selectedFamily != null ? _selectedFamily!.area : 'Select Family',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-        ),
-        subtitle: _selectedFamily != null
-            ? (_selectedFamily!.id == 'general_relief_fund')
-                  ? Text(
-                      'Emergency Support Fund',
-                      style: TextStyle(
-                        color: AppColors.donorGreen,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
-                  : Text(
-                      '${_selectedFamily!.numberOfAdults} Adults • ${_selectedFamily!.numberOfChildren} Children',
-                      style: TextStyle(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withOpacity(0.7),
-                      ),
-                    )
-            : Text(
-                'Tap to choose a family',
-                style: TextStyle(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withOpacity(0.6),
-                ),
-              ),
-        trailing: Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-        ),
-        onTap: () async {
-          // Navigate to family selection screen
-          final selected = await Navigator.push<Family>(
-            context,
-            MaterialPageRoute(builder: (_) => const FamilySelectionScreen()),
-          );
+    final isSelected = _selectedFamily != null;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-          // Update selected family if user chose one
-          if (selected != null) {
-            setState(() {
-              _selectedFamily = selected;
-              // Auto-fill amount if empty and family has remaining need
-              if (_amountController.text.isEmpty &&
-                  _selectedFamily!.remainingAmount > 0) {
-                _amountController.text = _selectedFamily!.remainingAmount
-                    .toStringAsFixed(0);
-              }
-            });
-          }
-        },
+    return InkWell(
+      onTap: () async {
+        final selected = await Navigator.push<Family>(
+          context,
+          MaterialPageRoute(builder: (_) => const FamilySelectionScreen()),
+        );
+
+        if (selected != null) {
+          setState(() {
+            _selectedFamily = selected;
+            if (_amountController.text.isEmpty &&
+                _selectedFamily!.remainingAmount > 0) {
+              _amountController.text = _selectedFamily!.remainingAmount
+                  .toStringAsFixed(0);
+            }
+            _setupFamilyStream();
+          });
+        }
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.donorGreen.withOpacity(isDark ? 0.15 : 0.08)
+              : (isDark ? Colors.grey[800] : Colors.white),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.donorGreen
+                : (isDark ? Colors.grey[700]! : Colors.grey[200]!),
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isSelected
+                  ? AppColors.donorGreen.withOpacity(0.1)
+                  : Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppColors.donorGreen
+                    : (isDark ? Colors.grey[700] : Colors.grey[100]),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.family_restroom,
+                color: isSelected
+                    ? Colors.white
+                    : (isDark ? Colors.grey[400] : Colors.grey[500]),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isSelected ? _selectedFamily!.area : 'Select Family',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  if (isSelected)
+                    _selectedFamily!.id == 'general_relief_fund'
+                        ? Text(
+                            'Emergency Support Fund',
+                            style: TextStyle(
+                              color: AppColors.donorGreen,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          )
+                        : Text(
+                            '${_selectedFamily!.numberOfAdults} Adults • ${_selectedFamily!.numberOfChildren} Children',
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.7,
+                              ),
+                              fontSize: 13,
+                            ),
+                          )
+                  else
+                    Text(
+                      'Tap to choose a family to support',
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        fontSize: 13,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: isSelected
+                  ? AppColors.donorGreen
+                  : theme.colorScheme.onSurface.withOpacity(0.3),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -692,49 +847,117 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: _isUploading ? null : _pickAndUploadImage,
-        borderRadius: BorderRadius.circular(12),
+    return InkWell(
+      onTap: _isUploading ? null : _pickAndUploadImage,
+      borderRadius: BorderRadius.circular(16),
+      child: CustomPaint(
+        painter: _DashedBorderPainter(
+          color: _paymentProofUrl != null
+              ? AppColors.donorGreen
+              : (isDark ? Colors.grey[600]! : Colors.grey[400]!),
+          strokeWidth: 2,
+          gap: 6,
+        ),
         child: Container(
-          padding: const EdgeInsets.all(20),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: _paymentProofUrl != null
+                ? AppColors.donorGreen.withOpacity(0.05)
+                : (isDark
+                      ? Colors.grey[800]!.withOpacity(0.5)
+                      : Colors.grey[50]!),
+          ),
           child: Column(
             children: [
               if (_isUploading)
-                const CircularProgressIndicator()
+                const Column(
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Uploading proof...'),
+                  ],
+                )
               else if (_paymentProofUrl != null)
                 Column(
                   children: [
-                    const Icon(
-                      Icons.check_circle,
-                      color: AppColors.donorGreen,
-                      size: 48,
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 8,
+                            offset: Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.check_circle,
+                        color: AppColors.donorGreen,
+                        size: 40,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Payment Proof Uploaded!',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      'Payment proof uploaded',
-                      style: TextStyle(color: theme.colorScheme.onSurface),
-                    ),
-                    TextButton(
+                    TextButton.icon(
                       onPressed: _pickAndUploadImage,
-                      child: const Text('Change Image'),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Replace Image'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.donorGreen,
+                      ),
                     ),
                   ],
                 )
               else
                 Column(
                   children: [
-                    Icon(
-                      Icons.cloud_upload,
-                      size: 48,
-                      color: isDark ? Colors.grey[600] : Colors.grey[400],
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.grey[700] : Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.add_a_photo_outlined,
+                        size: 32,
+                        color: AppColors.donorGreen,
+                      ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 16),
                     Text(
-                      'Tap to upload payment screenshot',
+                      'Tap to Upload Payment Proof',
                       style: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Screenshots or photos accepted',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
                       ),
                     ),
                   ],
@@ -891,4 +1114,86 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
       ),
     );
   }
+}
+
+class _QuantityButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final Color color;
+
+  const _QuantityButton({
+    required this.icon,
+    required this.onTap,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: onTap == null
+          ? Colors.grey.withOpacity(0.1)
+          : color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          child: Icon(
+            icon,
+            color: onTap == null ? Colors.grey : color,
+            size: 20,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  final Color color;
+  final double strokeWidth;
+  final double gap;
+
+  _DashedBorderPainter({
+    required this.color,
+    this.strokeWidth = 2.0,
+    this.gap = 5.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    final Path path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(0, 0, size.width, size.height),
+          const Radius.circular(16),
+        ),
+      );
+
+    final Path dashPath = Path();
+    final double dashWidth = 8.0;
+    final double dashSpace = gap;
+    double distance = 0.0;
+
+    for (final ui.PathMetric metric in path.computeMetrics()) {
+      while (distance < metric.length) {
+        dashPath.addPath(
+          metric.extractPath(distance, distance + dashWidth),
+          Offset.zero,
+        );
+        distance += dashWidth + dashSpace;
+      }
+    }
+
+    canvas.drawPath(dashPath, paint);
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }

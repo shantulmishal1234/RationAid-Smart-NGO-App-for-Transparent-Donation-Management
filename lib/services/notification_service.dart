@@ -103,6 +103,21 @@ class NotificationService {
     );
   }
 
+  /// Send notification when Purchaser submits a purchase
+  static Future<void> notifyPurchaseSubmitted({
+    required String requestId,
+    required String purchaserName,
+    required String packName,
+  }) async {
+    await sendAdminNotification(
+      title: 'Purchase Submitted',
+      message:
+          '$purchaserName submitted a purchase for "$packName". Verify now.',
+      type: 'purchase_verification',
+      relatedId: requestId,
+    );
+  }
+
   /// Mark notification as read for current user
   static Future<void> markAsRead(String notificationId) async {
     final user = FirebaseAuth.instance.currentUser;
@@ -228,6 +243,22 @@ class NotificationService {
     } catch (e) {
       print('Error marking notification as read: $e');
     }
+  }
+
+  /// Send notification when Purchaser reports an issue
+  static Future<void> notifyIssueReported({
+    required String requestId,
+    required String packName,
+    required String issueType,
+    required String reportedBy,
+  }) async {
+    await sendAdminNotification(
+      title: 'Inventory Issue Reported ⚠️',
+      message:
+          '$reportedBy reported "$issueType" issue for $packName. Review required.',
+      type: 'inventory_issue',
+      relatedId: requestId,
+    );
   }
 
   /// Get unread count for Purchaser

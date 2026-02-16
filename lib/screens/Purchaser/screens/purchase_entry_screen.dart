@@ -103,6 +103,7 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
         receiptUrl: receiptUrl,
         totalSpent: _totalSpent,
         updatedItems: _items,
+        packName: widget.request.packName,
       );
 
       if (!mounted) return;

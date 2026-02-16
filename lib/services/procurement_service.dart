@@ -137,6 +137,7 @@ class ProcurementService {
     required String receiptUrl,
     required double totalSpent,
     required List<ProcurementItem> updatedItems,
+    required String packName,
   }) async {
     try {
       await _firestore.collection(_collection).doc(requestId).update({
@@ -148,6 +149,13 @@ class ProcurementService {
         'items': updatedItems.map((e) => e.toMap()).toList(),
         'purchasedAt': FieldValue.serverTimestamp(),
       });
+
+      // Notify Admins
+      await NotificationService.notifyPurchaseSubmitted(
+        requestId: requestId,
+        purchaserName: purchaserName,
+        packName: packName,
+      );
 
       await AuditService.logAction(
         action: 'submit_purchase',
@@ -240,6 +248,43 @@ class ProcurementService {
       );
     } catch (e) {
       print('Error rejecting purchase: $e');
+      rethrow;
+    }
+  }
+
+  /// Report an issue with inventory (Purchaser)
+  static Future<void> reportIssue({
+    required String requestId,
+    required String issueType,
+    required String reason,
+    required String reportedBy,
+    required String packName,
+  }) async {
+    try {
+      await _firestore.collection(_collection).doc(requestId).update({
+        'status': 'issue_reported',
+        'issueType': issueType,
+        'issueReason': reason,
+        'issueReportedAt': FieldValue.serverTimestamp(),
+        'issueReportedBy': reportedBy,
+      });
+
+      // Notify Admins
+      await NotificationService.notifyIssueReported(
+        requestId: requestId,
+        packName: packName,
+        issueType: issueType,
+        reportedBy: reportedBy,
+      );
+
+      await AuditService.logAction(
+        action: 'report_issue',
+        entityType: 'procurement',
+        entityId: requestId,
+        details: 'Issue reported: $issueType - $reason',
+      );
+    } catch (e) {
+      print('Error reporting issue: $e');
       rethrow;
     }
   }

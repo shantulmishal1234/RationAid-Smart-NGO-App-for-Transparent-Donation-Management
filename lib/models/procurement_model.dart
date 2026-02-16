@@ -8,6 +8,8 @@ enum ProcurementStatus {
   rejected, // Admin rejected receipt
   stocked, // Officially in inventory (reserved)
   delivered, // Handed over to family
+  issue_reported, // Purchaser reported an issue
+  written_off, // Admin wrote off stock
 }
 
 /// Item to be purchased (snapshot from PackItem)
@@ -80,6 +82,14 @@ class ProcurementRequest {
   final DateTime? verifiedAt;
   final String? receiptUrl;
   final String? adminRemarks;
+  final String? issueType;
+  final String? issueReason;
+  final DateTime? issueReportedAt;
+  final String? issueReportedBy;
+  final DateTime? resolvedAt;
+  final String? resolutionAction; // 'write_off', 'ignore'
+  final String? resolutionNote;
+  final String? reviewStatus;
 
   ProcurementRequest({
     required this.id,
@@ -98,6 +108,14 @@ class ProcurementRequest {
     this.verifiedAt,
     this.receiptUrl,
     this.adminRemarks,
+    this.issueType,
+    this.issueReason,
+    this.issueReportedAt,
+    this.issueReportedBy,
+    this.resolvedAt,
+    this.resolutionAction,
+    this.resolutionNote,
+    this.reviewStatus,
   });
 
   Map<String, dynamic> toFirestore() {
@@ -149,6 +167,14 @@ class ProcurementRequest {
       verifiedAt: (data['verifiedAt'] as Timestamp?)?.toDate(),
       receiptUrl: data['receiptUrl'],
       adminRemarks: data['adminRemarks'],
+      issueType: data['issueType'],
+      issueReason: data['issueReason'],
+      issueReportedAt: (data['issueReportedAt'] as Timestamp?)?.toDate(),
+      issueReportedBy: data['issueReportedBy'],
+      resolvedAt: (data['resolvedAt'] as Timestamp?)?.toDate(),
+      resolutionAction: data['resolutionAction'],
+      resolutionNote: data['resolutionNote'],
+      reviewStatus: data['reviewStatus'],
     );
   }
 }

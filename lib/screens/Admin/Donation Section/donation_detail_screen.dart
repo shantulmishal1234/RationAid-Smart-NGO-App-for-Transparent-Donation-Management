@@ -165,6 +165,14 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                   FrostedPanel(child: _buildBeneficiaryInfo(d['familyId'])),
                   const SizedBox(height: 32),
 
+                  // In-Kind Items List (New)
+                  if (d['donationType'] == 'inKind' && d['items'] != null) ...[
+                    _buildSectionHeader('Donated Items'),
+                    const SizedBox(height: 12),
+                    FrostedPanel(child: _buildInKindItemsSection(d['items'])),
+                    const SizedBox(height: 32),
+                  ],
+
                   // Timestamps
                   _buildSectionHeader('Timestamps'),
                   const SizedBox(height: 12),
@@ -252,7 +260,8 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     final donorName = d['donorName'] ?? 'Unknown donor';
     final amount = (d['amount'] ?? 0).toDouble();
     final currency = d['currency'] ?? 'PKR';
-    final method = d['method'] ?? 'cash';
+    final donationType = d['donationType'] ?? 'cash';
+    final method = donationType == 'inKind' ? 'In-Kind' : 'Cash';
     final pickupAddress = d['pickupAddress'] as String?;
     final contactNumber = d['contactNumber'] as String?;
 
@@ -799,26 +808,139 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     final color = _statusColor(value);
 
     return FilterChip(
-      label: Text(label),
       selected: isSelected,
-      onSelected: (_) => setState(() => _status = value),
-      selectedColor: color.withOpacity(0.15),
-      checkmarkColor: color,
+      label: Text(label),
       labelStyle: TextStyle(
-        color: isSelected
-            ? color
-            : theme.colorScheme.onSurface.withOpacity(0.7),
-        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+        color: isSelected ? Colors.white : color,
+        fontWeight: FontWeight.w600,
         fontSize: 13,
       ),
+      backgroundColor: color.withOpacity(0.1),
+      selectedColor: color,
+      checkmarkColor: Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(20),
         side: BorderSide(
-          color: isSelected ? color : theme.dividerColor.withOpacity(0.8),
+          color: isSelected ? Colors.transparent : color.withOpacity(0.3),
         ),
       ),
-      backgroundColor: Colors.transparent,
+      onSelected: (bool selected) {
+        if (selected) {
+          setState(() {
+            _status = value;
+          });
+        }
+      },
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+    );
+  }
+
+  Widget _buildInKindItemsSection(Map<String, dynamic> items) {
+    final theme = Theme.of(context);
+    return FrostedPanel(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.inventory_2_outlined,
+                  color: Colors.purple,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Donated Items',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            decoration: BoxDecoration(
+              color: theme.cardColor.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
+            ),
+            child: Column(
+              children: items.entries.map((entry) {
+                final isLast = entry.key == items.keys.last;
+                return Container(
+                  decoration: BoxDecoration(
+                    border: isLast
+                        ? null
+                        : Border(
+                            bottom: BorderSide(
+                              color: theme.dividerColor.withOpacity(0.1),
+                            ),
+                          ),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withOpacity(0.5),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          entry.key,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: theme.dividerColor.withOpacity(0.2),
+                          ),
+                        ),
+                        child: Text(
+                          'x${entry.value}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

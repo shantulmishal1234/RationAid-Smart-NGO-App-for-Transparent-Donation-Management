@@ -18,7 +18,6 @@ class PackManagementScreen extends StatefulWidget {
 class _PackManagementScreenState extends State<PackManagementScreen> {
   String _searchQuery = '';
   String _filterType = 'all';
-  bool _isOverviewExpanded = true;
   final _searchController = TextEditingController();
 
   @override
@@ -66,74 +65,50 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
                 final totalPacks = packs.length;
                 final activePacks = packs.where((p) => p.isActive).length;
                 final inactivePacks = totalPacks - activePacks;
-                final typeCounts = <String, int>{};
-                for (var pack in packs) {
-                  typeCounts[pack.packType] =
-                      (typeCounts[pack.packType] ?? 0) + 1;
-                }
 
-                return Column(
-                  children: [
-                    InkWell(
-                      onTap: () => setState(
-                        () => _isOverviewExpanded = !_isOverviewExpanded,
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Overview',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: theme.colorScheme.onSurface,
-                              ),
-                            ),
-                            Icon(
-                              _isOverviewExpanded
-                                  ? Icons.keyboard_arrow_up
-                                  : Icons.keyboard_arrow_down,
-                              color: theme.colorScheme.onSurface.withOpacity(
-                                0.6,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                return ExpansionTile(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  collapsedShape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  title: Text(
+                    'Overview & Statistics',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                     ),
-                    if (_isOverviewExpanded) ...[
-                      const Divider(height: 1),
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            _statItem(
-                              'Total Packs',
-                              totalPacks.toString(),
-                              AdminColors.primaryBlue,
-                            ),
-                            _statItem(
-                              'Active',
-                              activePacks.toString(),
-                              Colors.green[600]!,
-                            ),
-                            _statItem(
-                              'Inactive',
-                              inactivePacks.toString(),
-                              Colors.grey[600]!,
-                            ),
-                          ],
+                  ),
+                  leading: Icon(
+                    Icons.analytics_outlined,
+                    color: theme.colorScheme.primary,
+                  ),
+                  childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  children: [
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        _statItem(
+                          'Total Packs',
+                          totalPacks.toString(),
+                          AdminColors.primaryBlue,
                         ),
-                      ),
-                    ],
+                        _statItem(
+                          'Active',
+                          activePacks.toString(),
+                          Colors.green[600]!,
+                        ),
+                        _statItem(
+                          'Inactive',
+                          inactivePacks.toString(),
+                          Colors.grey[600]!,
+                        ),
+                      ],
+                    ),
                   ],
                 );
               },
@@ -267,72 +242,77 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
 
         // Packs List
         Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: AssistancePackService.getPacksStream(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+          child: FrostedPanel(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            padding: EdgeInsets.zero,
+            child: StreamBuilder<QuerySnapshot>(
+              stream: AssistancePackService.getPacksStream(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.inventory_2_outlined,
-                        size: 64,
-                        color: theme.disabledColor,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No assistance packs yet',
-                        style: TextStyle(
-                          fontSize: 16,
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.inventory_2_outlined,
+                          size: 64,
                           color: theme.disabledColor,
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextButton.icon(
-                        onPressed: () => _showPackDialog(context),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Create First Pack'),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No assistance packs yet',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: theme.disabledColor,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: () => _showPackDialog(context),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Create First Pack'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                // Filter packs
+                final packs = snapshot.data!.docs
+                    .map((doc) => AssistancePack.fromFirestore(doc))
+                    .where((pack) {
+                      final matchesSearch = pack.name.toLowerCase().contains(
+                        _searchQuery,
+                      );
+                      final matchesType =
+                          _filterType == 'all' || pack.packType == _filterType;
+                      return matchesSearch && matchesType;
+                    })
+                    .toList();
+
+                if (packs.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No packs match your search',
+                      style: TextStyle(color: theme.disabledColor),
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: packs.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    return _buildPackCard(context, packs[index], index + 1);
+                  },
                 );
-              }
-
-              // Filter packs
-              final packs = snapshot.data!.docs
-                  .map((doc) => AssistancePack.fromFirestore(doc))
-                  .where((pack) {
-                    final matchesSearch = pack.name.toLowerCase().contains(
-                      _searchQuery,
-                    );
-                    final matchesType =
-                        _filterType == 'all' || pack.packType == _filterType;
-                    return matchesSearch && matchesType;
-                  })
-                  .toList();
-
-              if (packs.isEmpty) {
-                return Center(
-                  child: Text(
-                    'No packs match your search',
-                    style: TextStyle(color: theme.disabledColor),
-                  ),
-                );
-              }
-
-              return ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: packs.length,
-                itemBuilder: (context, index) {
-                  return _buildPackCard(context, packs[index]);
-                },
-              );
-            },
+              },
+            ),
           ),
         ),
       ],
@@ -340,38 +320,62 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
   }
 
   Widget _statItem(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          '$label: ',
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.6),
           ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: color.withOpacity(0.8),
-            ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: color,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildPackCard(BuildContext context, AssistancePack pack) {
+  Widget _infoChip({
+    required IconData icon,
+    required String label,
+    required ThemeData theme,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          icon,
+          size: 16,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPackCard(BuildContext context, AssistancePack pack, int index) {
     final theme = Theme.of(context);
 
     return Card(
@@ -401,7 +405,9 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
                         _formatPackType(pack.packType),
                         style: TextStyle(
                           fontSize: 13,
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
                         ),
                       ),
                     ],
@@ -415,8 +421,8 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
                   ),
                   decoration: BoxDecoration(
                     color: pack.isActive
-                        ? Colors.green.withOpacity(0.1)
-                        : Colors.grey.withOpacity(0.1),
+                        ? Colors.green.withValues(alpha: 0.1)
+                        : Colors.grey.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -448,7 +454,7 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
                 pack.description!,
                 style: TextStyle(
                   fontSize: 13,
-                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                 ),
               ),
             ],
@@ -514,31 +520,6 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _infoChip({
-    required IconData icon,
-    required String label,
-    required ThemeData theme,
-  }) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          icon,
-          size: 16,
-          color: theme.colorScheme.onSurface.withOpacity(0.6),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: theme.colorScheme.onSurface.withOpacity(0.8),
-          ),
-        ),
-      ],
     );
   }
 
