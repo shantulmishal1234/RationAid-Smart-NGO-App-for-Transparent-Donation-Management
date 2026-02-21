@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -23,12 +24,20 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
   late Future<Map<String, int>> _statsFuture;
   String? _profilePhotoUrl;
   bool _isUploadingPhoto = false;
+  StreamSubscription<DocumentSnapshot>? _profileSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadStats();
-    _loadProfilePhoto();
+    _loadStats();
+    _setupProfileStream();
+  }
+
+  @override
+  void dispose() {
+    _profileSubscription?.cancel();
+    super.dispose();
   }
 
   void _loadStats() {
@@ -38,22 +47,20 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
     }
   }
 
-  Future<void> _loadProfilePhoto() async {
+  void _setupProfileStream() {
     final userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId != null) {
-      try {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .get();
-        if (doc.exists && mounted) {
-          setState(() {
-            _profilePhotoUrl = doc.data()?['profilePhotoUrl'];
+      _profileSubscription = FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .snapshots()
+          .listen((doc) {
+            if (doc.exists && mounted) {
+              setState(() {
+                _profilePhotoUrl = doc.data()?['profilePhotoUrl'];
+              });
+            }
           });
-        }
-      } catch (e) {
-        debugPrint('Error loading profile photo: $e');
-      }
     }
   }
 
@@ -710,6 +717,27 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Current Name (Read-only)
+                TextFormField(
+                  initialValue: user?.displayName ?? 'Not set',
+                  enabled: false,
+                  decoration: InputDecoration(
+                    labelText: 'Current Name',
+                    prefixIcon: const Icon(Icons.person),
+                    filled: true,
+                    fillColor: Colors.grey.withOpacity(0.1),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // New Name
                 TextFormField(
                   controller: nameController,
                   textCapitalization: TextCapitalization.words,
@@ -915,6 +943,27 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Current Phone (Read-only)
+              TextFormField(
+                initialValue: user?.phoneNumber ?? 'Not set',
+                enabled: false,
+                decoration: InputDecoration(
+                  labelText: 'Current Phone',
+                  prefixIcon: const Icon(Icons.phone),
+                  filled: true,
+                  fillColor: Colors.grey.withOpacity(0.1),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // New Phone
               TextFormField(
                 controller: phoneController,
                 keyboardType: TextInputType.phone,

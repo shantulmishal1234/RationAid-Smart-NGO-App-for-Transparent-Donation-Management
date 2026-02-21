@@ -9,11 +9,15 @@ class ProcurementCard extends StatelessWidget {
   final VoidCallback onTap;
   final String actionLabel;
 
+  /// Optional trailing widget injected in the card header (e.g., release button).
+  final Widget? releaseButton;
+
   const ProcurementCard({
     super.key,
     required this.request,
     required this.onTap,
     this.actionLabel = 'Process',
+    this.releaseButton,
   });
 
   @override
@@ -178,6 +182,8 @@ class ProcurementCard extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            // Optional release/undo button
+                            if (releaseButton != null) releaseButton!,
                           ],
                         ),
 

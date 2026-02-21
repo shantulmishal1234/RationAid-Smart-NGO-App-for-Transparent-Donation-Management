@@ -21,14 +21,13 @@ class AdminQueries {
   /// Query donations by status and type filter
   /// NOTE: Draft donations are excluded from admin view
   static Stream<QuerySnapshot<Map<String, dynamic>>> donationsQuery(
-    DonationStatusFilter statusFilter, {
-    DonationTypeFilter typeFilter = DonationTypeFilter.all,
-  }) {
+    DonationStatusFilter statusFilter,
+  ) {
     Query<Map<String, dynamic>> query = FirebaseFirestore.instance.collection(
       'donations',
     );
 
-    // 1. Apply Status Filter
+    // Apply Status Filter
     switch (statusFilter) {
       case DonationStatusFilter.all:
         query = query.where('status', whereNotIn: ['draft']);
@@ -44,29 +43,6 @@ class AdminQueries {
         break;
       case DonationStatusFilter.rejected:
         query = query.where('status', isEqualTo: 'rejected');
-        break;
-    }
-
-    // 2. Apply Type Filter
-    // Note: Firestore Composite Index might be required for new combinations
-    switch (typeFilter) {
-      case DonationTypeFilter.generalFund:
-        query = query.where('familyId', isEqualTo: 'general_relief_fund');
-        break;
-      case DonationTypeFilter.family:
-        // 'isNotEqualTo' is supported but can't be combined with 'status != draft' (whereNotIn)
-        // usually. We'll rely on client side filter for 'family' strictly if needed,
-        // or just strictly filter for general_relief_fund when asked.
-        // For now, let's keep it simple: if 'family', we might need to filter client side
-        // or just rely on 'generalFund' being the main specific filter.
-        // Let's rely on client side filtering for 'family' to avoid "inequality on different fields" issues
-        // if status uses 'whereNotIn'.
-        // Actually, let's just use 'isEqualTo' for General Fund, which is safe.
-        // For 'family', we can't easily do 'familyId != general_relief_fund' efficiently with other filters.
-        // So we will filter 'family' type on the client side in the StreamBuilder or use a property check?
-        // Let's skip direct query for 'family' type to avoid index hell and do it in UI.
-        break;
-      case DonationTypeFilter.all:
         break;
     }
 

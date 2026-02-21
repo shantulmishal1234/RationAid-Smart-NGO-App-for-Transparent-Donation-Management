@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ration_aid/models/donation_model.dart';
 
 /// Donation card widget for displaying donation information
 class DonationCard extends StatelessWidget {
@@ -8,7 +9,7 @@ class DonationCard extends StatelessWidget {
   final double amount;
   final String currency;
   final String method;
-  final String status;
+  final DonationStatus status;
   final VoidCallback onTap;
   final int? serialNumber;
 
@@ -27,30 +28,28 @@ class DonationCard extends StatelessWidget {
 
   Color _statusColor() {
     switch (status) {
-      case 'verified':
+      case DonationStatus.verified:
         return Colors.green;
-      case 'under_verification':
+      case DonationStatus.underVerification:
         return Colors.orange;
-      case 'rejected':
+      case DonationStatus.rejected:
         return Colors.red;
-      case 'pending':
+      case DonationStatus.pending:
+        return Colors.grey;
+      case DonationStatus.inProcess:
+        return Colors.blue;
+      case DonationStatus.outForDelivery:
+      case DonationStatus.delivered:
+        return Colors.purple;
+      case DonationStatus.closed:
+        return Colors.teal;
       default:
-        return Colors.blueGrey;
+        return Colors.grey;
     }
   }
 
   String _statusLabel() {
-    switch (status) {
-      case 'verified':
-        return 'Verified';
-      case 'under_verification':
-        return 'Review';
-      case 'rejected':
-        return 'Rejected';
-      case 'pending':
-      default:
-        return 'Pending';
-    }
+    return status.displayName;
   }
 
   @override

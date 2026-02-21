@@ -410,6 +410,7 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
                           data['assignedVolunteerName'] as String?,
                       targetAmount: (data['targetAmount'] ?? 0).toDouble(),
                       raisedAmount: (data['raisedAmount'] ?? 0).toDouble(),
+                      surplusAmount: (data['surplusAmount'] ?? 0).toDouble(),
                       onTap: () async {
                         await Navigator.push(
                           context,

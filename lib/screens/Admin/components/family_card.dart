@@ -15,6 +15,7 @@ class FamilyCard extends StatelessWidget {
   final int? serialNumber;
   final double? targetAmount;
   final double? raisedAmount;
+  final double? surplusAmount;
 
   const FamilyCard({
     super.key,
@@ -30,9 +31,11 @@ class FamilyCard extends StatelessWidget {
     this.serialNumber,
     this.targetAmount,
     this.raisedAmount,
+    this.surplusAmount,
   });
 
   Color _statusColor() {
+    if ((surplusAmount ?? 0) > 0) return Colors.deepOrange; // Over-funded
     switch (status) {
       case 'accepted':
         return Colors.green;
@@ -46,6 +49,7 @@ class FamilyCard extends StatelessWidget {
   }
 
   String _statusLabel() {
+    if ((surplusAmount ?? 0) > 0) return 'Over-funded';
     switch (status) {
       case 'accepted':
         return 'Accepted';
@@ -63,6 +67,16 @@ class FamilyCard extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    // Calculate progress with surplus
+    final raised = raisedAmount ?? 0;
+    final target = targetAmount ?? 1; // Avoid div by zero
+    final surplus = surplusAmount ?? 0;
+    final totalAvailable = raised + surplus;
+
+    // If overfunded, we clamp progress at 1.0 but change color
+    final progress = (totalAvailable / target).clamp(0.0, 1.0);
+    final isOverFunded = surplus > 0;
+
     return RepaintBoundary(
       child: InkWell(
         onTap: onTap,
@@ -72,7 +86,12 @@ class FamilyCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: theme.cardColor,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: theme.dividerColor.withOpacity(0.6)),
+            border: Border.all(
+              color: isOverFunded
+                  ? Colors.deepOrange.withOpacity(0.5)
+                  : theme.dividerColor.withOpacity(0.6),
+              width: isOverFunded ? 1.5 : 1.0,
+            ),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -172,37 +191,52 @@ class FamilyCard extends StatelessWidget {
                       targetAmount! > 0) ...[
                     const SizedBox(height: 6),
                     SizedBox(
-                      width: 60,
+                      width: 80, // Slightly wider for surplus text
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(2),
                             child: LinearProgressIndicator(
-                              value: ((raisedAmount ?? 0) / targetAmount!)
-                                  .clamp(0.0, 1.0),
+                              value: progress,
                               backgroundColor:
                                   theme.brightness == Brightness.dark
                                   ? Colors.grey[800]
                                   : Colors.grey[200],
-                              // Show orange if pending included (we can't know for sure here without extra prop,
-                              // but we'll assume green for "raised" concept)
-                              color: ((raisedAmount ?? 0) >= targetAmount!)
-                                  ? Colors.green
-                                  : AppColors.donorGreen,
-                              minHeight: 3,
+                              color: isOverFunded
+                                  ? Colors.deepOrange
+                                  : (progress >= 1.0
+                                        ? Colors.green
+                                        : AppColors.donorGreen),
+                              minHeight: 4,
                             ),
                           ),
                           const SizedBox(height: 2),
-                          Text(
-                            '${(((raisedAmount ?? 0) / targetAmount!) * 100).toInt()}%',
-                            style: TextStyle(
-                              fontSize: 8,
-                              color: ((raisedAmount ?? 0) >= targetAmount!)
-                                  ? Colors.green
-                                  : AppColors.donorGreen,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              if (isOverFunded)
+                                Text(
+                                  '+${surplus.toInt()} ',
+                                  style: const TextStyle(
+                                    fontSize: 8,
+                                    color: Colors.deepOrange,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              Text(
+                                '${(progress * 100).toInt()}%',
+                                style: TextStyle(
+                                  fontSize: 8,
+                                  color: isOverFunded
+                                      ? Colors.deepOrange
+                                      : (progress >= 1.0
+                                            ? Colors.green
+                                            : AppColors.donorGreen),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),

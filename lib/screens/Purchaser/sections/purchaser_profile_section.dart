@@ -603,17 +603,44 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
           ),
           content: Form(
             key: formKey,
-            child: TextFormField(
-              controller: nameController,
-              decoration: InputDecoration(
-                labelText: 'Full Name',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Current Name (Read-only)
+                TextFormField(
+                  initialValue: user?.displayName ?? 'Not set',
+                  enabled: false,
+                  decoration: InputDecoration(
+                    labelText: 'Current Name',
+                    prefixIcon: const Icon(Icons.person),
+                    filled: true,
+                    fillColor: Colors.grey.withOpacity(0.1),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
-              validator: (val) => val == null || val.trim().length < 2
-                  ? 'Name too short'
-                  : null,
+                const SizedBox(height: 16),
+
+                // New Name
+                TextFormField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    labelText: 'Full Name',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  validator: (val) => val == null || val.trim().length < 2
+                      ? 'Name too short'
+                      : null,
+                ),
+              ],
             ),
           ),
           actions: [
@@ -696,6 +723,27 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Current Phone (Read-only)
+              TextFormField(
+                initialValue: user?.phoneNumber ?? 'Not set',
+                enabled: false,
+                decoration: InputDecoration(
+                  labelText: 'Current Phone',
+                  prefixIcon: const Icon(Icons.phone),
+                  filled: true,
+                  fillColor: Colors.grey.withOpacity(0.1),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // New Phone
               TextFormField(
                 controller: phoneController,
                 keyboardType: TextInputType.phone,

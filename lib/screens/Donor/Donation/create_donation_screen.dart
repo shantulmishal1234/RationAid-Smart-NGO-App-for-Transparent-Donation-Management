@@ -289,7 +289,8 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
         items: _donationType == DonationType.inKind ? _selectedItems : null,
         anonymous: _isAnonymous,
         status: submitForVerification
-            ? DonationStatus.underVerification
+            ? DonationStatus
+                  .underVerification // FIX: was 'pending', admin notifications require 'underVerification'
             : DonationStatus.draft,
         paymentProofUrl: _paymentProofUrl,
         donationNote: _noteController.text.isNotEmpty

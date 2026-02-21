@@ -91,6 +91,16 @@ class ProcurementRequest {
   final String? resolutionNote;
   final String? reviewStatus;
 
+  // ─── Self-Claim Pool Fields ───────────────────────────────────────────────
+  /// UID of the purchaser who claimed this order (null = unclaimed / in pool).
+  final String? claimedById;
+
+  /// Display name of the claimer, stored for quick UI display.
+  final String? claimedByName;
+
+  /// When the order was claimed (for 72-hour auto-release timeout).
+  final DateTime? claimedAt;
+
   ProcurementRequest({
     required this.id,
     required this.familyId,
@@ -116,6 +126,9 @@ class ProcurementRequest {
     this.resolutionAction,
     this.resolutionNote,
     this.reviewStatus,
+    this.claimedById,
+    this.claimedByName,
+    this.claimedAt,
   });
 
   Map<String, dynamic> toFirestore() {
@@ -137,6 +150,9 @@ class ProcurementRequest {
       'verifiedAt': verifiedAt != null ? Timestamp.fromDate(verifiedAt!) : null,
       'receiptUrl': receiptUrl,
       'adminRemarks': adminRemarks,
+      'claimedById': claimedById,
+      'claimedByName': claimedByName,
+      'claimedAt': claimedAt != null ? Timestamp.fromDate(claimedAt!) : null,
     };
   }
 
@@ -175,6 +191,17 @@ class ProcurementRequest {
       resolutionAction: data['resolutionAction'],
       resolutionNote: data['resolutionNote'],
       reviewStatus: data['reviewStatus'],
+      claimedById: data['claimedById'],
+      claimedByName: data['claimedByName'],
+      claimedAt: (data['claimedAt'] as Timestamp?)?.toDate(),
     );
   }
+
+  /// True when this order has been claimed by a purchaser but not yet submitted.
+  bool get isClaimed =>
+      claimedById != null && status == ProcurementStatus.pending;
+
+  /// True when this order is in the open pool (not yet claimed).
+  bool get isInPool =>
+      claimedById == null && status == ProcurementStatus.pending;
 }

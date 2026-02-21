@@ -93,7 +93,9 @@ class _InventoryViewState extends State<InventoryView> {
 
           // Check for aging (oldest verified date)
           final oldestDate = requests
-              .map((r) => r.verifiedAt ?? DateTime.now())
+              .map(
+                (r) => r.verifiedAt ?? r.createdAt,
+              ) // use createdAt fallback, not DateTime.now()
               .reduce((a, b) => a.isBefore(b) ? a : b);
 
           final daysInStock = DateTime.now().difference(oldestDate).inDays;

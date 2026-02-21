@@ -10,6 +10,7 @@ import 'package:ration_aid/screens/Admin/components/donation_card.dart';
 import 'package:ration_aid/screens/Admin/Donation Section/donation_detail_screen.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 import 'package:ration_aid/services/funding_service.dart';
+import 'package:ration_aid/models/donation_model.dart';
 
 /// Donations section for managing donor payments
 class DonationsSection extends StatefulWidget {
@@ -438,10 +439,7 @@ class _DonationsSectionState extends State<DonationsSection> {
             margin: const EdgeInsets.symmetric(horizontal: 16),
             padding: EdgeInsets.zero,
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: AdminQueries.donationsQuery(
-                widget.donationFilter,
-                typeFilter: _typeFilter,
-              ),
+              stream: AdminQueries.donationsQuery(widget.donationFilter),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -466,6 +464,21 @@ class _DonationsSectionState extends State<DonationsSection> {
                   if (t2 == null) return -1;
                   return t1.compareTo(t2);
                 });
+
+                // Client-side Type Filter (to avoid complex composite indexes)
+                if (_typeFilter != DonationTypeFilter.all) {
+                  docs = docs.where((doc) {
+                    final data = doc.data();
+                    final familyId = data['familyId'];
+
+                    if (_typeFilter == DonationTypeFilter.generalFund) {
+                      return familyId == 'general_relief_fund';
+                    } else if (_typeFilter == DonationTypeFilter.family) {
+                      return familyId != 'general_relief_fund';
+                    }
+                    return true;
+                  }).toList();
+                }
 
                 // Client-side search filter
                 if (_donationSearch.isNotEmpty) {
@@ -530,7 +543,9 @@ class _DonationsSectionState extends State<DonationsSection> {
                       amount: (data['amount'] ?? 0).toDouble(),
                       currency: data['currency'] ?? 'PKR',
                       method: method,
-                      status: data['status'] ?? 'pending',
+                      status: DonationStatus.fromFirestore(
+                        data['status'] ?? 'pending',
+                      ),
                       onTap: () {
                         Navigator.push(
                           context,

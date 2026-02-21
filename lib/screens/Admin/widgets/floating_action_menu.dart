@@ -66,8 +66,8 @@ class _FloatingActionMenuState extends State<FloatingActionMenu>
       'color': const Color(0xFF673AB7),
     },
     {
-      'icon': Icons.local_shipping,
-      'label': 'Delivery Verification',
+      'icon': Icons.delivery_dining,
+      'label': 'Delivery Management',
       'section': AdminSection.deliveryVerification,
       'color': const Color(0xFFFF5722),
     },

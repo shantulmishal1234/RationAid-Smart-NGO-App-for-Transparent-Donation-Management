@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:ration_aid/models/family_model.dart';
 import 'package:ration_aid/services/audit_service.dart';
+import 'package:ration_aid/services/funding_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
@@ -290,6 +291,455 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     }
   }
 
+  // ─── Pool Management ────────────────────────────────────────────────────────
+
+  Widget _buildPoolManagementSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final family = _family;
+    if (family == null) return const SizedBox.shrink();
+
+    final surplus = family.surplusAmount;
+    final remaining = family.remainingAmount;
+    final isOverFunded = surplus > 0;
+    final isUnderfunded = remaining > 0;
+
+    if (!isOverFunded && !isUnderfunded) return const SizedBox.shrink();
+
+    return FrostedPanel(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.account_balance_wallet_outlined,
+                size: 18,
+                color: isOverFunded ? Colors.deepOrange : Colors.blue,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Pool Management',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              const Spacer(),
+              if (isOverFunded)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.deepOrange.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '+ PKR ${surplus.toStringAsFixed(0)} Surplus',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.deepOrange,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (isUnderfunded)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _showGRFAllocationDialog(context, family),
+                icon: const Icon(Icons.monetization_on, size: 16),
+                label: Text(
+                  'Allocate from GRF (Gap: PKR ${remaining.toStringAsFixed(0)})',
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  elevation: 0,
+                ),
+              ),
+            ),
+          if (isUnderfunded && isOverFunded) const SizedBox(height: 8),
+          if (isOverFunded)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _showSurplusTransferDialog(context, family),
+                icon: const Icon(Icons.swap_horiz, size: 16),
+                label: Text(
+                  'Transfer Surplus (PKR ${surplus.toStringAsFixed(0)})',
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.deepOrange,
+                  side: const BorderSide(color: Colors.deepOrange),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showGRFAllocationDialog(
+    BuildContext context,
+    Family family,
+  ) async {
+    final amountController = TextEditingController();
+    final noteController = TextEditingController(
+      text: 'Allocated from General Relief Fund pool',
+    );
+    bool isProcessing = false;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: const Text('Allocate from GRF Pool'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Transfer funds from the General Relief Fund to this family\'s funding pool.',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Family Gap: PKR ${family.remainingAmount.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Amount (PKR)',
+                  prefixText: 'PKR ',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: noteController,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Note',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isProcessing ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: isProcessing
+                  ? null
+                  : () async {
+                      final amount = double.tryParse(
+                        amountController.text.trim(),
+                      );
+                      if (amount == null || amount <= 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Enter a valid amount')),
+                        );
+                        return;
+                      }
+                      setDlgState(() => isProcessing = true);
+                      try {
+                        await FundingService.allocateFromGRF(
+                          targetFamilyId: widget.familyId,
+                          amount: amount,
+                          adminNote: noteController.text.trim(),
+                          adminUid: _currentUser?.uid,
+                        );
+                        if (context.mounted) Navigator.pop(ctx);
+                        if (mounted) {
+                          _loadFamilyModel();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '✅ PKR ${amount.toStringAsFixed(0)} allocated from GRF',
+                              ),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        setDlgState(() => isProcessing = false);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+              child: isProcessing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Allocate'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    amountController.dispose();
+    noteController.dispose();
+  }
+
+  Future<void> _showSurplusTransferDialog(
+    BuildContext context,
+    Family family,
+  ) async {
+    final amountController = TextEditingController();
+    final noteController = TextEditingController(text: 'Surplus transfer');
+    String? selectedTargetId;
+    String selectedTargetName = '';
+    bool isProcessing = false;
+
+    // Load accepted families for the picker
+    List<Map<String, String>> families = [];
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('families')
+          .where('status', isEqualTo: 'accepted')
+          .get();
+      families = snap.docs
+          .where((d) => d.id != widget.familyId)
+          .map(
+            (d) => {
+              'id': d.id,
+              'name':
+                  (d.data()['registeredName'] ??
+                          d.data()['area'] ??
+                          'Family ${d.id.substring(0, 6)}')
+                      as String,
+            },
+          )
+          .toList();
+      // Add GRF as an option
+      families.insert(0, {
+        'id': 'general_relief_fund',
+        'name': 'General Relief Fund',
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not load families: $e')));
+      }
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          title: const Text('Transfer Surplus'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Transfer the surplus amount to another family or back to GRF.',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.deepOrange.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Available Surplus: PKR ${family.surplusAmount.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.deepOrange,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedTargetId,
+                hint: const Text('Select destination'),
+                items: families
+                    .map(
+                      (f) => DropdownMenuItem(
+                        value: f['id'],
+                        child: Text(
+                          f['name']!,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (val) {
+                  setDlgState(() {
+                    selectedTargetId = val;
+                    selectedTargetName =
+                        families.firstWhere((f) => f['id'] == val)['name'] ??
+                        '';
+                  });
+                },
+                decoration: const InputDecoration(
+                  labelText: 'Transfer To',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: amountController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Amount (PKR)',
+                  prefixText: 'PKR ',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: noteController,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Note',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isProcessing ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: isProcessing
+                  ? null
+                  : () async {
+                      if (selectedTargetId == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please select a destination'),
+                          ),
+                        );
+                        return;
+                      }
+                      final amount = double.tryParse(
+                        amountController.text.trim(),
+                      );
+                      if (amount == null || amount <= 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Enter a valid amount')),
+                        );
+                        return;
+                      }
+                      setDlgState(() => isProcessing = true);
+                      try {
+                        await FundingService.transferSurplus(
+                          fromFamilyId: widget.familyId,
+                          toFamilyId: selectedTargetId!,
+                          amount: amount,
+                          adminNote: noteController.text.trim(),
+                          adminUid: _currentUser?.uid,
+                        );
+                        if (context.mounted) Navigator.pop(ctx);
+                        if (mounted) {
+                          _loadFamilyModel();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '✅ PKR ${amount.toStringAsFixed(0)} transferred to $selectedTargetName',
+                              ),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        setDlgState(() => isProcessing = false);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepOrange,
+                foregroundColor: Colors.white,
+              ),
+              child: isProcessing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Transfer'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    amountController.dispose();
+    noteController.dispose();
+  }
+
   Future<void> _confirmDelete() async {
     final theme = Theme.of(context);
     final confirm = await showDialog<bool>(
@@ -477,6 +927,9 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                     _buildSectionHeader(context, 'Funding Progress'),
                     const SizedBox(height: 16),
                     FrostedPanel(child: _buildFundingSection(context)),
+                    const SizedBox(height: 16),
+                    // Pool Management Actions
+                    _buildPoolManagementSection(context),
                     const SizedBox(height: 32),
                   ],
 
@@ -1293,8 +1746,10 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     final theme = Theme.of(context);
     final target = _family!.targetAmount;
     final raised = _family!.raisedAmount;
-    final percent = (raised / target).clamp(0.0, 1.0);
-    final fullyFunded = raised >= target;
+    final surplus = _family!.surplusAmount;
+    final percent = ((raised + surplus) / target).clamp(0.0, 1.0);
+    final fullyFunded = (raised + surplus) >= target;
+    final isOverFunded = surplus > 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1377,34 +1832,66 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
             backgroundColor: theme.brightness == Brightness.dark
                 ? Colors.grey[800]
                 : Colors.grey[200],
-            color: fullyFunded ? Colors.green : Colors.blue,
+            color: isOverFunded
+                ? Colors.deepOrange
+                : (fullyFunded ? Colors.green : Colors.blue),
           ),
         ),
         const SizedBox(height: 8),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              '${(percent * 100).toInt()}% Funded',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: fullyFunded ? Colors.green : theme.colorScheme.primary,
-              ),
+            Row(
+              children: [
+                Text(
+                  '${(percent * 100).toInt()}% Funded',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: isOverFunded
+                        ? Colors.deepOrange
+                        : (fullyFunded
+                              ? Colors.green
+                              : theme.colorScheme.primary),
+                  ),
+                ),
+                if (isOverFunded) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.deepOrange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '+${surplus.toInt()} Surplus',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.deepOrange,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
             if (fullyFunded)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
+                  color: (isOverFunded ? Colors.deepOrange : Colors.green)
+                      .withOpacity(0.1),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text(
-                  'GOAL REACHED',
+                child: Text(
+                  isOverFunded ? 'OVER-FUNDED' : 'GOAL REACHED',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: Colors.green,
+                    color: isOverFunded ? Colors.deepOrange : Colors.green,
                   ),
                 ),
               )

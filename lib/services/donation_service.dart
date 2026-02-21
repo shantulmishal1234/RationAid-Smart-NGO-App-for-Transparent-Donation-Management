@@ -66,8 +66,9 @@ class DonationService {
           .collection('donations')
           .add(donationWithDonorInfo.toFirestore());
 
-      // Trigger funding recalculation immediately
-      if (donation.familyId.isNotEmpty) {
+      // FIX Bug#4: Only trigger recalc for non-draft donations (drafts don't count toward funding)
+      if (donation.familyId.isNotEmpty &&
+          donation.status != DonationStatus.draft) {
         await FundingService.recalculateFamilyFunding(donation.familyId);
       }
 
@@ -112,10 +113,14 @@ class DonationService {
       final currentData = currentDoc.data();
       final beforeStatus = currentData?['status'] ?? '';
 
-      await _firestore.doc(donationId).update(donation.toFirestore());
+      await _firestore
+          .collection('donations')
+          .doc(donationId)
+          .update(donation.toFirestore());
 
-      // Trigger funding recalculation immediately
-      if (donation.familyId.isNotEmpty) {
+      // FIX Bug#4: Only trigger recalc when status is not draft (avoids wasteful recalcs on every save)
+      if (donation.familyId.isNotEmpty &&
+          donation.status != DonationStatus.draft) {
         await FundingService.recalculateFamilyFunding(donation.familyId);
       }
 
@@ -143,6 +148,57 @@ class DonationService {
           },
         );
         print('Notification sent to admins for updated donation: $donationId');
+      }
+
+      // Notify Donor of status changes
+      if (afterStatus != beforeStatus) {
+        String? title;
+        String? body;
+
+        switch (afterStatus) {
+          case 'verified':
+            title = 'Donation Verified! ✅';
+            body =
+                'Your donation has been verified. Thank you for your support!';
+            break;
+          case 'rejected':
+            title = 'Action Required ⚠️';
+            body =
+                'Your donation was returned. Please check the app for details.';
+            break;
+          case 'out_for_delivery':
+            title = 'On the Way! 🚚';
+            body = 'Your donation is out for delivery to the family.';
+            break;
+          case 'delivered':
+            title = 'Impact Made! ❤️';
+            body =
+                'Your donation has been delivered. Thank you form making a difference!';
+            break;
+          case 'cancelled':
+            title = 'Donation Cancelled';
+            body = 'Your donation has been cancelled.';
+            break;
+        }
+
+        if (title != null && body != null) {
+          final donorId = currentData?['donorId'] as String?;
+          if (donorId != null) {
+            await NotificationService.sendToUser(
+              userId: donorId,
+              title: title,
+              body: body,
+              data: {
+                'type': 'donation_update',
+                'donationId': donationId,
+                'status': afterStatus,
+              },
+            );
+            print(
+              'Notification sent to donor $donorId for status: $afterStatus',
+            );
+          }
+        }
       }
     } catch (e) {
       throw Exception('Failed to update donation: $e');
@@ -365,6 +421,21 @@ class DonationService {
         action: 'submit_for_verification',
         donationId: donationId,
         details: 'Status: ${data?['status'] ?? ''} → under_verification',
+      );
+
+      // Notify admins
+      final donorName = data?['donorName'] ?? 'A donor';
+      final type = data?['donationType'] ?? 'Unknown';
+
+      await NotificationService.sendToRole(
+        role: 'admin',
+        title: 'Donation Submitted for Verification',
+        body: '$donorName submitted a $type donation for verification',
+        data: {
+          'type': 'donation_submitted',
+          'donationId': donationId,
+          'route': '/admin/donations',
+        },
       );
     } catch (e) {
       throw Exception('Failed to submit for verification: $e');

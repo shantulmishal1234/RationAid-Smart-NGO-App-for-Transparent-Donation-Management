@@ -7,10 +7,14 @@ class PurchaserBottomNav extends StatefulWidget {
   final PurchaserSection currentSection;
   final ValueChanged<PurchaserSection> onSectionChanged;
 
+  /// If > 0, a red badge is shown over the Notifications tab.
+  final int unreadNotificationCount;
+
   const PurchaserBottomNav({
     super.key,
     required this.currentSection,
     required this.onSectionChanged,
+    this.unreadNotificationCount = 0,
   });
 
   @override
@@ -202,6 +206,7 @@ class _PurchaserBottomNavState extends State<PurchaserBottomNav>
                         label: 'Alerts',
                         section: PurchaserSection.notifications,
                         index: 5,
+                        badgeCount: widget.unreadNotificationCount,
                       ),
                       _buildNavItem(
                         icon: Icons.person_outline,
@@ -225,6 +230,7 @@ class _PurchaserBottomNavState extends State<PurchaserBottomNav>
     required String label,
     required PurchaserSection section,
     required int index,
+    int badgeCount = 0,
   }) {
     final isActive = widget.currentSection == section;
     final currentIndex = _getSectionIndex(widget.currentSection);
@@ -248,17 +254,49 @@ class _PurchaserBottomNavState extends State<PurchaserBottomNav>
                       : 1.0;
                   return Transform.scale(
                     scale: scale,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      child: Icon(
-                        icon,
-                        color: isActive
-                            ? AppColors.purchaserOrange
-                            : (Theme.of(context).brightness == Brightness.dark
-                                  ? Colors.grey[400]
-                                  : Colors.grey[600]),
-                        size: isActive ? 26 : 24,
-                      ),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          child: Icon(
+                            icon,
+                            color: isActive
+                                ? AppColors.purchaserOrange
+                                : (Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.grey[400]
+                                      : Colors.grey[600]),
+                            size: isActive ? 26 : 24,
+                          ),
+                        ),
+                        // Unread badge
+                        if (badgeCount > 0)
+                          Positioned(
+                            top: -4,
+                            right: -6,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 16,
+                                minHeight: 16,
+                              ),
+                              child: Text(
+                                badgeCount > 99 ? '99+' : '$badgeCount',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   );
                 },
