@@ -30,14 +30,14 @@ class StatCard extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: isDark
-                ? Colors.black.withOpacity(0.3)
-                : Colors.black.withOpacity(0.03),
+                ? Colors.black.withValues(alpha: 0.3)
+                : Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
         ],
         border: Border.all(
-          color: theme.dividerColor.withOpacity(isDark ? 0.05 : 0.0),
+          color: theme.dividerColor.withValues(alpha: isDark ? 0.05 : 0.0),
         ),
       ),
       child: Row(
@@ -45,7 +45,7 @@ class StatCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 24),
@@ -59,7 +59,7 @@ class StatCard extends StatelessWidget {
                   title,
                   style: TextStyle(
                     fontSize: 12,
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
                 Text(
@@ -75,7 +75,7 @@ class StatCard extends StatelessWidget {
                   subtitle,
                   style: TextStyle(
                     fontSize: 11,
-                    color: theme.colorScheme.onSurface.withOpacity(0.5),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                   ),
                 ),
               ],

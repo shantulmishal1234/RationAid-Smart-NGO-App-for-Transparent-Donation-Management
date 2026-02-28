@@ -34,7 +34,7 @@ class AlertTile extends StatelessWidget {
               text,
               style: TextStyle(
                 fontSize: 13,
-                color: theme.colorScheme.onSurface.withOpacity(0.8),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
               ),
             ),
           ),

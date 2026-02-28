@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/models/notification_model.dart';
 import 'package:ration_aid/services/notification_service.dart';
+import 'package:ration_aid/services/donation_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 
 /// Donor Notifications Section - Display all notifications
@@ -17,19 +18,47 @@ class DonorNotificationsSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
-          Text(
-            'Notifications',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
+          // Header row with Mark All Read
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Notifications',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+              if (userId != null)
+                TextButton.icon(
+                  onPressed: () async {
+                    await NotificationService.markAllUserNotificationsAsRead(
+                      userId,
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('All marked as read')),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.done_all, size: 18),
+                  label: const Text(
+                    'Mark All Read',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.donorGreen,
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 4),
           Text(
             'Stay updated on your donations',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.7),
             ),
           ),
           const SizedBox(height: 16),
@@ -65,9 +94,8 @@ class DonorNotificationsSection extends StatelessWidget {
                                 'No notifications yet',
                                 style: TextStyle(
                                   fontSize: 16,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurface.withOpacity(0.6),
+                                  color: Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.6),
                                 ),
                               ),
                             ],
@@ -108,14 +136,14 @@ class _NotificationCard extends StatelessWidget {
         color: notification.isRead
             ? Theme.of(context).cardColor
             : (Theme.of(context).brightness == Brightness.dark
-                  ? AppColors.donorGreen.withOpacity(0.1)
+                  ? AppColors.donorGreen.withValues(alpha: 0.1)
                   : Colors.green[50]),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.black.withOpacity(0.3)
-                : Colors.black.withOpacity(0.04),
+                ? Colors.black.withValues(alpha: 0.3)
+                : Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -128,7 +156,23 @@ class _NotificationCard extends StatelessWidget {
             if (!notification.isRead) {
               await NotificationService.markAsRead(notification.id);
             }
-            // TODO: Navigate to action if hasAction
+            // Navigate to donation if this is a donation-related notification
+            if (notification.hasAction &&
+                notification.actionType == 'donation_status' &&
+                context.mounted) {
+              try {
+                final donation = await DonationService().getDonationById(
+                  notification.actionId!,
+                );
+                if (donation != null && context.mounted) {
+                  Navigator.pushNamed(
+                    context,
+                    '/donation-tracking',
+                    arguments: donation,
+                  );
+                }
+              } catch (_) {}
+            }
           },
           borderRadius: BorderRadius.circular(16),
           child: Padding(
@@ -168,7 +212,7 @@ class _NotificationCard extends StatelessWidget {
                           fontSize: 13,
                           color: Theme.of(
                             context,
-                          ).colorScheme.onSurface.withOpacity(0.7),
+                          ).colorScheme.onSurface.withValues(alpha: 0.7),
                         ),
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
@@ -181,7 +225,7 @@ class _NotificationCard extends StatelessWidget {
                           fontSize: 12,
                           color: Theme.of(
                             context,
-                          ).colorScheme.onSurface.withOpacity(0.5),
+                          ).colorScheme.onSurface.withValues(alpha: 0.5),
                         ),
                       ),
                     ],
@@ -192,7 +236,7 @@ class _NotificationCard extends StatelessWidget {
                   notification.isBroadcast
                       ? Icons.campaign
                       : Icons.volunteer_activism,
-                  color: AppColors.donorGreen.withOpacity(0.5),
+                  color: AppColors.donorGreen.withValues(alpha: 0.5),
                   size: 20,
                 ),
               ],

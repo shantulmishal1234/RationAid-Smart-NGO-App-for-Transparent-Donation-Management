@@ -257,7 +257,7 @@ class _FamilyReviewDetailDialogState extends State<FamilyReviewDetailDialog> {
                                   'Lat: ${widget.family.unverifiedLocation!.latitude.toStringAsFixed(6)}, Lng: ${widget.family.unverifiedLocation!.longitude.toStringAsFixed(6)}',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: theme.colorScheme.onSurface.withOpacity(
+                                color: theme.colorScheme.onSurface.withValues(alpha: 
                                   0.6,
                                 ),
                               ),
@@ -314,10 +314,10 @@ class _FamilyReviewDetailDialogState extends State<FamilyReviewDetailDialog> {
                           return Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.1),
+                              color: Colors.green.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: Colors.green.withOpacity(0.3),
+                                color: Colors.green.withValues(alpha: 0.3),
                               ),
                             ),
                             child: Row(
@@ -404,9 +404,9 @@ class _FamilyReviewDetailDialogState extends State<FamilyReviewDetailDialog> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.05),
+        color: color.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

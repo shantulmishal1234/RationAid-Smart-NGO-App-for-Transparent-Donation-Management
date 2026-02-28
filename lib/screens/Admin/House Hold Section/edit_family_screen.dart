@@ -453,7 +453,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                     color: theme.scaffoldBackgroundColor,
                     border: Border(
                       top: BorderSide(
-                        color: theme.dividerColor.withOpacity(0.5),
+                        color: theme.dividerColor.withValues(alpha: 0.5),
                       ),
                     ),
                   ),
@@ -529,7 +529,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 6),
@@ -546,7 +546,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(
-              color: theme.colorScheme.onSurface.withOpacity(0.3),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
               fontSize: 14,
               fontWeight: FontWeight.normal,
             ),
@@ -567,13 +567,13 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: theme.dividerColor.withOpacity(0.8),
+                color: theme.dividerColor.withValues(alpha: 0.8),
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: theme.dividerColor.withOpacity(0.8),
+                color: theme.dividerColor.withValues(alpha: 0.8),
               ),
             ),
             focusedBorder: OutlineInputBorder(
@@ -586,7 +586,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: theme.colorScheme.error.withOpacity(0.5),
+                color: theme.colorScheme.error.withValues(alpha: 0.5),
               ),
             ),
           ),
@@ -610,7 +610,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 6),
@@ -635,13 +635,13 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: theme.dividerColor.withOpacity(0.8),
+                color: theme.dividerColor.withValues(alpha: 0.8),
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: theme.dividerColor.withOpacity(0.8),
+                color: theme.dividerColor.withValues(alpha: 0.8),
               ),
             ),
             focusedBorder: OutlineInputBorder(
@@ -677,7 +677,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
               : Icon(
                   need.$2,
                   size: 16,
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
           selected: isSelected,
           onSelected: (bool selected) {
@@ -690,12 +690,12 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
             });
           },
           backgroundColor: theme.scaffoldBackgroundColor,
-          selectedColor: theme.colorScheme.primary.withOpacity(0.15),
+          selectedColor: theme.colorScheme.primary.withValues(alpha: 0.15),
           checkmarkColor: theme.colorScheme.primary,
           labelStyle: TextStyle(
             color: isSelected
                 ? theme.colorScheme.primary
-                : theme.colorScheme.onSurface.withOpacity(0.8),
+                : theme.colorScheme.onSurface.withValues(alpha: 0.8),
             fontSize: 13,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
           ),
@@ -704,7 +704,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
             side: BorderSide(
               color: isSelected
                   ? theme.colorScheme.primary
-                  : theme.dividerColor.withOpacity(0.8),
+                  : theme.dividerColor.withValues(alpha: 0.8),
             ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -732,7 +732,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                   fontSize: 11,
                   color: currentLength > 500
                       ? Colors.red
-                      : theme.colorScheme.onSurface.withOpacity(0.5),
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
               ),
             );
@@ -743,7 +743,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
         filled: true,
         fillColor: isDark
             ? theme.scaffoldBackgroundColor
-            : theme.scaffoldBackgroundColor.withOpacity(0.5),
+            : theme.scaffoldBackgroundColor.withValues(alpha: 0.5),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: theme.dividerColor),
@@ -785,7 +785,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
+                      color: Colors.green.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(
@@ -814,7 +814,9 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                           'Tap to replace',
                           style: TextStyle(
                             fontSize: 12,
-                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                         ),
                       ],
@@ -823,7 +825,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                   IconButton(
                     icon: Icon(
                       Icons.close,
-                      color: theme.colorScheme.onSurface.withOpacity(0.5),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
                     onPressed: () {
                       setState(() {
@@ -839,7 +841,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                   Icon(
                     Icons.cloud_upload_outlined,
                     size: 32,
-                    color: theme.colorScheme.primary.withOpacity(0.6),
+                    color: theme.colorScheme.primary.withValues(alpha: 0.6),
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -847,7 +849,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface.withOpacity(0.8),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -855,7 +857,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                     'Supports JPG, PNG, PDF (Max 5MB)',
                     style: TextStyle(
                       fontSize: 12,
-                      color: theme.colorScheme.onSurface.withOpacity(0.5),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
                   ),
                 ],

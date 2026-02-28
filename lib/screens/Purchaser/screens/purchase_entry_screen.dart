@@ -147,12 +147,12 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                   decoration: BoxDecoration(
                     color: _getStatusColor(
                       widget.request.status,
-                    ).withOpacity(0.1),
+                    ).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: _getStatusColor(
                         widget.request.status,
-                      ).withOpacity(0.3),
+                      ).withValues(alpha: 0.3),
                     ),
                   ),
                   child: Row(
@@ -179,8 +179,8 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                             Text(
                               _getStatusMessage(widget.request.status),
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurface.withOpacity(
-                                  0.7,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.7,
                                 ),
                               ),
                             ),
@@ -199,7 +199,9 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+                      color: Colors.black.withValues(
+                        alpha: isDark ? 0.3 : 0.05,
+                      ),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -221,13 +223,17 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                         Icon(
                           Icons.account_balance_wallet_outlined,
                           size: 18,
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           'Budget Limit: Rs. ${widget.request.budgetLimit.toStringAsFixed(0)}',
                           style: TextStyle(
-                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.7,
+                            ),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -245,7 +251,7 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                   'Itemized Costs',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSurface.withOpacity(0.8),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                   ),
                 ),
               ),
@@ -265,7 +271,7 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                       color: theme.cardColor,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: theme.dividerColor.withOpacity(0.5),
+                        color: theme.dividerColor.withValues(alpha: 0.5),
                       ),
                     ),
                     child: Row(
@@ -286,8 +292,9 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                               Text(
                                 'Qty: ${item.quantity}  •  Est: Rs. ${item.estimatedCost}',
                                 style: TextStyle(
-                                  color: theme.colorScheme.onSurface
-                                      .withOpacity(0.5),
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.5,
+                                  ),
                                   fontSize: 12,
                                 ),
                               ),
@@ -348,7 +355,7 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                                       style: TextStyle(
                                         fontSize: 11,
                                         color: theme.colorScheme.onSurface
-                                            .withOpacity(0.6),
+                                            .withValues(alpha: 0.6),
                                       ),
                                     ),
                                     const SizedBox(height: 4),
@@ -379,7 +386,9 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+                      color: Colors.black.withValues(
+                        alpha: isDark ? 0.3 : 0.05,
+                      ),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -423,13 +432,13 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                               'Budget Utilization',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: theme.colorScheme.onSurface.withOpacity(
-                                  0.6,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
                                 ),
                               ),
                             ),
                             Text(
-                              '${(_totalSpent / widget.request.budgetLimit * 100).toStringAsFixed(0)}%',
+                              '${widget.request.budgetLimit > 0 ? (_totalSpent / widget.request.budgetLimit * 100).toStringAsFixed(0) : 0}%',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
@@ -450,8 +459,8 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                             value: (_totalSpent / widget.request.budgetLimit)
                                 .clamp(0.0, 1.0),
                             minHeight: 8,
-                            backgroundColor: theme.dividerColor.withOpacity(
-                              0.2,
+                            backgroundColor: theme.dividerColor.withValues(
+                              alpha: 0.2,
                             ),
                             valueColor: AlwaysStoppedAnimation(
                               _totalSpent > widget.request.budgetLimit
@@ -520,14 +529,14 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                                       Icons.cloud_upload_outlined,
                                       size: 40,
                                       color: AppColors.purchaserOrange
-                                          .withOpacity(0.7),
+                                          .withValues(alpha: 0.7),
                                     ),
                                     const SizedBox(height: 12),
                                     Text(
                                       'Tap to upload receipt image',
                                       style: TextStyle(
                                         color: theme.colorScheme.onSurface
-                                            .withOpacity(0.5),
+                                            .withValues(alpha: 0.5),
                                       ),
                                     ),
                                   ],
@@ -580,7 +589,9 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                                             begin: Alignment.topRight,
                                             end: Alignment.bottomLeft,
                                             colors: [
-                                              Colors.black.withOpacity(0.4),
+                                              Colors.black.withValues(
+                                                alpha: 0.4,
+                                              ),
                                               Colors.transparent,
                                             ],
                                           ),
@@ -596,8 +607,8 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                                           // View full screen
                                           Container(
                                             decoration: BoxDecoration(
-                                              color: Colors.black.withOpacity(
-                                                0.6,
+                                              color: Colors.black.withValues(
+                                                alpha: 0.6,
                                               ),
                                               shape: BoxShape.circle,
                                             ),
@@ -626,8 +637,8 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                                           // Remove
                                           Container(
                                             decoration: BoxDecoration(
-                                              color: Colors.red.withOpacity(
-                                                0.8,
+                                              color: Colors.red.withValues(
+                                                alpha: 0.8,
                                               ),
                                               shape: BoxShape.circle,
                                             ),
@@ -656,8 +667,8 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                                             vertical: 6,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: Colors.black.withOpacity(
-                                              0.7,
+                                            color: Colors.black.withValues(
+                                              alpha: 0.7,
                                             ),
                                             borderRadius: BorderRadius.circular(
                                               20,
@@ -788,7 +799,7 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                                     vertical: 6,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.7),
+                                    color: Colors.black.withValues(alpha: 0.7),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: const Row(
@@ -820,7 +831,9 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                         height: 180,
                         width: double.infinity,
                         decoration: BoxDecoration(
-                          color: theme.scaffoldBackgroundColor.withOpacity(0.5),
+                          color: theme.scaffoldBackgroundColor.withValues(
+                            alpha: 0.5,
+                          ),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: theme.dividerColor),
                         ),
@@ -830,16 +843,16 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                             Icon(
                               Icons.receipt_outlined,
                               size: 40,
-                              color: theme.colorScheme.onSurface.withOpacity(
-                                0.3,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.3,
                               ),
                             ),
                             const SizedBox(height: 12),
                             Text(
                               'No receipt uploaded',
                               style: TextStyle(
-                                color: theme.colorScheme.onSurface.withOpacity(
-                                  0.4,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.4,
                                 ),
                               ),
                             ),
@@ -866,7 +879,9 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       elevation: 4,
-                      shadowColor: AppColors.purchaserOrange.withOpacity(0.4),
+                      shadowColor: AppColors.purchaserOrange.withValues(
+                        alpha: 0.4,
+                      ),
                     ),
                     child: _isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
@@ -892,6 +907,9 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
       case ProcurementStatus.purchased:
         return Colors.blue;
       case ProcurementStatus.verified:
+      case ProcurementStatus.stocked:
+      case ProcurementStatus.in_transit:
+      case ProcurementStatus.delivered:
         return Colors.green;
       case ProcurementStatus.rejected:
         return Colors.red;
@@ -905,6 +923,9 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
       case ProcurementStatus.purchased:
         return Icons.hourglass_empty;
       case ProcurementStatus.verified:
+      case ProcurementStatus.stocked:
+      case ProcurementStatus.in_transit:
+      case ProcurementStatus.delivered:
         return Icons.check_circle;
       case ProcurementStatus.rejected:
         return Icons.cancel;
@@ -918,6 +939,9 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
       case ProcurementStatus.purchased:
         return '⏳ Under Admin Review';
       case ProcurementStatus.verified:
+      case ProcurementStatus.stocked:
+      case ProcurementStatus.in_transit:
+      case ProcurementStatus.delivered:
         return '✓ Verified & Approved';
       case ProcurementStatus.rejected:
         return '✗ Rejected';
@@ -931,6 +955,9 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
       case ProcurementStatus.purchased:
         return 'Your purchase is being reviewed by admin. You cannot edit this submission.';
       case ProcurementStatus.verified:
+      case ProcurementStatus.stocked:
+      case ProcurementStatus.in_transit:
+      case ProcurementStatus.delivered:
         return 'This purchase has been approved by admin and added to inventory.';
       case ProcurementStatus.rejected:
         return widget.request.adminRemarks ?? 'This purchase was rejected.';

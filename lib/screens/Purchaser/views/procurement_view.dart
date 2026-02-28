@@ -19,7 +19,8 @@ import 'package:ration_aid/theme/app_colors.dart';
 ///   Release button available on claimed-but-not-submitted orders.
 ///   Supervisor (admin) can also force-release from admin panel.
 class ProcurementView extends StatefulWidget {
-  const ProcurementView({super.key});
+  final bool isSupervisor;
+  const ProcurementView({super.key, this.isSupervisor = false});
 
   @override
   State<ProcurementView> createState() => _ProcurementViewState();
@@ -35,7 +36,7 @@ class _ProcurementViewState extends State<ProcurementView>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 2, vsync: this);
+    _tab = TabController(length: widget.isSupervisor ? 3 : 2, vsync: this);
   }
 
   @override
@@ -82,7 +83,7 @@ class _ProcurementViewState extends State<ProcurementView>
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.purchaserOrange.withOpacity(0.12),
+                      color: AppColors.purchaserOrange.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
@@ -107,7 +108,9 @@ class _ProcurementViewState extends State<ProcurementView>
                           'Shared pool · claim any available order',
                           style: TextStyle(
                             fontSize: 12,
-                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                         ),
                       ],
@@ -133,8 +136,8 @@ class _ProcurementViewState extends State<ProcurementView>
                 child: TabBar(
                   controller: _tab,
                   labelColor: Colors.white,
-                  unselectedLabelColor: theme.colorScheme.onSurface.withOpacity(
-                    0.6,
+                  unselectedLabelColor: theme.colorScheme.onSurface.withValues(
+                    alpha: 0.6,
                   ),
                   labelStyle: const TextStyle(
                     fontWeight: FontWeight.w700,
@@ -150,9 +153,11 @@ class _ProcurementViewState extends State<ProcurementView>
                   ),
                   indicatorSize: TabBarIndicatorSize.tab,
                   dividerColor: Colors.transparent,
-                  tabs: const [
-                    Tab(text: '📦 Available Orders'),
-                    Tab(text: '🛒 My Orders'),
+                  tabs: [
+                    const Tab(text: '📦 Available Orders'),
+                    const Tab(text: '🛒 My Orders'),
+                    if (widget.isSupervisor)
+                      const Tab(text: '👥 Active Claims'),
                   ],
                 ),
               ),
@@ -167,6 +172,8 @@ class _ProcurementViewState extends State<ProcurementView>
                 children: [
                   _buildAvailablePool(uid, displayName, theme, isDark),
                   _buildMyOrders(uid, displayName, theme, isDark),
+                  if (widget.isSupervisor)
+                    _buildActiveClaims(uid, displayName, theme, isDark),
                 ],
               ),
             ),
@@ -228,10 +235,12 @@ class _ProcurementViewState extends State<ProcurementView>
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.purchaserOrange.withOpacity(0.25)),
+        border: Border.all(
+          color: AppColors.purchaserOrange.withValues(alpha: 0.25),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -251,7 +260,7 @@ class _ProcurementViewState extends State<ProcurementView>
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.12),
+                    color: Colors.green.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Row(
@@ -279,8 +288,8 @@ class _ProcurementViewState extends State<ProcurementView>
                   ),
                   decoration: BoxDecoration(
                     color: ageHours > 48
-                        ? Colors.red.withOpacity(0.1)
-                        : Colors.orange.withOpacity(0.1),
+                        ? Colors.red.withValues(alpha: 0.1)
+                        : Colors.orange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -315,14 +324,14 @@ class _ProcurementViewState extends State<ProcurementView>
                 Icon(
                   Icons.location_on_outlined,
                   size: 14,
-                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
                 const SizedBox(width: 4),
                 Text(
                   r.familyAddress,
                   style: TextStyle(
                     fontSize: 13,
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
               ],
@@ -338,7 +347,7 @@ class _ProcurementViewState extends State<ProcurementView>
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: theme.scaffoldBackgroundColor.withOpacity(0.6),
+                  color: theme.scaffoldBackgroundColor.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -347,7 +356,7 @@ class _ProcurementViewState extends State<ProcurementView>
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                   ),
                 ),
               ),
@@ -364,7 +373,9 @@ class _ProcurementViewState extends State<ProcurementView>
                       'Budget',
                       style: TextStyle(
                         fontSize: 11,
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                     ),
                     Text(
@@ -562,11 +573,13 @@ class _ProcurementViewState extends State<ProcurementView>
                   color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: theme.dividerColor.withOpacity(0.4),
+                    color: theme.dividerColor.withValues(alpha: 0.4),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+                      color: Colors.black.withValues(
+                        alpha: isDark ? 0.2 : 0.05,
+                      ),
                       blurRadius: 10,
                       offset: const Offset(0, 3),
                     ),
@@ -606,13 +619,17 @@ class _ProcurementViewState extends State<ProcurementView>
                   decoration: InputDecoration(
                     hintText: 'Search by pack or area...',
                     hintStyle: TextStyle(
-                      color: theme.colorScheme.onSurface.withOpacity(0.45),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.45,
+                      ),
                       fontSize: 14,
                     ),
                     prefixIcon: Icon(
                       Icons.search,
                       size: 20,
-                      color: theme.colorScheme.onSurface.withOpacity(0.45),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.45,
+                      ),
                     ),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
@@ -629,13 +646,13 @@ class _ProcurementViewState extends State<ProcurementView>
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(
-                        color: theme.dividerColor.withOpacity(0.5),
+                        color: theme.dividerColor.withValues(alpha: 0.5),
                       ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(
-                        color: theme.dividerColor.withOpacity(0.5),
+                        color: theme.dividerColor.withValues(alpha: 0.5),
                       ),
                     ),
                     focusedBorder: OutlineInputBorder(
@@ -663,9 +680,11 @@ class _ProcurementViewState extends State<ProcurementView>
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.12),
+                    color: Colors.orange.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.orange.withOpacity(0.4)),
+                    border: Border.all(
+                      color: Colors.orange.withValues(alpha: 0.4),
+                    ),
                   ),
                   child: const Row(
                     children: [
@@ -804,6 +823,215 @@ class _ProcurementViewState extends State<ProcurementView>
     );
   }
 
+  // ── Tab 3: Active Claims (Supervisors Only) ──────────────────────────────
+
+  Widget _buildActiveClaims(
+    String uid,
+    String displayName,
+    ThemeData theme,
+    bool isDark,
+  ) {
+    return StreamBuilder<List<ProcurementRequest>>(
+      stream: ProcurementService.streamAllActiveClaims(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: AppColors.purchaserOrange),
+          );
+        }
+        if (snapshot.hasError) return _errorState('${snapshot.error}');
+
+        final all = snapshot.data ?? [];
+        if (all.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.supervised_user_circle_outlined,
+                  size: 64,
+                  color: Colors.blue.withValues(alpha: 0.3),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'No active claims by anyone',
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // Apply search filter
+        final filtered = _searchQuery.isEmpty
+            ? all
+            : all.where((r) {
+                final s = _searchQuery;
+                return r.packName.toLowerCase().contains(s) ||
+                    r.familyAddress.toLowerCase().contains(s) ||
+                    (r.claimedByName?.toLowerCase().contains(s) ?? false);
+              }).toList();
+
+        return Column(
+          children: [
+            // ── Search ────────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: SizedBox(
+                height: 44,
+                child: TextField(
+                  controller: _searchController,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontSize: 14,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Search by pack, area or purchaser...',
+                    hintStyle: TextStyle(
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.45,
+                      ),
+                      fontSize: 14,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      size: 20,
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.45,
+                      ),
+                    ),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: isDark ? const Color(0xFF1E1E2E) : Colors.white,
+                    contentPadding: EdgeInsets.zero,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: theme.dividerColor.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: theme.dividerColor.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: AppColors.purchaserOrange,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                  onChanged: _onSearchChanged,
+                ),
+              ),
+            ),
+
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                itemCount: filtered.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (ctx, i) {
+                  final r = filtered[i];
+                  return ProcurementCard(
+                    request: r,
+                    actionLabel: 'Details',
+                    onTap: () => _handleCardTap(r, displayName),
+                    releaseButton: _buildForceReleaseButton(
+                      r,
+                      displayName,
+                      isDark,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildForceReleaseButton(
+    ProcurementRequest r,
+    String displayName,
+    bool isDark,
+  ) {
+    return IconButton(
+      icon: const Icon(
+        Icons.remove_circle_outline,
+        size: 20,
+        color: Colors.red,
+      ),
+      tooltip: 'Force Unassign',
+      onPressed: () async {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: const Text(
+              'Force Unassign Order?',
+              style: TextStyle(color: Colors.red),
+            ),
+            content: Text(
+              'This will forcibly return the order to the pool, unassigning it from ${r.claimedByName ?? 'the purchaser'}.\n\n'
+              'Only use this if the purchaser has gone AWOL or abandoned the task.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text('Force Unassign'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true || !mounted) return;
+
+        await ProcurementService.forceReleaseRequest(
+          requestId: r.id,
+          adminName: displayName,
+          previousPurchaserName: r.claimedByName ?? 'Unknown',
+        );
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Order forcibly returned to pool.'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   // ── Helper widgets ────────────────────────────────────────────────────────
 
   Widget _statItem(String label, int count, Color color) {
@@ -815,7 +1043,7 @@ class _ProcurementViewState extends State<ProcurementView>
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w900,
-              color: count > 0 ? color : color.withOpacity(0.4),
+              color: count > 0 ? color : color.withValues(alpha: 0.4),
             ),
           ),
           const SizedBox(height: 2),
@@ -823,7 +1051,9 @@ class _ProcurementViewState extends State<ProcurementView>
             label,
             style: TextStyle(
               fontSize: 11,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.5),
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -832,8 +1062,11 @@ class _ProcurementViewState extends State<ProcurementView>
     );
   }
 
-  Widget _divider() =>
-      Container(height: 32, width: 1, color: Colors.grey.withOpacity(0.2));
+  Widget _divider() => Container(
+    height: 32,
+    width: 1,
+    color: Colors.grey.withValues(alpha: 0.2),
+  );
 
   Widget _emptyPoolState() {
     return Center(
@@ -843,7 +1076,7 @@ class _ProcurementViewState extends State<ProcurementView>
           Icon(
             Icons.check_circle_outline,
             size: 64,
-            color: Colors.green.withOpacity(0.3),
+            color: Colors.green.withValues(alpha: 0.3),
           ),
           const SizedBox(height: 16),
           const Text(
@@ -857,7 +1090,10 @@ class _ProcurementViewState extends State<ProcurementView>
           const SizedBox(height: 6),
           Text(
             'New pack orders appear here when families are fully funded.',
-            style: TextStyle(fontSize: 13, color: Colors.grey.withOpacity(0.7)),
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.withValues(alpha: 0.7),
+            ),
             textAlign: TextAlign.center,
           ),
         ],
@@ -873,7 +1109,7 @@ class _ProcurementViewState extends State<ProcurementView>
           Icon(
             Icons.shopping_cart_outlined,
             size: 64,
-            color: Colors.grey.withOpacity(0.2),
+            color: Colors.grey.withValues(alpha: 0.2),
           ),
           const SizedBox(height: 16),
           const Text(
@@ -887,7 +1123,10 @@ class _ProcurementViewState extends State<ProcurementView>
           const SizedBox(height: 6),
           Text(
             'Claim an order from the Available Orders tab.',
-            style: TextStyle(fontSize: 13, color: Colors.grey.withOpacity(0.7)),
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.withValues(alpha: 0.7),
+            ),
             textAlign: TextAlign.center,
           ),
         ],
@@ -905,7 +1144,7 @@ class _ProcurementViewState extends State<ProcurementView>
             Icon(
               Icons.wifi_off_rounded,
               size: 56,
-              color: Colors.red.withOpacity(0.5),
+              color: Colors.red.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             const Text(

@@ -10,9 +10,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
 class PurchaserHomeView extends StatelessWidget {
+  final bool isSupervisor;
   final ValueChanged<PurchaserSection> onSectionChange;
 
-  const PurchaserHomeView({super.key, required this.onSectionChange});
+  const PurchaserHomeView({
+    super.key,
+    required this.isSupervisor,
+    required this.onSectionChange,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -23,123 +28,169 @@ class PurchaserHomeView extends StatelessWidget {
       return const Center(child: Text('Please log in'));
     }
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        await Future.delayed(const Duration(seconds: 1));
-      },
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Welcome back,',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
-                      ),
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Welcome back,',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
-                    Text(
-                      user.displayName?.split(' ').first ?? 'Purchaser',
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                    ),
-                  ],
-                ),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.purchaserOrange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
-                    Icons.dashboard_rounded,
-                    color: AppColors.purchaserOrange,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // 1. Main Stats & Financial Overview
-            StreamBuilder<List<ProcurementRequest>>(
-              stream: ProcurementService.getAllRequestsStream(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: LinearProgressIndicator());
-                }
-                final requests = snapshot.data!;
-                return _buildStatsandFinance(context, requests, theme);
-              },
-            ),
-
-            const SizedBox(height: 24),
-
-            // 2. Recent Activity Feed
-            Text(
-              'Recent Activity',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 12),
-            StreamBuilder<QuerySnapshot>(
-              stream: NotificationService.streamPurchaserNotifications(
-                user.uid,
-              ),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: CircularProgressIndicator(),
-                    ),
-                  );
-                }
-
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return FrostedPanel(
-                    padding: const EdgeInsets.all(24),
-                    child: Center(
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.notifications_none,
-                            size: 40,
-                            color: theme.disabledColor,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'No recent activity',
-                            style: TextStyle(color: theme.disabledColor),
-                          ),
-                        ],
+                  Row(
+                    children: [
+                      Text(
+                        user.displayName?.split(' ').first ?? 'Purchaser',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
-                    ),
-                  );
-                }
+                      if (isSupervisor) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.workspace_premium,
+                            size: 16,
+                            color: Colors.amber,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.purchaserOrange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.dashboard_rounded,
+                  color: AppColors.purchaserOrange,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
 
-                final docs = snapshot.data!.docs.take(5).toList();
-
-                return Column(
-                  children: docs.map((doc) {
-                    final data = doc.data() as Map<String, dynamic>;
-                    return _buildActivityItem(context, data, theme);
-                  }).toList(),
+          // 1. Main Stats & Financial Overview
+          StreamBuilder<List<ProcurementRequest>>(
+            stream: ProcurementService.getSmartHomeStatsStream(
+              user.uid,
+              isSupervisor,
+            ),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        color: Colors.red[400],
+                        size: 32,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Could not load stats',
+                        style: TextStyle(color: Colors.red[400]),
+                      ),
+                    ],
+                  ),
                 );
-              },
+              }
+              if (!snapshot.hasData) {
+                return const Center(child: LinearProgressIndicator());
+              }
+              final requests = snapshot.data!;
+              return _buildStatsandFinance(context, requests, theme);
+            },
+          ),
+
+          const SizedBox(height: 24),
+
+          // 2. Recent Activity Feed
+          Text(
+            'Recent Activity',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+          StreamBuilder<QuerySnapshot>(
+            stream: NotificationService.streamPurchaserNotifications(user.uid),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              }
+
+              if (snapshot.hasError) {
+                return FrostedPanel(
+                  padding: const EdgeInsets.all(24),
+                  child: Center(
+                    child: Text(
+                      'Could not load activity',
+                      style: TextStyle(color: Colors.red[400]),
+                    ),
+                  ),
+                );
+              }
+
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return FrostedPanel(
+                  padding: const EdgeInsets.all(24),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.notifications_none,
+                          size: 40,
+                          color: theme.disabledColor,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No recent activity',
+                          style: TextStyle(color: theme.disabledColor),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              final docs = snapshot.data!.docs.take(5).toList();
+
+              return Column(
+                children: docs.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  return _buildActivityItem(context, data, theme);
+                }).toList(),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -191,15 +242,20 @@ class PurchaserHomeView extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [theme.cardColor, theme.cardColor.withOpacity(0.95)],
+              colors: [
+                theme.cardColor,
+                theme.cardColor.withValues(alpha: 0.95),
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
+            border: Border.all(
+              color: theme.dividerColor.withValues(alpha: 0.5),
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -300,7 +356,9 @@ class PurchaserHomeView extends StatelessWidget {
                     child: Text(
                       'spent this month',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                     ),
                   ),
@@ -310,9 +368,15 @@ class PurchaserHomeView extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
-                  value:
-                      0.7, // Functionally placeholder/aesthetic for now as no hard limit
-                  backgroundColor: theme.dividerColor.withOpacity(0.2),
+                  value: verifiedRequests.isEmpty
+                      ? 0.0
+                      : (monthlySpent /
+                                (verifiedRequests.fold<double>(
+                                  0,
+                                  (s, r) => s + r.budgetLimit,
+                                )))
+                            .clamp(0.0, 1.0),
+                  backgroundColor: theme.dividerColor.withValues(alpha: 0.2),
                   color: Colors.green,
                   minHeight: 8,
                 ),
@@ -352,7 +416,9 @@ class PurchaserHomeView extends StatelessWidget {
           label,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             fontWeight: FontWeight.w600,
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.6),
           ),
         ),
       ],
@@ -368,7 +434,7 @@ class PurchaserHomeView extends StatelessWidget {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Colors.red.withOpacity(0.1),
+          color: Colors.red.withValues(alpha: 0.1),
           shape: BoxShape.circle,
         ),
         child: const Icon(Icons.priority_high, size: 16, color: Colors.red),
@@ -418,16 +484,16 @@ class PurchaserHomeView extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: theme.cardColor.withOpacity(isNew ? 1.0 : 0.6),
+        color: theme.cardColor.withValues(alpha: isNew ? 1.0 : 0.6),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isNew ? color.withOpacity(0.3) : Colors.transparent,
+          color: isNew ? color.withValues(alpha: 0.3) : Colors.transparent,
           width: 1,
         ),
         boxShadow: isNew
             ? [
                 BoxShadow(
-                  color: color.withOpacity(0.05),
+                  color: color.withValues(alpha: 0.05),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -438,7 +504,7 @@ class PurchaserHomeView extends StatelessWidget {
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
           child: Icon(icon, color: color, size: 20),
@@ -460,7 +526,7 @@ class PurchaserHomeView extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12,
-                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                 ),
               ),
             const SizedBox(height: 4),

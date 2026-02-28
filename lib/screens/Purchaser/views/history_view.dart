@@ -7,16 +7,18 @@ import 'package:ration_aid/theme/app_colors.dart';
 import 'package:intl/intl.dart';
 import 'package:ration_aid/widgets/frosted_panel.dart';
 import 'package:ration_aid/services/report_pdf_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class HistoryView extends StatefulWidget {
-  const HistoryView({super.key});
+  final bool isSupervisor;
+  const HistoryView({super.key, required this.isSupervisor});
 
   @override
   State<HistoryView> createState() => _HistoryViewState();
 }
 
 class _HistoryViewState extends State<HistoryView> {
-  String _filterStatus = 'All'; // All, Verified, Rejected
+  String _filterStatus = 'All'; // All, Active, Delivered, Rejected
 
   // Search state
   final TextEditingController _searchController = TextEditingController();
@@ -71,9 +73,13 @@ class _HistoryViewState extends State<HistoryView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dateFormat = DateFormat('MMM dd, yyyy');
+    final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return StreamBuilder<List<ProcurementRequest>>(
-      stream: ProcurementService.getAllRequestsStream(),
+      stream: ProcurementService.getSmartHistoryStream(
+        uid,
+        widget.isSupervisor,
+      ),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -81,30 +87,36 @@ class _HistoryViewState extends State<HistoryView> {
 
         final allRequests = snapshot.data ?? [];
 
-        // 1. Base Filter: Only finalize (Verified or Rejected)
+        // 1. Base Filter: Post-purchase processes
         var historyRequests = allRequests.where((r) {
           return r.status == ProcurementStatus.verified ||
-              r.status == ProcurementStatus.rejected;
+              r.status == ProcurementStatus.stocked ||
+              r.status == ProcurementStatus.delivered ||
+              r.status == ProcurementStatus.rejected ||
+              r.status == ProcurementStatus.issue_reported ||
+              r.status == ProcurementStatus.written_off;
         }).toList();
 
         // 2. Stats Calculation (Before View Filters)
-        // Unused: final totalAllTime = historyRequests.length;
+        final processedCountAllTime = historyRequests.length;
         final totalValueAllTime = historyRequests.fold<double>(
           0,
           (sum, r) => sum + r.totalSpent,
         );
-        final verifiedCountAllTime = historyRequests
-            .where((r) => r.status == ProcurementStatus.verified)
+        final activeCountAllTime = historyRequests
+            .where((r) => r.status == ProcurementStatus.verified || r.status == ProcurementStatus.stocked)
             .length;
-        final rejectedCountAllTime = historyRequests
-            .where((r) => r.status == ProcurementStatus.rejected)
+        final deliveredCountAllTime = historyRequests
+            .where((r) => r.status == ProcurementStatus.delivered)
             .length;
 
         // 3. Apply View Filters (Status)
         if (_filterStatus != 'All') {
           historyRequests = historyRequests.where((r) {
-            if (_filterStatus == 'Verified')
-              return r.status == ProcurementStatus.verified;
+            if (_filterStatus == 'Active')
+              return r.status == ProcurementStatus.verified || r.status == ProcurementStatus.stocked || r.status == ProcurementStatus.issue_reported;
+            if (_filterStatus == 'Delivered')
+              return r.status == ProcurementStatus.delivered || r.status == ProcurementStatus.written_off;
             if (_filterStatus == 'Rejected')
               return r.status == ProcurementStatus.rejected;
             return true;
@@ -172,18 +184,18 @@ class _HistoryViewState extends State<HistoryView> {
                   gradient: LinearGradient(
                     colors: [
                       theme.cardColor,
-                      theme.cardColor.withOpacity(0.95),
+                      theme.cardColor.withValues(alpha: 0.95),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: theme.dividerColor.withOpacity(0.5),
+                    color: theme.dividerColor.withValues(alpha: 0.5),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withValues(alpha: 0.03),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -203,29 +215,43 @@ class _HistoryViewState extends State<HistoryView> {
                     Container(
                       height: 32,
                       width: 1,
-                      color: theme.dividerColor.withOpacity(0.5),
+                      color: theme.dividerColor.withValues(alpha: 0.5),
                     ),
-                    // Verified
+                    // Processed
                     Expanded(
                       child: _buildStatItem(
                         theme,
-                        verifiedCountAllTime.toString(),
-                        'Verified',
-                        Colors.green,
+                        processedCountAllTime.toString(),
+                        'Processed',
+                        Colors.blue,
                       ),
                     ),
                     Container(
                       height: 32,
                       width: 1,
-                      color: theme.dividerColor.withOpacity(0.5),
+                      color: theme.dividerColor.withValues(alpha: 0.5),
                     ),
-                    // Rejected
+                    // Active
                     Expanded(
                       child: _buildStatItem(
                         theme,
-                        rejectedCountAllTime.toString(),
-                        'Rejected',
-                        Colors.red,
+                        activeCountAllTime.toString(),
+                        'Active',
+                        Colors.orange,
+                      ),
+                    ),
+                    Container(
+                      height: 32,
+                      width: 1,
+                      color: theme.dividerColor.withValues(alpha: 0.5),
+                    ),
+                    // Delivered
+                    Expanded(
+                      child: _buildStatItem(
+                        theme,
+                        deliveredCountAllTime.toString(),
+                        'Delivered',
+                        Colors.green,
                       ),
                     ),
                   ],
@@ -253,13 +279,17 @@ class _HistoryViewState extends State<HistoryView> {
                         decoration: InputDecoration(
                           hintText: 'Search history...',
                           hintStyle: TextStyle(
-                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.5,
+                            ),
                             fontSize: 14,
                           ),
                           prefixIcon: Icon(
                             Icons.search,
                             size: 20,
-                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                           filled: true,
                           fillColor: theme.cardColor,
@@ -269,13 +299,13 @@ class _HistoryViewState extends State<HistoryView> {
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: theme.dividerColor.withOpacity(0.6),
+                              color: theme.dividerColor.withValues(alpha: 0.6),
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: theme.dividerColor.withOpacity(0.6),
+                              color: theme.dividerColor.withValues(alpha: 0.6),
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
@@ -312,15 +342,19 @@ class _HistoryViewState extends State<HistoryView> {
                       itemBuilder: (context) => [
                         const PopupMenuItem(
                           value: 'All',
-                          child: Text('All Status'),
+                          child: Text('All Processes'),
                         ),
                         const PopupMenuItem(
-                          value: 'Verified',
-                          child: Text('Verified Only'),
+                          value: 'Active',
+                          child: Text('Verified / Active'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'Delivered',
+                          child: Text('Delivered Only'),
                         ),
                         const PopupMenuItem(
                           value: 'Rejected',
-                          child: Text('Rejected Only'),
+                          child: Text('Rejected'),
                         ),
                       ],
                       child: Icon(
@@ -329,7 +363,7 @@ class _HistoryViewState extends State<HistoryView> {
                             : Icons.filter_list_alt,
                         size: 20,
                         color: _filterStatus == 'All'
-                            ? theme.colorScheme.onSurface.withOpacity(0.7)
+                            ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
                             : AppColors.purchaserOrange,
                       ),
                     ),
@@ -417,7 +451,7 @@ class _HistoryViewState extends State<HistoryView> {
                         Icons.calendar_month_outlined,
                         size: 20,
                         color: _selectedDateRange == null
-                            ? theme.colorScheme.onSurface.withOpacity(0.7)
+                            ? theme.colorScheme.onSurface.withValues(alpha: 0.7)
                             : AppColors.purchaserOrange,
                       ),
                     ),
@@ -438,7 +472,7 @@ class _HistoryViewState extends State<HistoryView> {
                     'Showing $filteredCount records',
                     style: TextStyle(
                       fontSize: 12,
-                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
                   if (_selectedDateRange != null)
@@ -546,7 +580,7 @@ class _HistoryViewState extends State<HistoryView> {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: theme.colorScheme.onSurface.withOpacity(0.6),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -571,7 +605,7 @@ class _HistoryViewState extends State<HistoryView> {
         border: Border.all(
           color: isActive
               ? AppColors.purchaserOrange
-              : theme.dividerColor.withOpacity(0.6),
+              : theme.dividerColor.withValues(alpha: 0.6),
         ),
       ),
       child: Center(child: child),
@@ -624,8 +658,8 @@ class _HistoryViewState extends State<HistoryView> {
                     ),
                     decoration: BoxDecoration(
                       color: request.status == ProcurementStatus.verified
-                          ? Colors.green.withOpacity(0.1)
-                          : Colors.red.withOpacity(0.1),
+                          ? Colors.green.withValues(alpha: 0.1)
+                          : Colors.red.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -709,7 +743,9 @@ class _HistoryViewState extends State<HistoryView> {
                   Container(
                     decoration: BoxDecoration(
                       border: Border.all(
-                        color: Theme.of(context).dividerColor.withOpacity(0.5),
+                        color: Theme.of(
+                          context,
+                        ).dividerColor.withValues(alpha: 0.5),
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),

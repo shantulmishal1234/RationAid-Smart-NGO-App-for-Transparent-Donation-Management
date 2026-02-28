@@ -1,14 +1,21 @@
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/screens/Admin/utils/admin_helpers.dart';
 import 'package:ration_aid/screens/Admin/widgets/stat_card.dart';
 import 'package:ration_aid/screens/Admin/widgets/alert_tile.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
+import 'package:ration_aid/screens/Admin/widgets/admin_demographics_chart.dart';
+import 'package:ration_aid/screens/Admin/widgets/admin_funding_progress_bar.dart';
+import 'package:ration_aid/screens/Admin/models/admin_enums.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 
 /// Dashboard section showing overview statistics and alerts
 /// Optimized: Uses StatefulWidget to cache Future and prevent duplicate API calls
 class DashboardSection extends StatefulWidget {
-  const DashboardSection({super.key});
+  final void Function(AdminSection)? onSectionChanged;
+
+  const DashboardSection({super.key, this.onSectionChanged});
 
   @override
   State<DashboardSection> createState() => _DashboardSectionState();
@@ -17,11 +24,26 @@ class DashboardSection extends StatefulWidget {
 class _DashboardSectionState extends State<DashboardSection> {
   // Store future as stable reference to prevent recreation on rebuilds
   late Future<Map<String, int>> _statsFuture;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadStats();
+    // Auto-refresh stats every 60 seconds
+    _refreshTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (mounted) {
+        setState(() {
+          _loadStats(forceRefresh: true);
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   void _loadStats({bool forceRefresh = false}) {
@@ -63,8 +85,8 @@ class _DashboardSectionState extends State<DashboardSection> {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          AppColors.primaryBlue.withOpacity(0.18),
-                          AppColors.accentGreen.withOpacity(0.12),
+                          AppColors.primaryBlue.withValues(alpha: 0.18),
+                          AppColors.accentGreen.withValues(alpha: 0.12),
                         ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -72,7 +94,7 @@ class _DashboardSectionState extends State<DashboardSection> {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primaryBlue.withOpacity(0.18),
+                          color: AppColors.primaryBlue.withValues(alpha: 0.18),
                           blurRadius: 18,
                           offset: const Offset(0, 8),
                         ),
@@ -101,7 +123,9 @@ class _DashboardSectionState extends State<DashboardSection> {
                         Text(
                           'Snapshot of supported families and your frontline team.',
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
                       ],
@@ -156,31 +180,40 @@ class _DashboardSectionState extends State<DashboardSection> {
                     final famTotal = data['fam_total']!;
                     final famAccepted = data['fam_accepted']!;
                     final famPending = data['fam_pending']!;
-                    final memTotal = data['mem_total']!;
-                    final memAdmins = data['mem_admins']!;
-                    final memVolunteers = data['mem_volunteers']!;
+                    final memTotalStaff = data['mem_total_staff'] ?? 0;
+                    final memDistributors = data['mem_distributors'] ?? 0;
+                    final memPurchasers = data['mem_purchasers'] ?? 0;
 
                     return Row(
                       children: [
                         Expanded(
-                          child: StatCard(
-                            title: 'Families',
-                            value: famTotal.toString(),
-                            subtitle:
-                                '$famAccepted supported • $famPending pending',
-                            icon: Icons.family_restroom,
-                            color: AppColors.primaryBlue,
+                          child: GestureDetector(
+                            onTap: () => widget.onSectionChanged?.call(
+                              AdminSection.households,
+                            ),
+                            child: StatCard(
+                              title: 'Families',
+                              value: famTotal.toString(),
+                              subtitle:
+                                  '$famAccepted supported • $famPending pending',
+                              icon: Icons.family_restroom,
+                              color: AppColors.primaryBlue,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: StatCard(
-                            title: 'Volunteers & staff',
-                            value: memTotal.toString(),
-                            subtitle:
-                                '$memAdmins admins • $memVolunteers volunteers',
-                            icon: Icons.group,
-                            color: AppColors.accentGreen,
+                          child: GestureDetector(
+                            onTap: () =>
+                                widget.onSectionChanged?.call(AdminSection.hrm),
+                            child: StatCard(
+                              title: 'Team Members',
+                              value: memTotalStaff.toString(),
+                              subtitle:
+                                  '$memDistributors distributors • $memPurchasers purchasers',
+                              icon: Icons.group,
+                              color: AppColors.accentGreen,
+                            ),
                           ),
                         ),
                       ],
@@ -200,29 +233,66 @@ class _DashboardSectionState extends State<DashboardSection> {
                     return Row(
                       children: [
                         Expanded(
-                          child: StatCard(
-                            title: 'Donations',
-                            value: (data['donations_total'] ?? 0).toString(),
-                            subtitle:
-                                '${data['donations_to_review'] ?? 0} to review',
-                            icon: Icons.volunteer_activism,
-                            color: const Color(0xFFFFA726),
+                          child: GestureDetector(
+                            onTap: () => widget.onSectionChanged?.call(
+                              AdminSection.donations,
+                            ),
+                            child: StatCard(
+                              title: 'Donations',
+                              value: (data['donations_total'] ?? 0).toString(),
+                              subtitle:
+                                  '${data['donations_to_review'] ?? 0} to review',
+                              icon: Icons.volunteer_activism,
+                              color: const Color(0xFFFFA726),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: StatCard(
-                            title: 'Stock Available',
-                            value: (data['stock_available'] ?? 0).toString(),
-                            subtitle: 'Verified packs in inventory',
-                            icon: Icons.inventory_2,
-                            color: const Color(0xFF7E57C2),
+                          child: GestureDetector(
+                            onTap: () => widget.onSectionChanged?.call(
+                              AdminSection.inventoryIssues,
+                            ),
+                            child: StatCard(
+                              title: 'Stock Available',
+                              value: (data['stock_available'] ?? 0).toString(),
+                              subtitle: 'Verified packs in inventory',
+                              icon: Icons.inventory_2,
+                              color: const Color(0xFF7E57C2),
+                            ),
                           ),
                         ),
                       ],
                     );
                   },
                 ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Quick Actions Row
+              _buildQuickActionsRow(context, theme),
+
+              const SizedBox(height: 16),
+
+              // Funding Progress Bar
+              const AdminFundingProgressBar(),
+
+              const SizedBox(height: 16),
+
+              // Visual Demographics Chart
+              FutureBuilder<Map<String, int>>(
+                future: _statsFuture,
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const SizedBox.shrink();
+                  final data = snapshot.data!;
+                  return AdminDemographicsChart(
+                    accepted: data['fam_accepted'] ?? 0,
+                    pending: data['fam_pending'] ?? 0,
+                    rejected: data['fam_rejected'] ?? 0,
+                    discarded: data['fam_discarded'] ?? 0,
+                  );
+                },
               ),
 
               const SizedBox(height: 22),
@@ -244,7 +314,7 @@ class _DashboardSectionState extends State<DashboardSection> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: cs.primaryContainer.withOpacity(0.7),
+                      color: cs.primaryContainer.withValues(alpha: 0.7),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
@@ -259,37 +329,8 @@ class _DashboardSectionState extends State<DashboardSection> {
               ),
               const SizedBox(height: 10),
 
-              // Static alerts
-              FrostedPanel(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                child: const Column(
-                  children: [
-                    AlertTile(
-                      icon: Icons.warning_amber_rounded,
-                      text:
-                          'Heatwave alert: Prioritize water distribution in Barkat Market and Shahdara.',
-                      color: Color(0xFFEF5350),
-                    ),
-                    Divider(height: 1),
-                    AlertTile(
-                      icon: Icons.inventory_2_rounded,
-                      text:
-                          'Stock check required for flour and cooking oil in Johar Town warehouse.',
-                      color: AppColors.primaryBlue,
-                    ),
-                    Divider(height: 1),
-                    AlertTile(
-                      icon: Icons.bug_report,
-                      text:
-                          'One system error logged in audit trail. Review the HRM report for details.',
-                      color: Color(0xFFFFA726),
-                    ),
-                  ],
-                ),
-              ),
+              // Live alerts
+              _buildLiveAlerts(theme),
 
               const SizedBox(height: 18),
 
@@ -302,41 +343,179 @@ class _DashboardSectionState extends State<DashboardSection> {
                 ),
               ),
               const SizedBox(height: 10),
-              FrostedPanel(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                child: const Column(
-                  children: [
-                    AlertTile(
-                      icon: Icons.checklist_rounded,
-                      text:
-                          'Review at least 10 pending family applications before 6 PM.',
-                      color: AppColors.accentGreen,
-                    ),
-                    Divider(height: 1),
-                    AlertTile(
-                      icon: Icons.verified,
-                      text:
-                          'Verify today’s high‑value donations and update donors via SMS or email.',
-                      color: Color(0xFF7E57C2),
-                    ),
-                    Divider(height: 1),
-                    AlertTile(
-                      icon: Icons.group,
-                      text:
-                          'Confirm tomorrow’s volunteer rosters for Model Town and Gulberg routes.',
-                      color: AppColors.primaryBlue,
-                    ),
-                  ],
-                ),
-              ),
+              // Live tasks
+              _buildLiveTasks(theme),
               const SizedBox(height: 100),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildQuickActionsRow(BuildContext context, ThemeData theme) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: [
+          _QuickActionButton(
+            icon: Icons.person_add_rounded,
+            label: 'Add Member',
+            color: AppColors.primaryBlue,
+            onTap: () => widget.onSectionChanged?.call(AdminSection.hrm),
+          ),
+          const SizedBox(width: 12),
+          _QuickActionButton(
+            icon: Icons.receipt_long_rounded,
+            label: 'Verify Purchases',
+            color: const Color(0xFFFFA726),
+            onTap: () =>
+                widget.onSectionChanged?.call(AdminSection.purchaseApproval),
+          ),
+          const SizedBox(width: 12),
+          _QuickActionButton(
+            icon: Icons.history_rounded,
+            label: 'Audit Trail',
+            color: const Color(0xFF7E57C2),
+            onTap: () => widget.onSectionChanged?.call(AdminSection.audit),
+          ),
+          const SizedBox(width: 12),
+          _QuickActionButton(
+            icon: Icons.bar_chart_rounded,
+            label: 'Reports',
+            color: AppColors.accentGreen,
+            onTap: () => widget.onSectionChanged?.call(AdminSection.reports),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLiveAlerts(ThemeData theme) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('procurement_requests')
+          .where('status', isEqualTo: 'issue_reported')
+          .orderBy('createdAt', descending: true)
+          .limit(3)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(8.0),
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          return FrostedPanel(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: AlertTile(
+              icon: Icons.error_outline,
+              text: 'Could not load alerts. Pull to refresh.',
+              color: const Color(0xFFEF5350),
+            ),
+          );
+        }
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return const FrostedPanel(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: AlertTile(
+              icon: Icons.check_circle_outline,
+              text: 'No active procurement issues at the moment.',
+              color: AppColors.accentGreen,
+            ),
+          );
+        }
+
+        return FrostedPanel(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Column(
+            children: docs.map((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              final pack = data['packName'] ?? 'Unknown Pack';
+              final area = data['familyAddress'] ?? '';
+              return Column(
+                children: [
+                  AlertTile(
+                    icon: Icons.warning_amber_rounded,
+                    text: 'Issue reported for $pack delivery in $area.',
+                    color: const Color(0xFFEF5350),
+                  ),
+                  if (doc.id != docs.last.id) const Divider(height: 1),
+                ],
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLiveTasks(ThemeData theme) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('donations')
+          .where('status', whereIn: ['pending', 'under_verification'])
+          .limit(3)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(8.0),
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          return FrostedPanel(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: AlertTile(
+              icon: Icons.error_outline,
+              text: 'Could not load tasks. Pull to refresh.',
+              color: const Color(0xFFEF5350),
+            ),
+          );
+        }
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return const FrostedPanel(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: AlertTile(
+              icon: Icons.check_circle_outline,
+              text: 'All donations are verified and up to date.',
+              color: AppColors.accentGreen,
+            ),
+          );
+        }
+
+        return FrostedPanel(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Column(
+            children: docs.map((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              final donor = data['donorName'] ?? 'Unknown';
+              final amountStr = data['donationType'] == 'in_kind'
+                  ? 'In-kind items'
+                  : 'Rs ${(data['amount'] ?? 0).toStringAsFixed(0)}';
+              return Column(
+                children: [
+                  AlertTile(
+                    icon: Icons.pending_actions,
+                    text: 'Verify donation from $donor: $amountStr.',
+                    color: const Color(0xFFFFA726),
+                  ),
+                  if (doc.id != docs.last.id) const Divider(height: 1),
+                ],
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 }
@@ -353,10 +532,63 @@ class _SkeletonStatCard extends StatelessWidget {
     return Container(
       height: 90,
       decoration: BoxDecoration(
-        color: theme.cardColor.withOpacity(isDark ? 0.3 : 0.6),
+        color: theme.cardColor.withValues(alpha: isDark ? 0.3 : 0.6),
         borderRadius: BorderRadius.circular(20),
       ),
       child: const Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+    );
+  }
+}
+
+class _QuickActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _QuickActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(right: 4.0),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            width: 100,
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: color.withValues(alpha: 0.2)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: color, size: 28),
+                const SizedBox(height: 8),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

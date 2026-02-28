@@ -204,7 +204,7 @@ class _FamilySelectionCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.donorGreen.withOpacity(0.15),
+                  color: AppColors.donorGreen.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -294,7 +294,7 @@ class _GeneralReliefCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 4,
-      shadowColor: AppColors.donorGreen.withOpacity(0.3),
+      shadowColor: AppColors.donorGreen.withValues(alpha: 0.3),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: onSelect,
@@ -306,7 +306,7 @@ class _GeneralReliefCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
+                  color: Colors.orange.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(

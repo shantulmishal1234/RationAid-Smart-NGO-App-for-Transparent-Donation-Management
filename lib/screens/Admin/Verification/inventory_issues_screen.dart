@@ -50,19 +50,19 @@ class _InventoryIssuesScreenState extends State<InventoryIssuesScreen> {
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 16),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surface.withOpacity(0.5),
+                    color: theme.colorScheme.surface.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: theme.dividerColor.withOpacity(0.1),
+                      color: theme.dividerColor.withValues(alpha: 0.1),
                     ),
                   ),
                   child: TabBar(
                     indicatorSize: TabBarIndicatorSize.tab,
                     indicator: BoxDecoration(
-                      color: theme.primaryColor.withOpacity(0.1),
+                      color: theme.primaryColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: theme.primaryColor.withOpacity(0.2),
+                        color: theme.primaryColor.withValues(alpha: 0.2),
                       ),
                     ),
                     labelColor: theme.primaryColor,
@@ -82,11 +82,15 @@ class _InventoryIssuesScreenState extends State<InventoryIssuesScreen> {
 
                 // Tab Views
                 Expanded(
-                  child: TabBarView(
-                    children: [
-                      _buildPendingList(theme),
-                      _buildHistoryList(theme),
-                    ],
+                  child: FrostedPanel(
+                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    padding: EdgeInsets.zero,
+                    child: TabBarView(
+                      children: [
+                        _buildPendingList(theme),
+                        _buildHistoryList(theme),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -196,7 +200,7 @@ class _InventoryIssuesScreenState extends State<InventoryIssuesScreen> {
         });
 
         return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          padding: const EdgeInsets.all(12),
           itemCount: requests.length,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
@@ -247,7 +251,7 @@ class _InventoryIssuesScreenState extends State<InventoryIssuesScreen> {
           return _buildEmptyState(theme, 'No history found');
 
         return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          padding: const EdgeInsets.all(12),
           itemCount: requests.length,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
@@ -267,7 +271,7 @@ class _InventoryIssuesScreenState extends State<InventoryIssuesScreen> {
           Icon(
             Icons.check_circle_outline,
             size: 48,
-            color: theme.disabledColor.withOpacity(0.5),
+            color: theme.disabledColor.withValues(alpha: 0.5),
           ),
           const SizedBox(height: 12),
           Text(
@@ -310,20 +314,8 @@ class _InventoryIssuesScreenState extends State<InventoryIssuesScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isHistory
-              ? theme.dividerColor.withOpacity(0.3)
-              : statusColor.withOpacity(0.3),
-        ),
-        boxShadow: [
-          if (!isHistory)
-            BoxShadow(
-              color: statusColor.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-        ],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,7 +325,9 @@ class _InventoryIssuesScreenState extends State<InventoryIssuesScreen> {
             children: [
               CircleAvatar(
                 radius: 12,
-                backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+                backgroundColor: theme.colorScheme.primary.withValues(
+                  alpha: 0.1,
+                ),
                 child: Text(
                   (request.issueReportedBy ?? 'U')[0].toUpperCase(),
                   style: TextStyle(
@@ -369,7 +363,7 @@ class _InventoryIssuesScreenState extends State<InventoryIssuesScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.error.withOpacity(0.1),
+                  color: theme.colorScheme.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -396,7 +390,7 @@ class _InventoryIssuesScreenState extends State<InventoryIssuesScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.1),
+                  color: statusColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(statusIcon, color: statusColor, size: 20),
@@ -415,7 +409,7 @@ class _InventoryIssuesScreenState extends State<InventoryIssuesScreen> {
                           ),
                           decoration: BoxDecoration(
                             border: Border.all(
-                              color: statusColor.withOpacity(0.5),
+                              color: statusColor.withValues(alpha: 0.5),
                             ),
                             borderRadius: BorderRadius.circular(4),
                           ),
@@ -446,7 +440,9 @@ class _InventoryIssuesScreenState extends State<InventoryIssuesScreen> {
                     Text(
                       request.issueReason ?? "No reason provided",
                       style: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
+                        ),
                         fontSize: 13,
                         fontStyle: FontStyle.italic,
                       ),
@@ -536,9 +532,9 @@ class _InventoryIssuesScreenState extends State<InventoryIssuesScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.withOpacity(0.3)),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [

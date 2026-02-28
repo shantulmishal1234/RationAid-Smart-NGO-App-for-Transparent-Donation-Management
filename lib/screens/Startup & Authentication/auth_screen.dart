@@ -277,19 +277,19 @@ class _AuthScreenState extends State<AuthScreen>
                         decoration: BoxDecoration(
                           color: Theme.of(
                             context,
-                          ).cardColor.withOpacity(isDark ? 0.6 : 0.82),
+                          ).cardColor.withValues(alpha: isDark ? 0.6 : 0.82),
                           borderRadius: BorderRadius.circular(26),
                           border: Border.all(
                             color: isDark
-                                ? Colors.white.withOpacity(0.1)
-                                : Colors.white.withOpacity(0.7),
+                                ? Colors.white.withValues(alpha: 0.1)
+                                : Colors.white.withValues(alpha: 0.7),
                             width: 0.8,
                           ),
                           boxShadow: [
                             BoxShadow(
                               color: isDark
-                                  ? Colors.black.withOpacity(0.3)
-                                  : Colors.black.withOpacity(0.06),
+                                  ? Colors.black.withValues(alpha: 0.3)
+                                  : Colors.black.withValues(alpha: 0.06),
                               blurRadius: 18,
                               offset: const Offset(0, 10),
                             ),
@@ -323,7 +323,7 @@ class _AuthScreenState extends State<AuthScreen>
                                 fontSize: 14,
                                 color: Theme.of(
                                   context,
-                                ).textTheme.bodyMedium?.color?.withOpacity(0.7),
+                                ).textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                               ),
                             ),
                             const SizedBox(height: 24),
@@ -613,7 +613,7 @@ class _AuthScreenState extends State<AuthScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? Colors.green[900]!.withOpacity(0.3) : Colors.green[50],
+        color: isDark ? Colors.green[900]!.withValues(alpha: 0.3) : Colors.green[50],
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDark ? Colors.green[800]! : Colors.green[200]!,
@@ -680,7 +680,7 @@ class _AuthScreenState extends State<AuthScreen>
               borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                  color: Theme.of(context).primaryColor.withOpacity(0.32),
+                  color: Theme.of(context).primaryColor.withValues(alpha: 0.32),
                   blurRadius: 10,
                   offset: const Offset(0, 6),
                 ),

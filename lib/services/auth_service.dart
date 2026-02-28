@@ -38,6 +38,8 @@ class AuthService {
         // Profile setup fields for donor onboarding
         'profileCompleted': role != 'donor', // Donors need to complete profile
         'profilePhotoUrl': null,
+        // Default purchaser RBAC role
+        'isSupervisor': false,
       });
 
       await userCred.user!.sendEmailVerification();

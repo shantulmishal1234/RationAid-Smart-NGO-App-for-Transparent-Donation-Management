@@ -31,6 +31,7 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
   String _department = 'Distribution';
   String _mainRole = 'distributor'; // purchaser or distributor
   String _level = 'member'; // head / sub_head / member
+  bool _isSupervisor = false; // For Head Purchaser role
 
   bool _isSaving = false;
 
@@ -61,6 +62,9 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
       } else if (roles.contains('member')) {
         _level = 'member';
       }
+
+      // Check if they are a Head Purchaser
+      _isSupervisor = d['isSupervisor'] ?? false;
     }
   }
 
@@ -127,18 +131,19 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
       };
 
       if (isEdit) {
-        await docRef.update(data);
+        await docRef.update({...data, 'isSupervisor': _isSupervisor});
 
         await AuditService.logUserAction(
           action: 'Member profile updated',
           userId: uid,
           userName: memberName,
           details:
-              'Updated roles: ${roles.join(", ")}, Department: $_department',
+              'Updated roles: ${roles.join(", ")}, Department: $_department, Supervisor: $_isSupervisor',
         );
       } else {
         await docRef.set({
           ...data,
+          'isSupervisor': _isSupervisor,
           'joiningDate': FieldValue.serverTimestamp(),
           'deliveryCount': 0,
           'lastLoginAt': null,
@@ -208,7 +213,9 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
           'This will remove this member profile from HRM and they will no longer '
           'appear in the system. This does NOT automatically delete their '
           'Firebase login account.\n\nAre you sure you want to continue?',
-          style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.8)),
+          style: TextStyle(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+          ),
         ),
         actions: [
           TextButton(
@@ -442,6 +449,37 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
                               label: 'Team Head UID (Optional)',
                               hint: 'UID of head / sub-head',
                             ),
+                            if (_mainRole == 'purchaser') ...[
+                              const SizedBox(height: 16),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: theme.scaffoldBackgroundColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: theme.dividerColor.withValues(
+                                      alpha: 0.5,
+                                    ),
+                                  ),
+                                ),
+                                child: SwitchListTile(
+                                  title: const Text(
+                                    'Head Purchaser (Supervisor)',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  subtitle: const Text(
+                                    'Grants access to team reports, global financials, and history.',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                  value: _isSupervisor,
+                                  activeColor: theme.colorScheme.primary,
+                                  onChanged: (val) {
+                                    setState(() => _isSupervisor = val);
+                                  },
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -482,7 +520,9 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
               decoration: BoxDecoration(
                 color: theme.scaffoldBackgroundColor,
                 border: Border(
-                  top: BorderSide(color: theme.dividerColor.withOpacity(0.5)),
+                  top: BorderSide(
+                    color: theme.dividerColor.withValues(alpha: 0.5),
+                  ),
                 ),
               ),
               child: SafeArea(
@@ -558,7 +598,7 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 6),
@@ -579,10 +619,10 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
             helperMaxLines: 2,
             helperStyle: TextStyle(
               fontSize: 11,
-              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
             ),
             hintStyle: TextStyle(
-              color: theme.colorScheme.onSurface.withOpacity(0.3),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
               fontSize: 14,
               fontWeight: FontWeight.normal,
             ),
@@ -598,13 +638,13 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: theme.dividerColor.withOpacity(0.8),
+                color: theme.dividerColor.withValues(alpha: 0.8),
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: theme.dividerColor.withOpacity(0.8),
+                color: theme.dividerColor.withValues(alpha: 0.8),
               ),
             ),
             focusedBorder: OutlineInputBorder(
@@ -617,7 +657,7 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: theme.colorScheme.error.withOpacity(0.5),
+                color: theme.colorScheme.error.withValues(alpha: 0.5),
               ),
             ),
           ),
@@ -644,7 +684,7 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 6),
@@ -661,7 +701,7 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
             helperText: helperText,
             helperStyle: TextStyle(
               fontSize: 11,
-              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
             ),
             isDense: true,
             contentPadding: const EdgeInsets.symmetric(
@@ -675,13 +715,13 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: theme.dividerColor.withOpacity(0.8),
+                color: theme.dividerColor.withValues(alpha: 0.8),
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: theme.dividerColor.withOpacity(0.8),
+                color: theme.dividerColor.withValues(alpha: 0.8),
               ),
             ),
             focusedBorder: OutlineInputBorder(

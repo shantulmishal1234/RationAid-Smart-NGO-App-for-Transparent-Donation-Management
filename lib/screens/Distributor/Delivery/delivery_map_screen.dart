@@ -25,7 +25,8 @@ class DeliveryMapScreen extends StatefulWidget {
   State<DeliveryMapScreen> createState() => _DeliveryMapScreenState();
 }
 
-class _DeliveryMapScreenState extends State<DeliveryMapScreen> {
+class _DeliveryMapScreenState extends State<DeliveryMapScreen>
+    with WidgetsBindingObserver {
   late final MapController _mapController;
   LatLng? _myPosition;
   StreamSubscription<Position>? _positionSub;
@@ -42,12 +43,26 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _mapController = MapController();
     _startTracking();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_positionSub == null) {
+        _startTracking();
+      }
+    } else if (state == AppLifecycleState.paused) {
+      _positionSub?.cancel();
+      _positionSub = null;
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _positionSub?.cancel();
     super.dispose();
   }
@@ -244,7 +259,21 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> {
           '${a.familyArea} — Navigation',
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
-        backgroundColor: AppColors.volunteerBlue,
+        backgroundColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: isDark
+                  ? [
+                      AppColors.volunteerBlue.withValues(alpha: 0.1),
+                      AppColors.volunteerBlue.withValues(alpha: 0.05),
+                    ]
+                  : [AppColors.volunteerBlue, Colors.blueAccent],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+          ),
+        ),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -273,8 +302,8 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: a.familyLocationVerified
-                          ? Colors.green.withOpacity(0.15)
-                          : Colors.orange.withOpacity(0.15),
+                          ? Colors.green.withValues(alpha: 0.15)
+                          : Colors.orange.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -336,7 +365,7 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> {
             )
           else
             Container(
-              color: Colors.orange.withOpacity(0.1),
+              color: Colors.orange.withValues(alpha: 0.1),
               padding: const EdgeInsets.all(10),
               child: const Row(
                 children: [
@@ -355,143 +384,174 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen> {
 
           // ── Map ────────────────────────────────────────────────────────
           Expanded(
-            child: Stack(
-              children: [
-                FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: initialCenter,
-                    initialZoom: 14,
-                    onPositionChanged: (_, __) {
-                      // no-op
-                    },
-                  ),
-                  children: [
-                    // OSM tile layer
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.rationaid.app',
-                    ),
-
-                    // Markers layer
-                    MarkerLayer(
-                      markers: [
-                        // Family destination pin (blue)
-                        if (familyLatLng != null)
-                          Marker(
-                            point: familyLatLng,
-                            width: 60,
-                            height: 80,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.volunteerBlue,
-                                    borderRadius: BorderRadius.circular(8),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: AppColors.volunteerBlue
-                                            .withOpacity(0.4),
-                                        blurRadius: 6,
-                                      ),
-                                    ],
-                                  ),
-                                  child: const Text(
-                                    'Family',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                                const Icon(
-                                  Icons.location_pin,
-                                  color: AppColors.volunteerBlue,
-                                  size: 36,
-                                ),
-                              ],
-                            ),
+            child: familyLatLng == null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.location_off,
+                          size: 64,
+                          color: Colors.grey.withValues(alpha: 0.5),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'No GPS Data Available',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.grey,
                           ),
-
-                        // My position pin (green)
-                        if (_myPosition != null)
-                          Marker(
-                            point: _myPosition!,
-                            width: 50,
-                            height: 70,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green,
-                                    borderRadius: BorderRadius.circular(8),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.green.withOpacity(0.4),
-                                        blurRadius: 6,
-                                      ),
-                                    ],
-                                  ),
-                                  child: const Text(
-                                    'You',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                                const Icon(
-                                  Icons.location_pin,
-                                  color: Colors.green,
-                                  size: 32,
-                                ),
-                              ],
-                            ),
-                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'The family location was not captured.\nNavigation is disabled.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
                       ],
                     ),
-                  ],
-                ),
-
-                // ── Control buttons ────────────────────────────────────
-                Positioned(
-                  right: 12,
-                  bottom: 100,
-                  child: Column(
+                  )
+                : Stack(
                     children: [
-                      _mapButton(
-                        icon: Icons.my_location,
-                        tooltip: 'My Location',
-                        onTap: _centerOnMe,
-                        active: !_centeredOnFamily,
-                        isDark: isDark,
+                      FlutterMap(
+                        mapController: _mapController,
+                        options: MapOptions(
+                          initialCenter: initialCenter,
+                          initialZoom: 14,
+                          onPositionChanged: (_, __) {
+                            // no-op
+                          },
+                        ),
+                        children: [
+                          // OSM tile layer
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.rationaid.app',
+                          ),
+
+                          // Markers layer
+                          MarkerLayer(
+                            markers: [
+                              // Family destination pin (blue)
+                              Marker(
+                                point: familyLatLng,
+                                width: 60,
+                                height: 80,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.volunteerBlue,
+                                        borderRadius: BorderRadius.circular(8),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: AppColors.volunteerBlue
+                                                .withValues(alpha: 0.4),
+                                            blurRadius: 6,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Text(
+                                        'Family',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.location_pin,
+                                      color: AppColors.volunteerBlue,
+                                      size: 36,
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              // My position pin (green)
+                              if (_myPosition != null)
+                                Marker(
+                                  point: _myPosition!,
+                                  width: 50,
+                                  height: 70,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 3,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green,
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.green.withValues(
+                                                alpha: 0.4,
+                                              ),
+                                              blurRadius: 6,
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Text(
+                                          'You',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.location_pin,
+                                        color: Colors.green,
+                                        size: 32,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 8),
-                      _mapButton(
-                        icon: Icons.home_outlined,
-                        tooltip: 'Family Location',
-                        onTap: _centerOnFamily,
-                        active: _centeredOnFamily,
-                        isDark: isDark,
+
+                      // ── Control buttons ────────────────────────────────────
+                      Positioned(
+                        right: 12,
+                        bottom: 100,
+                        child: Column(
+                          children: [
+                            _mapButton(
+                              icon: Icons.my_location,
+                              tooltip: 'My Location',
+                              onTap: _centerOnMe,
+                              active: !_centeredOnFamily,
+                              isDark: isDark,
+                            ),
+                            const SizedBox(height: 8),
+                            _mapButton(
+                              icon: Icons.home_outlined,
+                              tooltip: 'Family Location',
+                              onTap: _centerOnFamily,
+                              active: _centeredOnFamily,
+                              isDark: isDark,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
           ),
 
           // ── Bottom action bar ──────────────────────────────────────────

@@ -176,6 +176,23 @@ class NotificationService {
         .snapshots();
   }
 
+  /// Mark all notifications as read for a specific user
+  static Future<void> markAllUserNotificationsAsRead(String userId) async {
+    final unread = await _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .where('isRead', isEqualTo: false)
+        .get();
+
+    if (unread.docs.isEmpty) return;
+
+    final batch = _firestore.batch();
+    for (final doc in unread.docs) {
+      batch.update(doc.reference, {'isRead': true});
+    }
+    await batch.commit();
+  }
+
   /// Stream notifications for Purchaser role (Specific + Broadcasts)
   static Stream<QuerySnapshot> streamPurchaserNotifications(String userId) {
     return _firestore
@@ -269,5 +286,35 @@ class NotificationService {
         .where('isRead', isEqualTo: false)
         .snapshots()
         .map((snapshot) => snapshot.docs.length);
+  }
+
+  /// Stream notifications for Distributor role
+  static Stream<QuerySnapshot> streamDistributorNotifications(String userId) {
+    return _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
+  /// Get unread count for Distributor
+  static Stream<int> getDistributorUnreadCountStream(String userId) {
+    return _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .where('isRead', isEqualTo: false)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
+  }
+
+  /// Mark notification as read (general utility)
+  static Future<void> markNotificationAsRead(String notificationId) async {
+    try {
+      await _firestore.collection('notifications').doc(notificationId).update({
+        'isRead': true,
+      });
+    } catch (e) {
+      print('Error marking notification as read: $e');
+    }
   }
 }

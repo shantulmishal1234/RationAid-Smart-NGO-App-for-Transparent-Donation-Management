@@ -61,15 +61,23 @@ class AdminHelpers {
 
     // Execute all count queries in parallel
     final results = await Future.wait([
-      _usersRef.count().get(),
-      _usersRef.where('roles', arrayContains: 'volunteer').count().get(),
-      _usersRef.where('roles', arrayContains: 'ngo_admin').count().get(),
+      _usersRef
+          .where(
+            'roles',
+            arrayContainsAny: ['admin', 'purchaser', 'distributor'],
+          )
+          .count()
+          .get(),
+      _usersRef.where('roles', arrayContains: 'distributor').count().get(),
+      _usersRef.where('roles', arrayContains: 'purchaser').count().get(),
+      _usersRef.where('roles', arrayContains: 'admin').count().get(),
     ]);
 
     final data = {
-      'total': results[0].count ?? 0,
-      'volunteers': results[1].count ?? 0,
-      'admins': results[2].count ?? 0,
+      'total_staff': results[0].count ?? 0,
+      'distributors': results[1].count ?? 0,
+      'purchasers': results[2].count ?? 0,
+      'admins': results[3].count ?? 0,
     };
 
     // Cache the results
@@ -141,9 +149,12 @@ class AdminHelpers {
       'fam_total': familyData['total'] ?? 0,
       'fam_accepted': familyData['accepted'] ?? 0,
       'fam_pending': familyData['pending'] ?? 0,
-      'mem_total': memberData['total'] ?? 0,
+      'fam_rejected': familyData['rejected'] ?? 0,
+      'fam_discarded': familyData['discarded'] ?? 0,
+      'mem_total_staff': memberData['total_staff'] ?? 0,
       'mem_admins': memberData['admins'] ?? 0,
-      'mem_volunteers': memberData['volunteers'] ?? 0,
+      'mem_distributors': memberData['distributors'] ?? 0,
+      'mem_purchasers': memberData['purchasers'] ?? 0,
       'stock_available': stockCount,
       'donations_total': donationData['total'] ?? 0,
       'donations_to_review':
@@ -215,6 +226,7 @@ class AdminHelpers {
       _usersRef.where('roles', arrayContains: 'purchaser').count().get(),
       _usersRef.where('roles', arrayContains: 'distributor').count().get(),
       _usersRef.where('roles', arrayContains: 'donor').count().get(),
+      _usersRef.where('roles', arrayContains: 'admin').count().get(),
     ]);
 
     final data = {
@@ -222,6 +234,7 @@ class AdminHelpers {
       'purchaser': results[1].count ?? 0,
       'distributor': results[2].count ?? 0,
       'donor': results[3].count ?? 0,
+      'admin': results[4].count ?? 0,
     };
 
     // Cache the results

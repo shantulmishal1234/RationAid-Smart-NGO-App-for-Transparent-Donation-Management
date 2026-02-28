@@ -400,7 +400,7 @@ class _StatusTimelineCard extends StatelessWidget {
 
     final textColor = isActive
         ? itemColor
-        : Theme.of(context).colorScheme.onSurface.withOpacity(0.6);
+        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6);
 
     return IntrinsicHeight(
       child: Row(
@@ -492,7 +492,7 @@ class _DonationInfoCard extends StatelessWidget {
                     '• ${entry.key}: ${entry.value}',
                     style: TextStyle(
                       fontSize: 13,
-                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                     ),
                   ),
                 );
@@ -623,7 +623,7 @@ class _RejectionReasonCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Card(
-      color: isDark ? Colors.red[900]!.withOpacity(0.3) : Colors.red[50],
+      color: isDark ? Colors.red[900]!.withValues(alpha: 0.3) : Colors.red[50],
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -683,7 +683,7 @@ class _InfoRow extends StatelessWidget {
               style: TextStyle(
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
-                color: theme.colorScheme.onSurface.withOpacity(0.7),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
               ),
             ),
           ),

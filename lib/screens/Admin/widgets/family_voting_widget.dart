@@ -186,7 +186,7 @@ class _FamilyVotingWidgetState extends State<FamilyVotingWidget> {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withOpacity(0.7),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
             ),
           ),
           const SizedBox(height: 12),
@@ -287,9 +287,9 @@ class _FamilyVotingWidgetState extends State<FamilyVotingWidget> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
+              color: Colors.blue.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
@@ -326,7 +326,7 @@ class _FamilyVotingWidgetState extends State<FamilyVotingWidget> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface.withOpacity(0.7),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
               ),
             ),
             Text(
@@ -345,7 +345,7 @@ class _FamilyVotingWidgetState extends State<FamilyVotingWidget> {
           child: LinearProgressIndicator(
             value: progress.clamp(0.0, 1.0),
             minHeight: 8,
-            backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+            backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
             valueColor: AlwaysStoppedAnimation(
               progress >= 1.0 ? Colors.green : theme.colorScheme.primary,
             ),
@@ -356,9 +356,9 @@ class _FamilyVotingWidgetState extends State<FamilyVotingWidget> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.1),
+              color: Colors.green.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.green.withOpacity(0.3)),
+              border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -391,9 +391,9 @@ class _FamilyVotingWidgetState extends State<FamilyVotingWidget> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -407,7 +407,7 @@ class _FamilyVotingWidgetState extends State<FamilyVotingWidget> {
                   label,
                   style: TextStyle(
                     fontSize: 11,
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
                 Text(
@@ -436,7 +436,7 @@ class _FamilyVotingWidgetState extends State<FamilyVotingWidget> {
       decoration: BoxDecoration(
         color: theme.scaffoldBackgroundColor,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -469,7 +469,7 @@ class _FamilyVotingWidgetState extends State<FamilyVotingWidget> {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: color.withOpacity(0.15),
+                        color: color.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
@@ -489,7 +489,7 @@ class _FamilyVotingWidgetState extends State<FamilyVotingWidget> {
                     review.comment!,
                     style: TextStyle(
                       fontSize: 12,
-                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -518,7 +518,7 @@ class _FamilyVotingWidgetState extends State<FamilyVotingWidget> {
       icon: Icon(icon, size: 20),
       label: Text(label),
       style: OutlinedButton.styleFrom(
-        backgroundColor: isSelected ? color.withOpacity(0.1) : null,
+        backgroundColor: isSelected ? color.withValues(alpha: 0.1) : null,
         foregroundColor: isSelected ? color : theme.colorScheme.onSurface,
         side: BorderSide(
           color: isSelected ? color : theme.dividerColor,

@@ -33,7 +33,7 @@ class NotificationCard extends StatelessWidget {
           border: Border.all(color: theme.dividerColor),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -45,7 +45,7 @@ class NotificationCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: color, size: 28),
@@ -66,7 +66,7 @@ class NotificationCard extends StatelessWidget {
                 description,
                 style: TextStyle(
                   fontSize: 11,
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
                 textAlign: TextAlign.center,
                 maxLines: 2,

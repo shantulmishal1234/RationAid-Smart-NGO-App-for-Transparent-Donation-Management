@@ -47,7 +47,7 @@ class FinalApproverScreen extends StatelessWidget {
                   'You are not authorized to access Final Approval',
                   style: TextStyle(
                     fontSize: 14,
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -87,7 +87,7 @@ class FinalApproverScreen extends StatelessWidget {
           child: Text(
             'Review families that have reached quorum and make final approval decisions',
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.7),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
             ),
             textAlign: TextAlign.center,
           ),
@@ -167,7 +167,7 @@ class FinalApproverScreen extends StatelessWidget {
                       Icon(
                         Icons.check_circle_outline,
                         size: 64,
-                        color: theme.colorScheme.primary.withOpacity(0.5),
+                        color: theme.colorScheme.primary.withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -175,7 +175,7 @@ class FinalApproverScreen extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                         ),
                       ),
                     ],
@@ -231,7 +231,7 @@ class FinalApproverScreen extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: theme.colorScheme.onSurface.withOpacity(0.6),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
           ),
         ),
       ],
@@ -282,9 +282,9 @@ class FinalApproverScreen extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
+                      color: Colors.green.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.green.withOpacity(0.3)),
+                      border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -320,7 +320,7 @@ class FinalApproverScreen extends StatelessWidget {
                     '$totalVotes votes cast',
                     style: TextStyle(
                       fontSize: 13,
-                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                     ),
                   ),
                   const Spacer(),
@@ -357,7 +357,7 @@ class FinalApproverScreen extends StatelessWidget {
                         'Approval Rate',
                         style: TextStyle(
                           fontSize: 12,
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
                       Text(
@@ -376,7 +376,7 @@ class FinalApproverScreen extends StatelessWidget {
                     child: LinearProgressIndicator(
                       value: approvePercentage / 100,
                       minHeight: 6,
-                      backgroundColor: Colors.red.withOpacity(0.2),
+                      backgroundColor: Colors.red.withValues(alpha: 0.2),
                       valueColor: AlwaysStoppedAnimation(Colors.green),
                     ),
                   ),

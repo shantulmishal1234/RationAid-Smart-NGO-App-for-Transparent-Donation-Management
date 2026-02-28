@@ -43,7 +43,7 @@ class DonationStatusFilterChips extends StatelessWidget {
         labelStyle: TextStyle(
           color: isSelected
               ? AdminColors.primaryBlue
-              : theme.colorScheme.onSurface.withOpacity(0.7),
+              : theme.colorScheme.onSurface.withValues(alpha: 0.7),
           fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
         ),
         side: BorderSide(

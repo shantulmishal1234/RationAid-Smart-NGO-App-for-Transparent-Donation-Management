@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/services/delivery_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
+import 'package:ration_aid/widgets/frosted_panel.dart';
 
 class PerformanceSection extends StatefulWidget {
   const PerformanceSection({super.key});
@@ -65,7 +66,7 @@ class _PerformanceSectionState extends State<PerformanceSection> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppColors.volunteerBlue.withOpacity(0.12),
+                    color: AppColors.volunteerBlue.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
@@ -88,7 +89,9 @@ class _PerformanceSectionState extends State<PerformanceSection> {
                       'Pull to refresh',
                       style: TextStyle(
                         fontSize: 12,
-                        color: theme.colorScheme.onSurface.withOpacity(0.45),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.45,
+                        ),
                       ),
                     ),
                   ],
@@ -114,7 +117,7 @@ class _PerformanceSectionState extends State<PerformanceSection> {
                       Icon(
                         Icons.wifi_off_rounded,
                         size: 64,
-                        color: Colors.red.withOpacity(0.5),
+                        color: Colors.red.withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 16),
                       const Text(
@@ -253,19 +256,8 @@ class _PerformanceSectionState extends State<PerformanceSection> {
     required IconData icon,
     required Color color,
   }) {
-    return Container(
+    return FrostedPanel(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -283,7 +275,9 @@ class _PerformanceSectionState extends State<PerformanceSection> {
             label,
             style: TextStyle(
               fontSize: 12,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.55),
             ),
           ),
         ],
@@ -309,24 +303,14 @@ class _BigRateCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return FrostedPanel(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
-            blurRadius: 10,
-          ),
-        ],
-      ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 24),
@@ -342,7 +326,7 @@ class _BigRateCard extends StatelessWidget {
                     fontSize: 13,
                     color: Theme.of(
                       context,
-                    ).colorScheme.onSurface.withOpacity(0.55),
+                    ).colorScheme.onSurface.withValues(alpha: 0.55),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -350,7 +334,7 @@ class _BigRateCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: (rate / 100).clamp(0.0, 1.0),
-                    backgroundColor: color.withOpacity(0.12),
+                    backgroundColor: color.withValues(alpha: 0.12),
                     valueColor: AlwaysStoppedAnimation(color),
                     minHeight: 8,
                   ),

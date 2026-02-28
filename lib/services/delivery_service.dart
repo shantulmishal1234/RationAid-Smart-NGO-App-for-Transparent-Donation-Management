@@ -34,6 +34,7 @@ class DeliveryService {
     String? procurementRequestId,
     DateTime? scheduledAt,
     String? adminNote,
+    WriteBatch? batch,
   }) async {
     final now = DateTime.now();
     final ref = _db.collection(_collection).doc();
@@ -62,7 +63,11 @@ class DeliveryService {
       updatedAt: now,
     );
 
-    await ref.set(assignment.toFirestore());
+    if (batch != null) {
+      batch.set(ref, assignment.toFirestore());
+    } else {
+      await ref.set(assignment.toFirestore());
+    }
 
     // Notify the assigned distributor
     if (distributorId != null) {
@@ -102,6 +107,67 @@ class DeliveryService {
         .where('assignedDistributorId', isEqualTo: distributorId)
         .snapshots()
         .map((s) => s.docs.map(DeliveryAssignment.fromFirestore).toList());
+  }
+
+  /// Stream historical assignments for a specific distributor (delivered, failed, etc).
+  static Stream<List<DeliveryAssignment>> streamDistributorHistory(
+    String distributorId,
+  ) {
+    if (distributorId.isEmpty) return const Stream.empty();
+
+    return _db
+        .collection(_collection)
+        .where('assignedDistributorId', isEqualTo: distributorId)
+        .where(
+          'status',
+          whereIn: ['delivered', 'failed', 'admin_verified', 'reassigned'],
+        )
+        .snapshots()
+        .map((s) {
+          final list = s.docs.map(DeliveryAssignment.fromFirestore).toList();
+          list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+          return list;
+        });
+  }
+
+  /// Smart stream: supervisor sees ALL assignments, member sees own only.
+  /// Mirrors ProcurementService.getSmartHomeStatsStream()
+  static Stream<List<DeliveryAssignment>> getSmartDeliveryStream(
+    String distributorId,
+    bool isSupervisor,
+  ) {
+    if (isSupervisor) {
+      return streamAllAssignments(); // global
+    }
+    return streamAssignmentsByDistributor(distributorId); // personal
+  }
+
+  /// Smart history stream: supervisor sees ALL history, member sees own.
+  /// Mirrors ProcurementService.getSmartHistoryStream()
+  static Stream<List<DeliveryAssignment>> getSmartHistoryStream(
+    String distributorId,
+    bool isSupervisor,
+  ) {
+    if (isSupervisor) {
+      return streamAllHistory(); // global
+    }
+    return streamDistributorHistory(distributorId); // personal
+  }
+
+  /// Stream ALL historical assignments across all distributors.
+  static Stream<List<DeliveryAssignment>> streamAllHistory() {
+    return _db
+        .collection(_collection)
+        .where(
+          'status',
+          whereIn: ['delivered', 'failed', 'admin_verified', 'reassigned'],
+        )
+        .snapshots()
+        .map((s) {
+          final list = s.docs.map(DeliveryAssignment.fromFirestore).toList();
+          list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+          return list;
+        });
   }
 
   /// Stream ALL assignments (Admin view)
@@ -199,11 +265,26 @@ class DeliveryService {
 
   /// Move assignment to Picked Up
   static Future<void> markPickedUp(String assignmentId) async {
+    final doc = await _db.collection(_collection).doc(assignmentId).get();
+    if (!doc.exists) return;
+
+    final assignment = DeliveryAssignment.fromFirestore(doc);
+
     await _db.collection(_collection).doc(assignmentId).update({
       'status': DeliveryStatus.pickedUp.toFirestore(),
       'pickedUpAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    if (assignment.procurementRequestId != null) {
+      await _db
+          .collection('procurement_requests')
+          .doc(assignment.procurementRequestId)
+          .update({
+            'status':
+                'stocked', // Stocked acts as 'In Progress' for Purchaser Inventory
+          });
+    }
   }
 
   /// Move assignment to In Transit
@@ -232,9 +313,11 @@ class DeliveryService {
     if (photoUrl == null) throw Exception('Failed to upload proof photo');
 
     final now = DateTime.now();
+    final batch = _db.batch();
 
     // 2. Update delivery assignment
-    await _db.collection(_collection).doc(assignmentId).update({
+    final assignmentRef = _db.collection(_collection).doc(assignmentId);
+    batch.update(assignmentRef, {
       'status': DeliveryStatus.delivered.toFirestore(),
       'deliveredAt': Timestamp.fromDate(now),
       'proofPhotoUrl': photoUrl,
@@ -246,12 +329,26 @@ class DeliveryService {
     });
 
     // 3. Update family fulfillment status
-    await _db.collection('families').doc(familyId).update({
+    final familyRef = _db.collection('families').doc(familyId);
+    batch.update(familyRef, {
       'fulfillmentStatus': 'delivered',
       'deliveredAt': Timestamp.fromDate(now),
       'deliveryProof': photoUrl,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    // 3b. Update original procurement request
+    final assignmentDoc = await assignmentRef.get();
+    final assignment = DeliveryAssignment.fromFirestore(assignmentDoc);
+    if (assignment.procurementRequestId != null) {
+      final procRef = _db
+          .collection('procurement_requests')
+          .doc(assignment.procurementRequestId);
+      batch.update(procRef, {'status': 'delivered'});
+    }
+
+    // Commit all state updates atomically
+    await batch.commit();
 
     // 4. Notify admin for verification
     await NotificationService.sendToRole(
@@ -341,6 +438,15 @@ class DeliveryService {
               : [],
         );
         synced++;
+
+        // Gap 1 Fix: Delete the physical image file from storage if sync succeeds
+        try {
+          if (file.existsSync()) {
+            file.deleteSync();
+          }
+        } catch (e) {
+          // Keep silently failing if file deletion errors, to prevent sync halting
+        }
       } catch (_) {
         // Keep failed entries for retry
         remaining.add(raw);
@@ -365,13 +471,37 @@ class DeliveryService {
     required DeliveryFailureReason reason,
     String notes = '',
   }) async {
-    await _db.collection(_collection).doc(assignmentId).update({
+    final batch = _db.batch();
+
+    // 1. Update assignment status
+    final assignmentRef = _db.collection(_collection).doc(assignmentId);
+    batch.update(assignmentRef, {
       'status': DeliveryStatus.failed.toFirestore(),
       'failedAt': FieldValue.serverTimestamp(),
       'failureReason': reason.toFirestore(),
       'failureNotes': notes,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    // 2. Cascade failure back to family fulfillment status
+    final familyRef = _db.collection('families').doc(familyId);
+    batch.update(familyRef, {
+      'fulfillmentStatus': 'issue_reported',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // 3. Cascade failure back to purchaser procurement request
+    final assignmentDoc = await assignmentRef.get();
+    final assignment = DeliveryAssignment.fromFirestore(assignmentDoc);
+    if (assignment.procurementRequestId != null) {
+      final procRef = _db
+          .collection('procurement_requests')
+          .doc(assignment.procurementRequestId);
+      batch.update(procRef, {'status': 'issue_reported'});
+    }
+
+    // Commit atomic failure logging
+    await batch.commit();
 
     // Notify admin
     await NotificationService.sendToRole(

@@ -58,7 +58,7 @@ class AdminDrawer extends StatelessWidget {
               accountEmail: Text(
                 user?.email ?? '',
                 style: TextStyle(
-                  color: theme.colorScheme.onSurface.withOpacity(0.8),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                 ),
               ),
             ),
@@ -109,12 +109,12 @@ class AdminDrawer extends StatelessWidget {
             ListTile(
               leading: Icon(
                 Icons.info_outline,
-                color: theme.colorScheme.onSurface.withOpacity(0.7),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
               ),
               title: Text(
                 'About Ration Aid',
                 style: TextStyle(
-                  color: theme.colorScheme.onSurface.withOpacity(0.8),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                 ),
               ),
               onTap: () {},
@@ -139,7 +139,7 @@ class AdminDrawer extends StatelessWidget {
         icon,
         color: isSelected
             ? AdminColors.primaryBlue
-            : theme.colorScheme.onSurface.withOpacity(0.7),
+            : theme.colorScheme.onSurface.withValues(alpha: 0.7),
       ),
       title: Text(
         label,
@@ -147,7 +147,7 @@ class AdminDrawer extends StatelessWidget {
           fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
           color: isSelected
               ? AdminColors.primaryBlue
-              : theme.colorScheme.onSurface.withOpacity(0.9),
+              : theme.colorScheme.onSurface.withValues(alpha: 0.9),
         ),
       ),
       selected: isSelected,

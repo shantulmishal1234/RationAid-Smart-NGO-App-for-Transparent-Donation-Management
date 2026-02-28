@@ -86,7 +86,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Icon(
@@ -112,7 +112,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         'Skip',
                         style: TextStyle(
                           fontSize: 15,
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -132,21 +132,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: theme.cardColor.withOpacity(
+                      color: theme.cardColor.withValues(alpha: 
                         theme.brightness == Brightness.dark ? 0.6 : 0.82,
                       ),
                       borderRadius: BorderRadius.circular(28),
                       border: Border.all(
                         color: theme.brightness == Brightness.dark
-                            ? Colors.white.withOpacity(0.1)
-                            : Colors.white.withOpacity(0.7),
+                            ? Colors.white.withValues(alpha: 0.1)
+                            : Colors.white.withValues(alpha: 0.7),
                         width: 0.8,
                       ),
                       boxShadow: [
                         BoxShadow(
                           color: theme.brightness == Brightness.dark
-                              ? Colors.black.withOpacity(0.3)
-                              : Colors.black.withOpacity(0.06),
+                              ? Colors.black.withValues(alpha: 0.3)
+                              : Colors.black.withValues(alpha: 0.06),
                           blurRadius: 18,
                           offset: const Offset(0, 10),
                         ),
@@ -303,7 +303,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           Container(
             padding: const EdgeInsets.all(26),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.10),
+              color: color.withValues(alpha: 0.10),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, size: 70, color: color),
@@ -376,7 +376,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Theme.of(context).primaryColor.withOpacity(0.28),
+                color: Theme.of(context).primaryColor.withValues(alpha: 0.28),
                 blurRadius: 10,
                 offset: const Offset(0, 6),
               ),

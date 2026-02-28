@@ -39,12 +39,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
   List<dynamic> _documents = [];
   List<String> _assistanceNeeds = [];
 
-  // Volunteer assignment variables
-  String? _assignedVolunteerUid;
-  String? _assignedVolunteerName;
-  List<Map<String, String>> _distributors = [];
-  String? _selectedDistributorUid;
-  bool _loadingDistributors = true;
+  // Removed explicit volunteer assignment variables as Distributors utilize a pooling system
 
   @override
   void initState() {
@@ -55,10 +50,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     _remarksController.text = _familyData['remarks'] ?? '';
     _documents = List<dynamic>.from(_familyData['documents'] ?? []);
     _assistanceNeeds = List<String>.from(_familyData['assistanceNeeds'] ?? []);
-    _assignedVolunteerUid = _familyData['assignedVolunteerUid'];
-    _assignedVolunteerName = _familyData['assignedVolunteerName'];
-    _selectedDistributorUid = _assignedVolunteerUid;
-    _loadDistributors();
+    // Removed _loadDistributors() call
   }
 
   @override
@@ -83,46 +75,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     }
   }
 
-  Future<void> _loadDistributors() async {
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .where('roles', arrayContains: 'distributor')
-          .get();
-
-      final list = <Map<String, String>>[];
-      for (final doc in snap.docs) {
-        final d = doc.data();
-        final name = (d['name'] ?? d['email'] ?? 'Unknown') as String;
-        list.add({'uid': doc.id, 'name': name});
-      }
-
-      if (!mounted) return;
-      if (!mounted) return;
-      setState(() {
-        _distributors = [
-          {'uid': 'none', 'name': 'None'},
-          ...list,
-        ];
-        if (_assignedVolunteerUid != null &&
-            list.any((e) => e['uid'] == _assignedVolunteerUid)) {
-          _selectedDistributorUid = _assignedVolunteerUid;
-        } else {
-          _selectedDistributorUid = 'none';
-        }
-        _loadingDistributors = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _loadingDistributors = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to load distributors: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
+  // Removed _loadDistributors()
 
   Future<void> _updateStatus() async {
     setState(() => _isUpdatingStatus = true);
@@ -189,107 +142,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     }
   }
 
-  Future<void> _assignVolunteerFromDropdown() async {
-    final uid = _selectedDistributorUid;
-    if (uid == null || uid.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a volunteer to assign'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    try {
-      final familyName = _familyData['name'] ?? 'Unnamed family';
-
-      if (uid == 'none') {
-        // Unassign volunteer
-        await FirebaseFirestore.instance
-            .collection('families')
-            .doc(widget.familyId)
-            .update({
-              'assignedVolunteerUid': FieldValue.delete(),
-              'assignedVolunteerName': FieldValue.delete(),
-            });
-
-        await AuditService.logFamilyAction(
-          action: 'Volunteer unassigned',
-          familyId: widget.familyId,
-          familyName: familyName,
-          details: 'Volunteer removed from family',
-        );
-
-        if (!mounted) return;
-        setState(() {
-          _assignedVolunteerUid = null;
-          _assignedVolunteerName = null;
-          _selectedDistributorUid = 'none';
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Volunteer unassigned successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        return;
-      }
-
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-
-      if (!userDoc.exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Selected user not found'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
-      final userData = userDoc.data()!;
-      final name =
-          (userData['name'] ?? userData['email'] ?? 'Unknown') as String;
-
-      await FirebaseFirestore.instance
-          .collection('families')
-          .doc(widget.familyId)
-          .update({'assignedVolunteerUid': uid, 'assignedVolunteerName': name});
-
-      await AuditService.logFamilyAction(
-        action: 'Volunteer assigned to family',
-        familyId: widget.familyId,
-        familyName: familyName,
-        details: 'Assigned volunteer: $name',
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _assignedVolunteerUid = uid;
-        _assignedVolunteerName = name;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Volunteer assigned successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to assign volunteer: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
+  // Removed _assignVolunteerFromDropdown()
 
   // ─── Pool Management ────────────────────────────────────────────────────────
 
@@ -334,7 +187,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.deepOrange.withOpacity(0.10),
+                    color: Colors.deepOrange.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -355,8 +208,11 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
               child: ElevatedButton.icon(
                 onPressed: () => _showGRFAllocationDialog(context, family),
                 icon: const Icon(Icons.monetization_on, size: 16),
-                label: Text(
-                  'Allocate from GRF (Gap: PKR ${remaining.toStringAsFixed(0)})',
+                label: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'Allocate from GRF (Gap: PKR ${remaining.toStringAsFixed(0)})',
+                  ),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
@@ -373,8 +229,11 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
               child: OutlinedButton.icon(
                 onPressed: () => _showSurplusTransferDialog(context, family),
                 icon: const Icon(Icons.swap_horiz, size: 16),
-                label: Text(
-                  'Transfer Surplus (PKR ${surplus.toStringAsFixed(0)})',
+                label: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'Transfer Surplus (PKR ${surplus.toStringAsFixed(0)})',
+                  ),
                 ),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.deepOrange,
@@ -417,7 +276,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.08),
+                  color: Colors.blue.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -591,7 +450,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.deepOrange.withOpacity(0.08),
+                  color: Colors.deepOrange.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -753,7 +612,9 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
         content: Text(
           'Are you sure you want to delete this family record? '
           'This action cannot be undone.',
-          style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.8)),
+          style: TextStyle(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+          ),
         ),
         actions: [
           TextButton(
@@ -838,8 +699,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
             _assistanceNeeds = List<String>.from(
               _familyData['assistanceNeeds'] ?? [],
             );
-            _assignedVolunteerUid = _familyData['assignedVolunteerUid'];
-            _assignedVolunteerName = _familyData['assignedVolunteerName'];
+            // Removed volunteer assignments loading
             _isLoading = false;
           });
         }
@@ -883,42 +743,59 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                   _buildSectionHeader(context, 'Demographics & Income'),
                   const SizedBox(height: 16),
                   FrostedPanel(
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _buildCompactInfoItem(
-                            'Adults',
-                            (_familyData['adults'] ?? 0).toString(),
-                            Icons.person,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildCompactInfoItem(
-                            'Children',
-                            (_familyData['children'] ?? 0).toString(),
-                            Icons.child_care,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildCompactInfoItem(
-                            'Family Size',
-                            (_familyData['familySize'] ?? 0).toString(),
-                            Icons.groups,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildCompactInfoItem(
-                            'Income',
-                            _familyData['monthlyIncome'] != null
-                                ? _formatCurrency(_familyData['monthlyIncome'])
-                                : '-',
-                            Icons.attach_money,
-                          ),
-                        ),
-                      ],
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isSmall = constraints.maxWidth < 400;
+                        final crossAxisCount = isSmall ? 2 : 4;
+                        final spacing = 12.0;
+                        final itemWidth =
+                            (constraints.maxWidth -
+                                (spacing * (crossAxisCount - 1))) /
+                            crossAxisCount;
+
+                        return Wrap(
+                          spacing: spacing,
+                          runSpacing: spacing,
+                          children: [
+                            SizedBox(
+                              width: itemWidth,
+                              child: _buildCompactInfoItem(
+                                'Adults',
+                                (_familyData['adults'] ?? 0).toString(),
+                                Icons.person,
+                              ),
+                            ),
+                            SizedBox(
+                              width: itemWidth,
+                              child: _buildCompactInfoItem(
+                                'Children',
+                                (_familyData['children'] ?? 0).toString(),
+                                Icons.child_care,
+                              ),
+                            ),
+                            SizedBox(
+                              width: itemWidth,
+                              child: _buildCompactInfoItem(
+                                'Family Size',
+                                (_familyData['familySize'] ?? 0).toString(),
+                                Icons.groups,
+                              ),
+                            ),
+                            SizedBox(
+                              width: itemWidth,
+                              child: _buildCompactInfoItem(
+                                'Income',
+                                _familyData['monthlyIncome'] != null
+                                    ? _formatCurrency(
+                                        _familyData['monthlyIncome'],
+                                      )
+                                    : '-',
+                                Icons.attach_money,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: 32),
@@ -943,10 +820,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                   FrostedPanel(child: _buildAssistanceChips(context)),
                   const SizedBox(height: 32),
 
-                  _buildSectionHeader(context, 'Assigned Volunteer'),
-                  const SizedBox(height: 16),
-                  FrostedPanel(child: _buildVolunteerSection(context)),
-                  const SizedBox(height: 32),
+                  // Removed volunteer section UI
 
                   // Show voting UI for pending_review status, otherwise show decision section
                   if (_status == 'pending_review' && _family != null) ...[
@@ -1015,7 +889,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
       children: [
         CircleAvatar(
           radius: 28,
-          backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+          backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.1),
           child: Text(
             (_familyData['name'] as String? ?? '?')[0].toUpperCase(),
             style: const TextStyle(
@@ -1037,6 +911,9 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                   fontWeight: FontWeight.w800,
                   color: theme.colorScheme.onSurface,
                 ),
+                softWrap: true,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
               if (_familyData['cnic'] != null &&
                   _familyData['cnic'].toString().isNotEmpty) ...[
@@ -1045,7 +922,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                   'CNIC: ${_familyData['cnic']}',
                   style: TextStyle(
                     fontSize: 12,
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
               ],
@@ -1054,7 +931,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                 'ID: ...${widget.familyId.substring(widget.familyId.length - 6)}',
                 style: TextStyle(
                   fontSize: 11,
-                  color: theme.colorScheme.onSurface.withOpacity(0.4),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
                   fontFamily: 'Monospace',
                 ),
               ),
@@ -1064,9 +941,11 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: _statusColor(_status).withOpacity(0.15),
+            color: _statusColor(_status).withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: _statusColor(_status).withOpacity(0.3)),
+            border: Border.all(
+              color: _statusColor(_status).withValues(alpha: 0.3),
+            ),
           ),
           child: Text(
             _status.toUpperCase(),
@@ -1098,24 +977,36 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
   Widget _buildContactInfo(BuildContext context) {
     return Column(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _buildCompactInfoItem(
-                'Phone',
-                _familyData['phone'] ?? '-',
-                Icons.phone,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildCompactInfoItem(
-                'City',
-                _familyData['city'] ?? '-',
-                Icons.location_city,
-              ),
-            ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isVerySmall = constraints.maxWidth < 250;
+            final spacing = 12.0;
+            final itemWidth = isVerySmall
+                ? constraints.maxWidth
+                : (constraints.maxWidth - spacing) / 2;
+            return Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
+              children: [
+                SizedBox(
+                  width: itemWidth,
+                  child: _buildCompactInfoItem(
+                    'Phone',
+                    _familyData['phone'] ?? '-',
+                    Icons.phone,
+                  ),
+                ),
+                SizedBox(
+                  width: itemWidth,
+                  child: _buildCompactInfoItem(
+                    'City',
+                    _familyData['city'] ?? '-',
+                    Icons.location_city,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
         const SizedBox(height: 12),
         _buildCompactInfoItem('Area', _familyData['area'] ?? '-', Icons.map),
@@ -1127,7 +1018,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
             color: Theme.of(context).scaffoldBackgroundColor,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: Theme.of(context).dividerColor.withOpacity(0.5),
+              color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
             ),
           ),
           child: Column(
@@ -1140,7 +1031,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                   fontWeight: FontWeight.w600,
                   color: Theme.of(
                     context,
-                  ).colorScheme.onSurface.withOpacity(0.5),
+                  ).colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
               ),
               const SizedBox(height: 4),
@@ -1150,7 +1041,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                   fontSize: 13,
                   color: Theme.of(
                     context,
-                  ).colorScheme.onSurface.withOpacity(0.8),
+                  ).colorScheme.onSurface.withValues(alpha: 0.8),
                   height: 1.4,
                 ),
               ),
@@ -1167,7 +1058,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
       return Text(
         'No specific needs listed.',
         style: TextStyle(
-          color: theme.colorScheme.onSurface.withOpacity(0.5),
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
           fontStyle: FontStyle.italic,
         ),
       );
@@ -1185,7 +1076,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
               color: theme.colorScheme.primary,
             ),
           ),
-          backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+          backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
           side: BorderSide.none,
           padding: const EdgeInsets.symmetric(horizontal: 4),
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1194,113 +1085,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     );
   }
 
-  Widget _buildVolunteerSection(BuildContext context) {
-    final theme = Theme.of(context);
-    final canAssign = _status == 'accepted';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          _assignedVolunteerName != null
-              ? 'Currently assigned to: $_assignedVolunteerName'
-              : 'No volunteer assigned yet.',
-          style: TextStyle(
-            fontSize: 13,
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
-            fontStyle: _assignedVolunteerName == null ? FontStyle.italic : null,
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (_loadingDistributors)
-          const SizedBox(
-            height: 40,
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-          )
-        else if (_distributors.isEmpty)
-          const Text(
-            'No distributor accounts found in HRM.',
-            style: TextStyle(fontSize: 12, color: Colors.red),
-          )
-        else
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _selectedDistributorUid,
-                      items: _distributors.map((d) {
-                        return DropdownMenuItem<String>(
-                          value: d['uid'],
-                          child: Text(
-                            d['name'] ?? 'Unknown',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: canAssign
-                          ? (value) {
-                              setState(() => _selectedDistributorUid = value);
-                            }
-                          : null,
-                      dropdownColor: theme.cardColor,
-                      style: TextStyle(color: theme.colorScheme.onSurface),
-                      decoration: InputDecoration(
-                        labelText: 'Select volunteer',
-                        labelStyle: TextStyle(
-                          color: theme.colorScheme.onSurface.withOpacity(0.7),
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: theme.dividerColor),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: canAssign ? _assignVolunteerFromDropdown : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryBlue,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: theme.disabledColor.withOpacity(
-                        0.1,
-                      ),
-                      disabledForegroundColor: theme.disabledColor,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: const Text('Assign'),
-                  ),
-                ],
-              ),
-              if (!canAssign) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Volunteer assignment is only available for accepted households.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: theme.colorScheme.error,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ],
-            ],
-          ),
-      ],
-    );
-  }
+  // Removed _buildVolunteerSection as volunteers now use pooling.
 
   Widget _buildDecisionSection(BuildContext context) {
     // Determine which status chips to show based on current status
@@ -1417,8 +1202,8 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: isPdf
-                        ? Colors.red.withOpacity(0.1)
-                        : theme.colorScheme.primary.withOpacity(0.1),
+                        ? Colors.red.withValues(alpha: 0.1)
+                        : theme.colorScheme.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -1454,7 +1239,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                 Icon(
                   Icons.open_in_new,
                   size: 16,
-                  color: theme.colorScheme.onSurface.withOpacity(0.4),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
                 ),
               ],
             ),
@@ -1550,12 +1335,12 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
       label: Text(label),
       selected: isSelected,
       onSelected: (_) => setState(() => _status = value),
-      selectedColor: color.withOpacity(0.15),
+      selectedColor: color.withValues(alpha: 0.15),
       backgroundColor: isDark ? theme.cardColor : Colors.white,
       labelStyle: TextStyle(
         color: isSelected
             ? color
-            : theme.colorScheme.onSurface.withOpacity(0.7),
+            : theme.colorScheme.onSurface.withValues(alpha: 0.7),
         fontWeight: FontWeight.w600,
         fontSize: 13,
       ),
@@ -1584,16 +1369,16 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: theme.scaffoldBackgroundColor.withOpacity(0.5),
+        color: theme.scaffoldBackgroundColor.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.3)),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
           Icon(
             icon,
             size: 16,
-            color: theme.colorScheme.primary.withOpacity(0.7),
+            color: theme.colorScheme.primary.withValues(alpha: 0.7),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1604,7 +1389,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                   label,
                   style: TextStyle(
                     fontSize: 10,
-                    color: theme.colorScheme.onSurface.withOpacity(0.5),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1654,7 +1439,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                     width: 2,
                     color: isFirst
                         ? Colors.transparent
-                        : theme.dividerColor.withOpacity(0.5),
+                        : theme.dividerColor.withValues(alpha: 0.5),
                   ),
                 ),
                 Container(
@@ -1675,7 +1460,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                     width: 2,
                     color: isLast
                         ? Colors.transparent
-                        : theme.dividerColor.withOpacity(0.5),
+                        : theme.dividerColor.withValues(alpha: 0.5),
                   ),
                 ),
               ],
@@ -1697,7 +1482,9 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                           fontWeight: FontWeight.bold,
                           color: isFirst
                               ? color
-                              : theme.colorScheme.onSurface.withOpacity(0.7),
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.7,
+                                ),
                           letterSpacing: 0.5,
                         ),
                       ),
@@ -1706,7 +1493,9 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                         when,
                         style: TextStyle(
                           fontSize: 11,
-                          color: theme.colorScheme.onSurface.withOpacity(0.4),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.4,
+                          ),
                         ),
                       ),
                     ],
@@ -1717,7 +1506,9 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                       remarks,
                       style: TextStyle(
                         fontSize: 13,
-                        color: theme.colorScheme.onSurface.withOpacity(0.8),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.8,
+                        ),
                         height: 1.4,
                       ),
                     ),
@@ -1727,7 +1518,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                     'By: $adminName',
                     style: TextStyle(
                       fontSize: 11,
-                      color: theme.colorScheme.onSurface.withOpacity(0.5),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -1757,69 +1548,75 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Raised Amount',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  ),
-                ),
-                RichText(
-                  text: TextSpan(
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Raised Amount',
                     style: TextStyle(
-                      fontFamily: theme.textTheme.bodyLarge?.fontFamily,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
-                    children: [
-                      TextSpan(text: raised.toStringAsFixed(0)),
-                      TextSpan(
-                        text: ' PKR',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.green.withOpacity(0.8),
-                        ),
-                      ),
-                    ],
                   ),
-                ),
-              ],
+                  RichText(
+                    text: TextSpan(
+                      style: TextStyle(
+                        fontFamily: theme.textTheme.bodyLarge?.fontFamily,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                      children: [
+                        TextSpan(text: raised.toStringAsFixed(0)),
+                        TextSpan(
+                          text: ' PKR',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green.withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  'Goal Amount',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  ),
-                ),
-                RichText(
-                  text: TextSpan(
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'Goal Amount',
                     style: TextStyle(
-                      fontFamily: theme.textTheme.bodyLarge?.fontFamily,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.primary,
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
-                    children: [
-                      TextSpan(text: target.toStringAsFixed(0)),
-                      TextSpan(
-                        text: ' PKR',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: theme.colorScheme.primary.withOpacity(0.8),
-                        ),
-                      ),
-                    ],
                   ),
-                ),
-              ],
+                  RichText(
+                    text: TextSpan(
+                      style: TextStyle(
+                        fontFamily: theme.textTheme.bodyLarge?.fontFamily,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                      children: [
+                        TextSpan(text: target.toStringAsFixed(0)),
+                        TextSpan(
+                          text: ' PKR',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.8,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -1838,10 +1635,16 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            Row(
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
               children: [
                 Text(
                   '${(percent * 100).toInt()}% Funded',
@@ -1856,14 +1659,13 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                   ),
                 ),
                 if (isOverFunded) ...[
-                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 6,
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.deepOrange.withOpacity(0.1),
+                      color: Colors.deepOrange.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -1883,7 +1685,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: (isOverFunded ? Colors.deepOrange : Colors.green)
-                      .withOpacity(0.1),
+                      .withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(

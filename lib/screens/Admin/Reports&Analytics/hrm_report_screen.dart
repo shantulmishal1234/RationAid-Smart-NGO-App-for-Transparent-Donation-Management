@@ -285,7 +285,7 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
               child: Text(
                 'No HR data available.',
                 style: TextStyle(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
             );
@@ -453,7 +453,7 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
                         '• Plan recruitment, training, and restructuring',
                         style: TextStyle(
                           fontSize: 13,
-                          color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                           height: 1.5,
                         ),
                       ),
@@ -512,7 +512,7 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.08),
+                    color: color.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(icon, color: color, size: 20),
@@ -543,7 +543,7 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
               subtitle,
               style: TextStyle(
                 fontSize: 11,
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
           ],
@@ -574,7 +574,7 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
           flex: 3,
           child: LinearProgressIndicator(
             value: total > 0 ? count / total : 0,
-            backgroundColor: theme.colorScheme.onSurface.withOpacity(0.1),
+            backgroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.1),
             valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryBlue),
           ),
         ),
@@ -583,7 +583,7 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
           '$count ($percentage%)',
           style: TextStyle(
             fontSize: 13,
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
           ),
         ),
       ],

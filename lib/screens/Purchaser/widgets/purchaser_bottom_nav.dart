@@ -10,11 +10,15 @@ class PurchaserBottomNav extends StatefulWidget {
   /// If > 0, a red badge is shown over the Notifications tab.
   final int unreadNotificationCount;
 
+  /// Whether the current purchaser is a Head Purchaser
+  final bool isSupervisor;
+
   const PurchaserBottomNav({
     super.key,
     required this.currentSection,
     required this.onSectionChanged,
     this.unreadNotificationCount = 0,
+    required this.isSupervisor,
   });
 
   @override
@@ -66,21 +70,40 @@ class _PurchaserBottomNavState extends State<PurchaserBottomNav>
   }
 
   int _getSectionIndex(PurchaserSection section) {
-    switch (section) {
-      case PurchaserSection.dashboard:
-        return 0;
-      case PurchaserSection.procurement:
-        return 1;
-      case PurchaserSection.inventory:
-        return 2;
-      case PurchaserSection.history:
-        return 3;
-      case PurchaserSection.reports:
-        return 4;
-      case PurchaserSection.notifications:
-        return 5;
-      case PurchaserSection.profile:
-        return 6;
+    if (widget.isSupervisor) {
+      switch (section) {
+        case PurchaserSection.dashboard:
+          return 0;
+        case PurchaserSection.procurement:
+          return 1;
+        case PurchaserSection.inventory:
+          return 2;
+        case PurchaserSection.history:
+          return 3;
+        case PurchaserSection.reports:
+          return 4;
+        case PurchaserSection.notifications:
+          return 5;
+        case PurchaserSection.profile:
+          return 6;
+      }
+    } else {
+      switch (section) {
+        case PurchaserSection.dashboard:
+          return 0;
+        case PurchaserSection.procurement:
+          return 1;
+        case PurchaserSection.inventory:
+          return 2;
+        case PurchaserSection.history:
+          return 3;
+        case PurchaserSection.notifications:
+          return 4;
+        case PurchaserSection.profile:
+          return 5;
+        case PurchaserSection.reports:
+          return -1;
+      }
     }
   }
 
@@ -99,7 +122,8 @@ class _PurchaserBottomNavState extends State<PurchaserBottomNav>
     final currentIndex = _getSectionIndex(widget.currentSection);
     final screenWidth = MediaQuery.of(context).size.width;
     final barWidth = screenWidth - 32;
-    final itemWidth = barWidth / 7; // divided by 7 items
+    final int totalItems = widget.isSupervisor ? 7 : 6;
+    final itemWidth = barWidth / totalItems;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final adjustedNotchX = _getAdjustedNotchX(
@@ -158,8 +182,8 @@ class _PurchaserBottomNavState extends State<PurchaserBottomNav>
                     painter: NotchedBarPainter(
                       notchX: notchX,
                       color: isDark
-                          ? const Color(0xFF1E1E1E).withOpacity(0.95)
-                          : Colors.white.withOpacity(0.95),
+                          ? const Color(0xFF1E1E1E).withValues(alpha: 0.95)
+                          : Colors.white.withValues(alpha: 0.95),
                       isDark: isDark,
                     ),
                     child: child,
@@ -195,24 +219,25 @@ class _PurchaserBottomNavState extends State<PurchaserBottomNav>
                         section: PurchaserSection.history,
                         index: 3,
                       ),
-                      _buildNavItem(
-                        icon: Icons.analytics_outlined,
-                        label: 'Reports',
-                        section: PurchaserSection.reports,
-                        index: 4,
-                      ),
+                      if (widget.isSupervisor)
+                        _buildNavItem(
+                          icon: Icons.analytics_outlined,
+                          label: 'Reports',
+                          section: PurchaserSection.reports,
+                          index: 4,
+                        ),
                       _buildNavItem(
                         icon: Icons.notifications_outlined,
                         label: 'Alerts',
                         section: PurchaserSection.notifications,
-                        index: 5,
+                        index: widget.isSupervisor ? 5 : 4,
                         badgeCount: widget.unreadNotificationCount,
                       ),
                       _buildNavItem(
                         icon: Icons.person_outline,
                         label: 'Profile',
                         section: PurchaserSection.profile,
-                        index: 6,
+                        index: widget.isSupervisor ? 6 : 5,
                       ),
                     ],
                   ),
@@ -390,7 +415,7 @@ class NotchedBarPainter extends CustomPainter {
 
     canvas.drawShadow(
       finalPath,
-      Colors.black.withOpacity(isDark ? 0.5 : 0.1),
+      Colors.black.withValues(alpha: isDark ? 0.5 : 0.1),
       15,
       false,
     );
@@ -398,8 +423,8 @@ class NotchedBarPainter extends CustomPainter {
 
     final borderPaint = Paint()
       ..color = isDark
-          ? Colors.white.withOpacity(0.1)
-          : Colors.white.withOpacity(0.5)
+          ? Colors.white.withValues(alpha: 0.1)
+          : Colors.white.withValues(alpha: 0.5)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     canvas.drawPath(finalPath, borderPaint);

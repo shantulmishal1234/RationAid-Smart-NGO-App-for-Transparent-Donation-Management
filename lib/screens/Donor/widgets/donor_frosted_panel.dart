@@ -19,21 +19,21 @@ class DonorFrostedPanel extends StatelessWidget {
     return Container(
       margin: margin ?? const EdgeInsets.only(bottom: 4),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor.withOpacity(isDark ? 0.6 : 0.82),
+        color: Theme.of(context).cardColor.withValues(alpha: isDark ? 0.6 : 0.82),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: isDark
-                ? Colors.black.withOpacity(0.3)
-                : Colors.black.withOpacity(0.06),
+                ? Colors.black.withValues(alpha: 0.3)
+                : Colors.black.withValues(alpha: 0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
         border: Border.all(
           color: isDark
-              ? Colors.white.withOpacity(0.1)
-              : Colors.white.withOpacity(0.7),
+              ? Colors.white.withValues(alpha: 0.1)
+              : Colors.white.withValues(alpha: 0.7),
           width: 0.8,
         ),
       ),

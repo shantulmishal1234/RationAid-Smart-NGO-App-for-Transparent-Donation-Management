@@ -135,13 +135,17 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
                     decoration: InputDecoration(
                       hintText: 'Search packs...',
                       hintStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                         fontSize: 14,
                       ),
                       prefixIcon: Icon(
                         Icons.search,
                         size: 20,
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                       filled: true,
                       fillColor: theme.cardColor,
@@ -149,13 +153,13 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: theme.dividerColor.withOpacity(0.6),
+                          color: theme.dividerColor.withValues(alpha: 0.6),
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: theme.dividerColor.withOpacity(0.6),
+                          color: theme.dividerColor.withValues(alpha: 0.6),
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -182,13 +186,13 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
                   color: theme.cardColor,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: theme.dividerColor.withOpacity(0.6),
+                    color: theme.dividerColor.withValues(alpha: 0.6),
                   ),
                 ),
                 child: PopupMenuButton<String>(
                   icon: Icon(
                     Icons.filter_list,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                     size: 22,
                   ),
                   tooltip: 'Filter by Type',
@@ -567,6 +571,26 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
   }
 
   Future<void> _deletePack(AssistancePack pack) async {
+    // Safety check: prevent deletion of packs with active family assignments
+    final assignedFamilies = await FirebaseFirestore.instance
+        .collection('families')
+        .where('assignedPackId', isEqualTo: pack.id)
+        .where('status', isEqualTo: 'accepted')
+        .limit(1)
+        .get();
+
+    if (assignedFamilies.docs.isNotEmpty && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Cannot delete: families are currently assigned to this pack.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(

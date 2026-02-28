@@ -159,7 +159,7 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: c.withOpacity(0.1),
+              color: c.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, size: 28, color: c),
@@ -389,7 +389,7 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.purchaserOrange.withOpacity(0.1),
+                    color: AppColors.purchaserOrange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
@@ -589,7 +589,7 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.purchaserOrange.withOpacity(0.1),
+                  color: AppColors.purchaserOrange.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
@@ -615,7 +615,7 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
                     labelText: 'Current Name',
                     prefixIcon: const Icon(Icons.person),
                     filled: true,
-                    fillColor: Colors.grey.withOpacity(0.1),
+                    fillColor: Colors.grey.withValues(alpha: 0.1),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -706,7 +706,7 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.purchaserOrange.withOpacity(0.1),
+                color: AppColors.purchaserOrange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(
@@ -731,7 +731,7 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
                   labelText: 'Current Phone',
                   prefixIcon: const Icon(Icons.phone),
                   filled: true,
-                  fillColor: Colors.grey.withOpacity(0.1),
+                  fillColor: Colors.grey.withValues(alpha: 0.1),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -807,7 +807,7 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.purchaserOrange.withOpacity(0.1),
+                color: AppColors.purchaserOrange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(
@@ -867,7 +867,7 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.logout, color: Colors.red),
@@ -928,7 +928,7 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
                         CircleAvatar(
                           radius: 50,
                           backgroundColor: AppColors.purchaserOrange
-                              .withOpacity(0.2),
+                              .withValues(alpha: 0.2),
                           backgroundImage: _profilePhotoUrl != null
                               ? NetworkImage(_profilePhotoUrl!)
                               : null,
@@ -1087,7 +1087,7 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.indigo.withOpacity(0.1),
+                        color: Colors.indigo.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
@@ -1154,7 +1154,7 @@ class _ActivityRow extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.15),
+            color: color.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(icon, color: color, size: 24),
@@ -1203,7 +1203,7 @@ class _SupportOption extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.purchaserOrange.withOpacity(0.1),
+                color: AppColors.purchaserOrange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: AppColors.purchaserOrange, size: 22),
@@ -1255,7 +1255,7 @@ class _SettingsTile extends StatelessWidget {
       leading: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(icon, color: color, size: 22),

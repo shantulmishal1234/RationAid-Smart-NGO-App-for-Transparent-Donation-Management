@@ -67,7 +67,7 @@ class _AdminSendNotificationScreenState
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: AppColors.primaryBlue.withOpacity(0.15),
+                              color: AppColors.primaryBlue.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: const Icon(
@@ -95,7 +95,7 @@ class _AdminSendNotificationScreenState
                                   style: TextStyle(
                                     fontSize: 13,
                                     color: theme.colorScheme.onSurface
-                                        .withOpacity(0.6),
+                                        .withValues(alpha: 0.6),
                                   ),
                                 ),
                               ],
@@ -160,7 +160,7 @@ class _AdminSendNotificationScreenState
                           decoration: InputDecoration(
                             labelText: 'Select role',
                             labelStyle: TextStyle(
-                              color: theme.colorScheme.onSurface.withOpacity(
+                              color: theme.colorScheme.onSurface.withValues(alpha: 
                                 0.7,
                               ),
                             ),
@@ -219,7 +219,7 @@ class _AdminSendNotificationScreenState
                         decoration: InputDecoration(
                           labelText: 'Notification title',
                           labelStyle: TextStyle(
-                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                           ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -231,7 +231,7 @@ class _AdminSendNotificationScreenState
                           ),
                           prefixIcon: Icon(
                             Icons.title,
-                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                           ),
                         ),
                         validator: (value) {
@@ -249,7 +249,7 @@ class _AdminSendNotificationScreenState
                         decoration: InputDecoration(
                           labelText: 'Notification message',
                           labelStyle: TextStyle(
-                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                           ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -261,7 +261,7 @@ class _AdminSendNotificationScreenState
                           ),
                           prefixIcon: Icon(
                             Icons.message,
-                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                           ),
                           alignLabelWithHint: true,
                         ),
@@ -320,12 +320,12 @@ class _AdminSendNotificationScreenState
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: isDark
-                      ? Colors.blue.withOpacity(0.1)
+                      ? Colors.blue.withValues(alpha: 0.1)
                       : Colors.blue[50],
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: isDark
-                        ? Colors.blue.withOpacity(0.3)
+                        ? Colors.blue.withValues(alpha: 0.3)
                         : Colors.blue[200]!,
                   ),
                 ),
@@ -380,7 +380,7 @@ class _AdminSendNotificationScreenState
           decoration: InputDecoration(
             labelText: 'Select user',
             labelStyle: TextStyle(
-              color: theme.colorScheme.onSurface.withOpacity(0.7),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
             ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -410,7 +410,7 @@ class _AdminSendNotificationScreenState
                     email,
                     style: TextStyle(
                       fontSize: 11,
-                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
                 ],

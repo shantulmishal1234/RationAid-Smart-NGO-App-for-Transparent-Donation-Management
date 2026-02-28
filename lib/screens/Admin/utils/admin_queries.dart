@@ -30,7 +30,7 @@ class AdminQueries {
     // Apply Status Filter
     switch (statusFilter) {
       case DonationStatusFilter.all:
-        query = query.where('status', whereNotIn: ['draft']);
+        query = query.where('status', isNotEqualTo: 'draft');
         break;
       case DonationStatusFilter.pending:
         query = query.where('status', isEqualTo: 'pending');

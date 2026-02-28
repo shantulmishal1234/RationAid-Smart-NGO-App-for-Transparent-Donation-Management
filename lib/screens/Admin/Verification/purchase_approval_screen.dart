@@ -5,6 +5,7 @@ import 'package:ration_aid/services/procurement_service.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 // Removed AdminScaffold import
 import 'package:intl/intl.dart';
+import 'package:ration_aid/screens/Admin/utils/admin_cache.dart';
 
 class PurchaseApprovalScreen extends StatefulWidget {
   const PurchaseApprovalScreen({super.key});
@@ -17,6 +18,7 @@ class PurchaseApprovalScreen extends StatefulWidget {
 /// Now verifies PENDING STOCK (Purchased but not yet in inventory)
 class _PurchaseApprovalScreenState extends State<PurchaseApprovalScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  bool _isProcessing = false;
 
   void _showVerificationDialog(ProcurementRequest request) {
     final currencyFormat = NumberFormat.currency(
@@ -121,26 +123,41 @@ class _PurchaseApprovalScreenState extends State<PurchaseApprovalScreen> {
             child: const Text('Reject', style: TextStyle(color: Colors.red)),
           ),
           ElevatedButton(
-            onPressed: () async {
-              try {
-                await ProcurementService.adminVerifyPurchase(request.id);
-                if (context.mounted) Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Stock Verified & Added to Inventory'),
-                  ),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text('Error: $e')));
-              }
-            },
+            onPressed: _isProcessing
+                ? null
+                : () async {
+                    setState(() => _isProcessing = true);
+                    try {
+                      await ProcurementService.adminVerifyPurchase(request.id);
+                      AdminCache.invalidate(CacheKeys.dashboardStats);
+                      if (context.mounted) Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Stock Verified & Added to Inventory'),
+                        ),
+                      );
+                    } catch (e) {
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                    } finally {
+                      if (mounted) setState(() => _isProcessing = false);
+                    }
+                  },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Approve & Stock In'),
+            child: _isProcessing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('Approve & Stock In'),
           ),
         ],
       ),

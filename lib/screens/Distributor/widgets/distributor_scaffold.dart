@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 
-/// A reusable Scaffold wrapper for Purchaser screens that handles:
+/// A reusable Scaffold wrapper for Distributor screens that handles:
 /// - Consistent AppBar styling with gradients
 /// - Safe Area handling
 /// - Bottom Navigation integration
-class PurchaserScaffold extends StatelessWidget {
+class DistributorScaffold extends StatelessWidget {
   final String title;
   final Widget body;
   final Widget? bottomNavigationBar;
@@ -15,7 +15,7 @@ class PurchaserScaffold extends StatelessWidget {
   final bool useSafeArea;
   final PreferredSizeWidget? appBarBottom;
 
-  const PurchaserScaffold({
+  const DistributorScaffold({
     super.key,
     required this.title,
     required this.body,
@@ -43,7 +43,7 @@ class PurchaserScaffold extends StatelessWidget {
           title,
           style: TextStyle(
             fontWeight: FontWeight.w600,
-            color: isDark ? AppColors.purchaserOrange : Colors.white,
+            color: isDark ? AppColors.volunteerBlue : Colors.white,
           ),
         ),
         actions: actions,
@@ -53,17 +53,17 @@ class PurchaserScaffold extends StatelessWidget {
             gradient: LinearGradient(
               colors: isDark
                   ? [
-                      AppColors.purchaserOrange.withValues(alpha: 0.1),
-                      AppColors.purchaserOrange.withValues(alpha: 0.05),
+                      AppColors.volunteerBlue.withValues(alpha: 0.1),
+                      AppColors.volunteerBlue.withValues(alpha: 0.05),
                     ]
-                  : [AppColors.purchaserOrange, Colors.orangeAccent],
+                  : [AppColors.volunteerBlue, Colors.blueAccent],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
             ),
             border: isDark
                 ? Border(
                     bottom: BorderSide(
-                      color: AppColors.purchaserOrange.withValues(alpha: 0.3),
+                      color: AppColors.volunteerBlue.withValues(alpha: 0.3),
                       width: 1.5,
                     ),
                   )
@@ -83,9 +83,9 @@ class PurchaserScaffold extends StatelessWidget {
             colors: isDark
                 ? [const Color(0xFF121212), const Color(0xFF1E1E1E)]
                 : [
-                    const Color(0xFFFFF3E0),
-                    const Color(0xFFFFF8E1),
-                  ], // Light orange tint
+                    const Color(0xFFE3F2FD),
+                    const Color(0xFFBBDEFB),
+                  ], // Light blue tint
           ),
         ),
         child: useSafeArea ? SafeArea(bottom: false, child: body) : body,

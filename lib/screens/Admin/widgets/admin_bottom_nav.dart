@@ -365,7 +365,7 @@ class NotchedBarPainter extends CustomPainter {
     // Draw shadow
     canvas.drawShadow(
       finalPath,
-      Colors.black.withOpacity(isDark ? 0.5 : 0.1),
+      Colors.black.withValues(alpha: isDark ? 0.5 : 0.1),
       15,
       false,
     );
@@ -376,8 +376,8 @@ class NotchedBarPainter extends CustomPainter {
     // Draw border
     final borderPaint = Paint()
       ..color = isDark
-          ? Colors.white.withOpacity(0.1)
-          : Colors.white.withOpacity(0.5)
+          ? Colors.white.withValues(alpha: 0.1)
+          : Colors.white.withValues(alpha: 0.5)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     canvas.drawPath(finalPath, borderPaint);

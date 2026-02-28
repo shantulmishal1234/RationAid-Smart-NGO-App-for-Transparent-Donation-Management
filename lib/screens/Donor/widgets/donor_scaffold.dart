@@ -52,8 +52,8 @@ class DonorScaffold extends StatelessWidget {
             gradient: LinearGradient(
               colors: isDark
                   ? [
-                      AppColors.donorGreen.withOpacity(0.1),
-                      AppColors.donorGreen.withOpacity(0.05),
+                      AppColors.donorGreen.withValues(alpha: 0.1),
+                      AppColors.donorGreen.withValues(alpha: 0.05),
                     ]
                   : [AppColors.donorGreen, AppColors.accentGreen],
               begin: Alignment.centerLeft,
@@ -62,7 +62,7 @@ class DonorScaffold extends StatelessWidget {
             border: isDark
                 ? Border(
                     bottom: BorderSide(
-                      color: AppColors.donorGreen.withOpacity(0.3),
+                      color: AppColors.donorGreen.withValues(alpha: 0.3),
                       width: 1.5,
                     ),
                   )

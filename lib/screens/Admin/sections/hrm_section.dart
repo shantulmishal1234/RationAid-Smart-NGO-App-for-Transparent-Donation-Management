@@ -109,7 +109,7 @@ class _HrmSectionState extends State<HrmSection> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.onSurface.withOpacity(0.8),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                 ),
               ),
               leading: Icon(
@@ -158,6 +158,12 @@ class _HrmSectionState extends State<HrmSection> {
                         ),
                         _overviewChip(
                           context,
+                          label: 'Admin',
+                          value: (d['admin'] ?? 0).toString(),
+                          color: Colors.red[600]!,
+                        ),
+                        _overviewChip(
+                          context,
                           label: 'Purchaser',
                           value: d['purchaser'].toString(),
                           color: Colors.purple[600]!,
@@ -202,13 +208,17 @@ class _HrmSectionState extends State<HrmSection> {
                     decoration: InputDecoration(
                       hintText: 'Search members...',
                       hintStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                         fontSize: 14,
                       ),
                       prefixIcon: Icon(
                         Icons.search,
                         size: 20,
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                       filled: true,
                       fillColor: theme.cardColor,
@@ -216,13 +226,13 @@ class _HrmSectionState extends State<HrmSection> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: theme.dividerColor.withOpacity(0.6),
+                          color: theme.dividerColor.withValues(alpha: 0.6),
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: theme.dividerColor.withOpacity(0.6),
+                          color: theme.dividerColor.withValues(alpha: 0.6),
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -247,13 +257,13 @@ class _HrmSectionState extends State<HrmSection> {
                   color: theme.cardColor,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: theme.dividerColor.withOpacity(0.6),
+                    color: theme.dividerColor.withValues(alpha: 0.6),
                   ),
                 ),
                 child: PopupMenuButton<String>(
                   icon: Icon(
                     Icons.filter_list,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                     size: 22,
                   ),
                   tooltip: 'Filter by Role',
@@ -373,7 +383,9 @@ class _HrmSectionState extends State<HrmSection> {
                     child: Text(
                       'No members found for this filter.',
                       style: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                     ),
                   );
@@ -449,7 +461,9 @@ class _HrmSectionState extends State<HrmSection> {
           '$label: ',
           style: TextStyle(
             fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.6),
           ),
         ),
         Text(

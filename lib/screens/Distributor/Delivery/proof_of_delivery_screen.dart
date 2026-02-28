@@ -61,6 +61,8 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
     final picked = await _picker.pickImage(
       source: ImageSource.camera,
       imageQuality: 85,
+      maxWidth: 1600,
+      maxHeight: 1600,
     );
     if (picked != null) setState(() => _photo = File(picked.path));
   }
@@ -69,6 +71,8 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
     final picked = await _picker.pickImage(
       source: ImageSource.gallery,
       imageQuality: 85,
+      maxWidth: 1600,
+      maxHeight: 1600,
     );
     if (picked != null) setState(() => _photo = File(picked.path));
   }
@@ -163,7 +167,7 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
                 color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: AppColors.volunteerBlue.withOpacity(0.25),
+                  color: AppColors.volunteerBlue.withValues(alpha: 0.25),
                 ),
               ),
               child: Row(
@@ -200,7 +204,7 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
               'Take a photo of the delivered items at the family\'s location',
               style: TextStyle(
                 fontSize: 12,
-                color: theme.colorScheme.onSurface.withOpacity(0.55),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
               ),
             ),
             const SizedBox(height: 12),
@@ -216,8 +220,8 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: _photo != null
-                        ? Colors.green.withOpacity(0.5)
-                        : Colors.grey.withOpacity(0.3),
+                        ? Colors.green.withValues(alpha: 0.5)
+                        : Colors.grey.withValues(alpha: 0.3),
                     width: 2,
                   ),
                 ),
@@ -278,13 +282,13 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: _position != null
-                    ? Colors.green.withOpacity(0.06)
-                    : Colors.orange.withOpacity(0.06),
+                    ? Colors.green.withValues(alpha: 0.06)
+                    : Colors.orange.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: _position != null
-                      ? Colors.green.withOpacity(0.3)
-                      : Colors.orange.withOpacity(0.3),
+                      ? Colors.green.withValues(alpha: 0.3)
+                      : Colors.orange.withValues(alpha: 0.3),
                 ),
               ),
               child: Row(

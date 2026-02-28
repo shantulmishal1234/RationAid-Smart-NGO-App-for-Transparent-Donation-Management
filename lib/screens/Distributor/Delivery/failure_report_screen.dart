@@ -89,9 +89,9 @@ class _FailureReportScreenState extends State<FailureReportScreen> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.08),
+                color: Colors.red.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.withOpacity(0.3)),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -119,7 +119,7 @@ class _FailureReportScreenState extends State<FailureReportScreen> {
                           'This will notify the admin immediately. Provide as much detail as possible.',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.red.withOpacity(0.75),
+                            color: Colors.red.withValues(alpha: 0.75),
                           ),
                         ),
                       ],
@@ -137,7 +137,7 @@ class _FailureReportScreenState extends State<FailureReportScreen> {
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
               ),
               child: Row(
                 children: [
@@ -180,13 +180,13 @@ class _FailureReportScreenState extends State<FailureReportScreen> {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? Colors.red.withOpacity(0.08)
+                        ? Colors.red.withValues(alpha: 0.08)
                         : (isDark ? const Color(0xFF1E1E2E) : Colors.white),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isSelected
                           ? Colors.red
-                          : Colors.grey.withOpacity(0.2),
+                          : Colors.grey.withValues(alpha: 0.2),
                       width: isSelected ? 2 : 1,
                     ),
                   ),

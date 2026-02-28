@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ration_aid/theme/app_colors.dart';
 
 /// Enum representing different sections in the Donor Dashboard
 enum DonorSection {
@@ -45,12 +46,12 @@ enum DonationFilter {
   }
 }
 
-/// Color constants used throughout the Donor Dashboard
-/// Matching the theme from AppColors but donor-specific
+/// @Deprecated('Use AppColors directly')
+/// Kept as alias for backward compatibility.
 class DonorColors {
-  static const Color primaryGreen = Color(0xFF4CAF50);
-  static const Color accentBlue = Color(0xFF5CB9DD);
-  static const Color lightGreen = Color(0xFF6DD1A1);
+  static const Color primaryGreen = AppColors.donorGreen;
+  static const Color accentBlue = AppColors.primaryBlue;
+  static const Color lightGreen = AppColors.accentGreen;
 
   // Status colors
   static const Color statusDraft = Color(0xFF9E9E9E);

@@ -112,7 +112,7 @@ class _FinalApprovalDialogState extends State<FinalApprovalDialog> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withOpacity(0.1),
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(16),
                   topRight: Radius.circular(16),
@@ -138,7 +138,7 @@ class _FinalApprovalDialogState extends State<FinalApprovalDialog> {
                           'Family ID: ${widget.family.id.substring(widget.family.id.length - 8)}',
                           style: TextStyle(
                             fontSize: 12,
-                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                           ),
                         ),
                       ],
@@ -289,9 +289,9 @@ class _FinalApprovalDialogState extends State<FinalApprovalDialog> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.green.withOpacity(0.1),
+        color: Colors.green.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.green.withOpacity(0.3)),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -313,7 +313,7 @@ class _FinalApprovalDialogState extends State<FinalApprovalDialog> {
                   '$totalVotes votes cast (threshold: ${widget.family.quorumThreshold})',
                   style: TextStyle(
                     fontSize: 13,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                   ),
                 ),
               ],
@@ -360,9 +360,9 @@ class _FinalApprovalDialogState extends State<FinalApprovalDialog> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -380,7 +380,7 @@ class _FinalApprovalDialogState extends State<FinalApprovalDialog> {
             label,
             style: TextStyle(
               fontSize: 12,
-              color: theme.colorScheme.onSurface.withOpacity(0.6),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
         ],
@@ -398,7 +398,7 @@ class _FinalApprovalDialogState extends State<FinalApprovalDialog> {
       decoration: BoxDecoration(
         color: theme.scaffoldBackgroundColor,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -431,7 +431,7 @@ class _FinalApprovalDialogState extends State<FinalApprovalDialog> {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: color.withOpacity(0.15),
+                        color: color.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
@@ -451,7 +451,7 @@ class _FinalApprovalDialogState extends State<FinalApprovalDialog> {
                     review.comment!,
                     style: TextStyle(
                       fontSize: 12,
-                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -480,7 +480,7 @@ class _FinalApprovalDialogState extends State<FinalApprovalDialog> {
       icon: Icon(icon, size: 20),
       label: Text(label),
       style: OutlinedButton.styleFrom(
-        backgroundColor: isSelected ? color.withOpacity(0.1) : null,
+        backgroundColor: isSelected ? color.withValues(alpha: 0.1) : null,
         foregroundColor: isSelected ? color : theme.colorScheme.onSurface,
         side: BorderSide(
           color: isSelected ? color : theme.dividerColor,

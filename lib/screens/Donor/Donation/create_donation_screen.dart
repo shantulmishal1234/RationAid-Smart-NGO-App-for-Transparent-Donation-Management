@@ -207,6 +207,8 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
 
       if (image == null) return;
 
+      setState(() => _isUploading = true);
+
       final imageFile = File(image.path);
       final imageUrl = await CloudinaryService.uploadImage(imageFile);
 
@@ -412,7 +414,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
               prefixStyle: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: theme.colorScheme.onSurface.withOpacity(0.7),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
               ),
               filled: true,
               fillColor: isDark ? Colors.grey[800] : Colors.grey[50],
@@ -507,7 +509,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                       : BorderSide.none,
                 ),
                 elevation: currentQty > 0 ? 4 : 1,
-                shadowColor: AppColors.donorGreen.withOpacity(0.3),
+                shadowColor: AppColors.donorGreen.withValues(alpha: 0.3),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Column(
@@ -519,15 +521,17 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               color: currentQty > 0
-                                  ? AppColors.donorGreen.withOpacity(0.1)
-                                  : theme.dividerColor.withOpacity(0.1),
+                                  ? AppColors.donorGreen.withValues(alpha: 0.1)
+                                  : theme.dividerColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Icon(
                               Icons.inventory_2,
                               color: currentQty > 0
                                   ? AppColors.donorGreen
-                                  : theme.iconTheme.color?.withOpacity(0.5),
+                                  : theme.iconTheme.color?.withValues(
+                                      alpha: 0.5,
+                                    ),
                               size: 20,
                             ),
                           ),
@@ -549,7 +553,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: theme.colorScheme.onSurface
-                                        .withOpacity(0.6),
+                                        .withValues(alpha: 0.6),
                                   ),
                                 ),
                               ],
@@ -563,7 +567,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                           color: theme.colorScheme.surface,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: theme.dividerColor.withOpacity(0.2),
+                            color: theme.dividerColor.withValues(alpha: 0.2),
                           ),
                         ),
                         child: Row(
@@ -618,7 +622,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
               child: Text(
                 'Please select a family first',
                 style: TextStyle(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
             ),
@@ -751,7 +755,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.donorGreen.withOpacity(isDark ? 0.15 : 0.08)
+              ? AppColors.donorGreen.withValues(alpha: isDark ? 0.15 : 0.08)
               : (isDark ? Colors.grey[800] : Colors.white),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
@@ -763,8 +767,8 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
           boxShadow: [
             BoxShadow(
               color: isSelected
-                  ? AppColors.donorGreen.withOpacity(0.1)
-                  : Colors.black.withOpacity(0.05),
+                  ? AppColors.donorGreen.withValues(alpha: 0.1)
+                  : Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -815,8 +819,8 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                         : Text(
                             '${_selectedFamily!.numberOfAdults} Adults • ${_selectedFamily!.numberOfChildren} Children',
                             style: TextStyle(
-                              color: theme.colorScheme.onSurface.withOpacity(
-                                0.7,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.7,
                               ),
                               fontSize: 13,
                             ),
@@ -825,7 +829,9 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                     Text(
                       'Tap to choose a family to support',
                       style: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                         fontSize: 13,
                       ),
                     ),
@@ -836,7 +842,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
               Icons.chevron_right,
               color: isSelected
                   ? AppColors.donorGreen
-                  : theme.colorScheme.onSurface.withOpacity(0.3),
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.3),
             ),
           ],
         ),
@@ -865,9 +871,9 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             color: _paymentProofUrl != null
-                ? AppColors.donorGreen.withOpacity(0.05)
+                ? AppColors.donorGreen.withValues(alpha: 0.05)
                 : (isDark
-                      ? Colors.grey[800]!.withOpacity(0.5)
+                      ? Colors.grey[800]!.withValues(alpha: 0.5)
                       : Colors.grey[50]!),
           ),
           child: Column(
@@ -932,7 +938,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withValues(alpha: 0.05),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -958,7 +964,9 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                       'Screenshots or photos accepted',
                       style: TextStyle(
                         fontSize: 13,
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                     ),
                   ],
@@ -990,7 +998,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
           subtitle: Text(
             'Your name will not be shared with the family',
             style: TextStyle(
-              color: theme.colorScheme.onSurface.withOpacity(0.7),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
             ),
           ),
           activeColor: AppColors.donorGreen,
@@ -1044,7 +1052,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
         color: theme.cardColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, -5),
           ),
@@ -1132,8 +1140,8 @@ class _QuantityButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: onTap == null
-          ? Colors.grey.withOpacity(0.1)
-          : color.withOpacity(0.1),
+          ? Colors.grey.withValues(alpha: 0.1)
+          : color.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: onTap,

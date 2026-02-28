@@ -52,8 +52,8 @@ class AdminScaffold extends StatelessWidget {
             gradient: LinearGradient(
               colors: isDark
                   ? [
-                      AppColors.primaryBlue.withOpacity(0.1),
-                      AppColors.primaryBlue.withOpacity(0.05),
+                      AppColors.primaryBlue.withValues(alpha: 0.1),
+                      AppColors.primaryBlue.withValues(alpha: 0.05),
                     ]
                   : [AppColors.primaryBlue, AppColors.accentGreen],
               begin: Alignment.centerLeft,
@@ -62,7 +62,7 @@ class AdminScaffold extends StatelessWidget {
             border: isDark
                 ? Border(
                     bottom: BorderSide(
-                      color: AppColors.primaryBlue.withOpacity(0.3),
+                      color: AppColors.primaryBlue.withValues(alpha: 0.3),
                       width: 1.5,
                     ),
                   )
@@ -76,13 +76,14 @@ class AdminScaffold extends StatelessWidget {
         width: double.infinity,
         height: double.infinity,
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [const Color(0xFF121212), const Color(0xFF1E1E1E)]
-                : [const Color(0xFFE1F5FE), const Color(0xFFE0F7FA)],
-          ),
+          color: isDark ? null : Theme.of(context).scaffoldBackgroundColor,
+          gradient: isDark
+              ? const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF121212), Color(0xFF1E1E1E)],
+                )
+              : null,
         ),
         child: useSafeArea ? SafeArea(bottom: false, child: body) : body,
       ),

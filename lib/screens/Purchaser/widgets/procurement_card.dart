@@ -61,6 +61,10 @@ class ProcurementCard extends StatelessWidget {
         statusColor = Colors.teal;
         statusLabel = 'In Stock';
         break;
+      case ProcurementStatus.in_transit:
+        statusColor = Colors.indigo;
+        statusLabel = 'In Transit';
+        break;
       case ProcurementStatus.delivered:
         statusColor = Colors.purple;
         statusLabel = 'Delivered';
@@ -80,10 +84,10 @@ class ProcurementCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.6)),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.6)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -134,7 +138,7 @@ class ProcurementCard extends StatelessWidget {
                                         Icons.location_on,
                                         size: 13,
                                         color: theme.iconTheme.color
-                                            ?.withOpacity(0.5),
+                                            ?.withValues(alpha: 0.5),
                                       ),
                                       const SizedBox(width: 3),
                                       Expanded(
@@ -146,7 +150,7 @@ class ProcurementCard extends StatelessWidget {
                                                     .textTheme
                                                     .bodySmall
                                                     ?.color
-                                                    ?.withOpacity(0.7),
+                                                    ?.withValues(alpha: 0.7),
                                                 fontSize: 11,
                                               ),
                                           maxLines: 1,
@@ -166,10 +170,10 @@ class ProcurementCard extends StatelessWidget {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: statusColor.withOpacity(0.1),
+                                color: statusColor.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(6),
                                 border: Border.all(
-                                  color: statusColor.withOpacity(0.2),
+                                  color: statusColor.withValues(alpha: 0.2),
                                   width: 0.5,
                                 ),
                               ),
@@ -197,8 +201,8 @@ class ProcurementCard extends StatelessWidget {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: theme.scaffoldBackgroundColor.withOpacity(
-                                0.5,
+                              color: theme.scaffoldBackgroundColor.withValues(
+                                alpha: 0.5,
                               ),
                               borderRadius: BorderRadius.circular(6),
                             ),
@@ -210,8 +214,8 @@ class ProcurementCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: theme.colorScheme.onSurface.withOpacity(
-                                  0.8,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.8,
                                 ),
                               ),
                             ),
@@ -224,10 +228,10 @@ class ProcurementCard extends StatelessWidget {
                             margin: const EdgeInsets.only(top: 8),
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.red.withOpacity(0.05),
+                              color: Colors.red.withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
-                                color: Colors.red.withOpacity(0.2),
+                                color: Colors.red.withValues(alpha: 0.2),
                               ),
                             ),
                             child: Row(

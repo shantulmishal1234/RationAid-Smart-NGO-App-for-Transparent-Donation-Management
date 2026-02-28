@@ -7,6 +7,7 @@ enum ProcurementStatus {
   verified, // Admin approved, stock added
   rejected, // Admin rejected receipt
   stocked, // Officially in inventory (reserved)
+  in_transit, // Loaded in truck, on the way
   delivered, // Handed over to family
   issue_reported, // Purchaser reported an issue
   written_off, // Admin wrote off stock

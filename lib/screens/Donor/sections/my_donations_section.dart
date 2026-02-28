@@ -52,7 +52,7 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
                 Text(
                   'Track your donation journey',
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
               ],
@@ -143,13 +143,13 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
                     decoration: InputDecoration(
                       hintText: 'Search donations...',
                       hintStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                         fontSize: 14,
                       ),
                       prefixIcon: Icon(
                         Icons.search,
                         size: 20,
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                       ),
                       suffixIcon: _searchQuery.isNotEmpty
                           ? IconButton(
@@ -168,13 +168,13 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: theme.dividerColor.withOpacity(0.6),
+                          color: theme.dividerColor.withValues(alpha: 0.6),
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: theme.dividerColor.withOpacity(0.6),
+                          color: theme.dividerColor.withValues(alpha: 0.6),
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -203,13 +203,13 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
                   color: theme.cardColor,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: theme.dividerColor.withOpacity(0.6),
+                    color: theme.dividerColor.withValues(alpha: 0.6),
                   ),
                 ),
                 child: PopupMenuButton<DonationFilter>(
                   icon: Icon(
                     Icons.filter_list,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                     size: 22,
                   ),
                   onSelected: (DonationFilter value) {
@@ -313,7 +313,7 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
                                   fontSize: 16,
                                   color: Theme.of(
                                     context,
-                                  ).colorScheme.onSurface.withOpacity(0.6),
+                                  ).colorScheme.onSurface.withValues(alpha: 0.6),
                                 ),
                               ),
                             ],
@@ -377,7 +377,7 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
           '$label: ',
           style: TextStyle(
             fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
           ),
         ),
         Text(
@@ -440,12 +440,12 @@ class _DonationCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: theme.cardColor,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: theme.dividerColor.withOpacity(0.4)),
+            border: Border.all(color: theme.dividerColor.withValues(alpha: 0.4)),
             boxShadow: [
               BoxShadow(
                 color: isDark
-                    ? Colors.black.withOpacity(0.2)
-                    : Colors.black.withOpacity(0.03),
+                    ? Colors.black.withValues(alpha: 0.2)
+                    : Colors.black.withValues(alpha: 0.03),
                 blurRadius: 4,
                 offset: const Offset(0, 1),
               ),
@@ -456,7 +456,7 @@ class _DonationCard extends StatelessWidget {
               // Serial Number
               CircleAvatar(
                 radius: 16,
-                backgroundColor: AppColors.donorGreen.withOpacity(0.1),
+                backgroundColor: AppColors.donorGreen.withValues(alpha: 0.1),
                 child: Text(
                   serialNumber.toString(),
                   style: const TextStyle(
@@ -503,7 +503,7 @@ class _DonationCard extends StatelessWidget {
                       'Created: ${_formatDate(donation.createdAt)}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontSize: 11,
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
                   ],
@@ -515,12 +515,12 @@ class _DonationCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _getStatusBadgeColor(donation.status).withOpacity(0.1),
+                  color: _getStatusBadgeColor(donation.status).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: _getStatusBadgeColor(
                       donation.status,
-                    ).withOpacity(0.3),
+                    ).withValues(alpha: 0.3),
                   ),
                 ),
                 child: Text(
@@ -538,7 +538,7 @@ class _DonationCard extends StatelessWidget {
               Icon(
                 Icons.arrow_forward_ios,
                 size: 14,
-                color: theme.colorScheme.onSurface.withOpacity(0.4),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
               ),
             ],
           ),

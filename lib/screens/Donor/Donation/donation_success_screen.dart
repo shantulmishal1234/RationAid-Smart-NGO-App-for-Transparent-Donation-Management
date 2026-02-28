@@ -75,7 +75,7 @@ class _DonationSuccessScreenState extends State<DonationSuccessScreen>
               child: Container(
                 padding: const EdgeInsets.all(30),
                 decoration: BoxDecoration(
-                  color: AppColors.donorGreen.withOpacity(0.1),
+                  color: AppColors.donorGreen.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Container(
@@ -118,14 +118,14 @@ class _DonationSuccessScreenState extends State<DonationSuccessScreen>
                   Text(
                     'Your donation has been submitted.',
                     style: theme.textTheme.bodyLarge?.copyWith(
-                      color: theme.colorScheme.onSurface.withOpacity(0.8),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Redirecting to tracking...',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withOpacity(0.5),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
                   ),
                 ],

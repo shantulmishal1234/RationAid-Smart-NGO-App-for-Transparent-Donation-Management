@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:ration_aid/screens/Purchaser/models/purchaser_enums.dart';
 import 'package:ration_aid/screens/Purchaser/sections/purchaser_profile_section.dart';
 import 'package:ration_aid/screens/Purchaser/widgets/purchaser_bottom_nav.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ration_aid/screens/Purchaser/widgets/purchaser_scaffold.dart';
 import 'package:ration_aid/screens/Purchaser/views/home_view.dart';
 import 'package:ration_aid/screens/Purchaser/views/procurement_view.dart';
@@ -36,65 +37,78 @@ class _PurchaserDashboardState extends State<PurchaserDashboard> {
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
 
-    return PurchaserScaffold(
-      title: _titles[_currentSection]!,
-      showBackButton: false,
-      useSafeArea: false,
-      body: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 80),
-            child: _buildBody(),
-          ),
-        ],
-      ),
-      bottomNavigationBar: StreamBuilder<int>(
-        // Stream unread notification count so the badge auto-updates in real time
-        stream: uid == null
-            ? Stream.value(0)
-            : NotificationService.streamPurchaserNotifications(uid).map(
-                (snap) => snap.docs.where((d) => d['isRead'] != true).length,
+    return StreamBuilder<DocumentSnapshot>(
+      stream: uid == null
+          ? const Stream.empty()
+          : FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+      builder: (context, userSnap) {
+        final userData = userSnap.data?.data() as Map<String, dynamic>?;
+        final isSupervisor = userData?['isSupervisor'] ?? false;
+
+        return PurchaserScaffold(
+          title: _titles[_currentSection]!,
+          showBackButton: false,
+          useSafeArea: false,
+          body: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 80),
+                child: _buildBody(isSupervisor),
               ),
-        initialData: 0,
-        builder: (context, snap) {
-          return PurchaserBottomNav(
-            currentSection: _currentSection,
-            unreadNotificationCount: snap.data ?? 0,
-            onSectionChanged: (section) {
-              setState(() {
-                _currentSection = section;
-              });
+            ],
+          ),
+          bottomNavigationBar: StreamBuilder<int>(
+            // Stream unread notification count so the badge auto-updates in real time
+            stream: uid == null
+                ? Stream.value(0)
+                : NotificationService.streamPurchaserNotifications(uid).map(
+                    (snap) =>
+                        snap.docs.where((d) => d['isRead'] != true).length,
+                  ),
+            initialData: 0,
+            builder: (context, snap) {
+              return PurchaserBottomNav(
+                currentSection: _currentSection,
+                isSupervisor: isSupervisor,
+                unreadNotificationCount: snap.data ?? 0,
+                onSectionChanged: (section) {
+                  setState(() {
+                    _currentSection = section;
+                  });
+                },
+              );
             },
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildBody() {
-    return SafeArea(bottom: false, child: _buildSectionView());
+  Widget _buildBody(bool isSupervisor) {
+    return SafeArea(bottom: false, child: _buildSectionView(isSupervisor));
   }
 
-  Widget _buildSectionView() {
+  Widget _buildSectionView(bool isSupervisor) {
     switch (_currentSection) {
       case PurchaserSection.dashboard:
         return PurchaserHomeView(
+          isSupervisor: isSupervisor,
           onSectionChange: (section) =>
               setState(() => _currentSection = section),
         );
       case PurchaserSection.procurement:
-        return const ProcurementView();
+        return ProcurementView(isSupervisor: isSupervisor);
       case PurchaserSection.inventory:
         return const InventoryView();
       case PurchaserSection.history:
-        return const HistoryView();
+        return HistoryView(isSupervisor: isSupervisor);
       case PurchaserSection.notifications:
         return PurchaserNotificationsView(
           onSectionChange: (section) =>
               setState(() => _currentSection = section),
         );
       case PurchaserSection.reports:
-        return const ReportsView();
+        return isSupervisor ? const ReportsView() : const SizedBox.shrink();
       case PurchaserSection.profile:
         return const PurchaserProfileSection();
     }

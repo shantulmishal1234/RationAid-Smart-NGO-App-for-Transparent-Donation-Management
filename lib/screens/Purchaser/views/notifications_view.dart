@@ -20,18 +20,37 @@ class PurchaserNotificationsView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Header
+        // Header row with Mark All Read
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Center(
-            child: Text(
-              'Notifications',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: theme.colorScheme.onSurface,
-                letterSpacing: 0.5,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Notifications',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: theme.colorScheme.onSurface,
+                  letterSpacing: 0.5,
+                ),
               ),
-            ),
+              if (userId != null)
+                TextButton.icon(
+                  onPressed: () async {
+                    await NotificationService.markAllUserNotificationsAsRead(
+                      userId,
+                    );
+                  },
+                  icon: const Icon(Icons.done_all, size: 18),
+                  label: const Text(
+                    'Mark All Read',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.purchaserOrange,
+                  ),
+                ),
+            ],
           ),
         ),
 
@@ -49,6 +68,15 @@ class PurchaserNotificationsView extends StatelessWidget {
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
+                      }
+
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Text(
+                            'Could not load notifications',
+                            style: TextStyle(color: Colors.red[400]),
+                          ),
+                        );
                       }
 
                       final docs = snapshot.data?.docs ?? [];
@@ -86,7 +114,9 @@ class PurchaserNotificationsView extends StatelessWidget {
           Icon(
             Icons.notifications_none,
             size: 64,
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.2),
           ),
           const SizedBox(height: 16),
           Text(
@@ -94,14 +124,18 @@ class PurchaserNotificationsView extends StatelessWidget {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.5),
             ),
           ),
           Text(
             'You\'re all caught up!',
             style: TextStyle(
               fontSize: 14,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.4),
             ),
           ),
         ],
@@ -125,13 +159,13 @@ class _NotificationCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: isUnread
-            ? AppColors.purchaserOrange.withOpacity(0.05)
+            ? AppColors.purchaserOrange.withValues(alpha: 0.05)
             : theme.cardColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isUnread
-              ? AppColors.purchaserOrange.withOpacity(0.3)
-              : theme.dividerColor.withOpacity(0.5),
+              ? AppColors.purchaserOrange.withValues(alpha: 0.3)
+              : theme.dividerColor.withValues(alpha: 0.5),
         ),
       ),
       child: InkWell(
@@ -166,7 +200,7 @@ class _NotificationCard extends StatelessWidget {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: isUnread
-                      ? AppColors.purchaserOrange.withOpacity(0.1)
+                      ? AppColors.purchaserOrange.withValues(alpha: 0.1)
                       : theme.scaffoldBackgroundColor,
                   shape: BoxShape.circle,
                 ),
@@ -174,7 +208,7 @@ class _NotificationCard extends StatelessWidget {
                   _getNotificationIcon(notification),
                   color: isUnread
                       ? AppColors.purchaserOrange
-                      : theme.iconTheme.color?.withOpacity(0.6),
+                      : theme.iconTheme.color?.withValues(alpha: 0.6),
                   size: 20,
                 ),
               ),
@@ -202,7 +236,9 @@ class _NotificationCard extends StatelessWidget {
                           notification.timeAgo,
                           style: TextStyle(
                             fontSize: 11,
-                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                         ),
                       ],
@@ -212,7 +248,9 @@ class _NotificationCard extends StatelessWidget {
                       notification.message,
                       style: TextStyle(
                         fontSize: 13,
-                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
+                        ),
                         height: 1.3,
                       ),
                       maxLines: 2,

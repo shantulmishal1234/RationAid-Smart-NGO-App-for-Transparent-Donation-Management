@@ -238,7 +238,7 @@ class _FamilyStatisticsReportScreenState
               child: Text(
                 'No family data available.',
                 style: TextStyle(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
             );
@@ -366,7 +366,7 @@ class _FamilyStatisticsReportScreenState
                       child: Text(
                         'No family data available yet.',
                         style: TextStyle(
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
                     ),
@@ -379,7 +379,7 @@ class _FamilyStatisticsReportScreenState
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: Colors.blue.withOpacity(0.2),
+                          backgroundColor: Colors.blue.withValues(alpha: 0.2),
                           child: Text(
                             '${index + 1}',
                             style: const TextStyle(
@@ -456,7 +456,7 @@ class _FamilyStatisticsReportScreenState
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, color: color, size: 20),
@@ -484,7 +484,7 @@ class _FamilyStatisticsReportScreenState
               subtitle,
               style: TextStyle(
                 fontSize: 11,
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
           ],
@@ -519,7 +519,7 @@ class _FamilyStatisticsReportScreenState
           child: LinearProgressIndicator(
             value: total > 0 ? count / total : 0,
             backgroundColor: isDark
-                ? Colors.white.withOpacity(0.1)
+                ? Colors.white.withValues(alpha: 0.1)
                 : Colors.grey[200],
             valueColor: AlwaysStoppedAnimation<Color>(color),
           ),
@@ -529,7 +529,7 @@ class _FamilyStatisticsReportScreenState
           '$count ($percentage%)',
           style: TextStyle(
             fontSize: 13,
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
           ),
         ),
       ],

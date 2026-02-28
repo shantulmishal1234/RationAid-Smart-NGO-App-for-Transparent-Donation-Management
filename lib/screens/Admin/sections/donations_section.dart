@@ -105,7 +105,7 @@ class _DonationsSectionState extends State<DonationsSection> {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface.withOpacity(0.8),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                     ),
                   ),
                   leading: Icon(
@@ -225,7 +225,7 @@ class _DonationsSectionState extends State<DonationsSection> {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.green.withOpacity(0.1),
+                                  color: Colors.green.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
@@ -301,13 +301,13 @@ class _DonationsSectionState extends State<DonationsSection> {
                     decoration: InputDecoration(
                       hintText: 'Search donations...',
                       hintStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                         fontSize: 14,
                       ),
                       prefixIcon: Icon(
                         Icons.search,
                         size: 20,
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                       ),
                       filled: true,
                       fillColor: theme.cardColor,
@@ -315,13 +315,13 @@ class _DonationsSectionState extends State<DonationsSection> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: theme.dividerColor.withOpacity(0.6),
+                          color: theme.dividerColor.withValues(alpha: 0.6),
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: theme.dividerColor.withOpacity(0.6),
+                          color: theme.dividerColor.withValues(alpha: 0.6),
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -346,13 +346,13 @@ class _DonationsSectionState extends State<DonationsSection> {
                   color: theme.cardColor,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: theme.dividerColor.withOpacity(0.6),
+                    color: theme.dividerColor.withValues(alpha: 0.6),
                   ),
                 ),
                 child: PopupMenuButton<DonationStatusFilter>(
                   icon: Icon(
                     Icons.filter_list,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                     size: 22,
                   ),
                   tooltip: 'Filter by Status',
@@ -394,13 +394,13 @@ class _DonationsSectionState extends State<DonationsSection> {
                   color: theme.cardColor,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: theme.dividerColor.withOpacity(0.6),
+                    color: theme.dividerColor.withValues(alpha: 0.6),
                   ),
                 ),
                 child: PopupMenuButton<DonationTypeFilter>(
                   icon: Icon(
                     Icons.category_outlined,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                     size: 22,
                   ),
                   tooltip: 'Filter by Type',
@@ -508,13 +508,13 @@ class _DonationsSectionState extends State<DonationsSection> {
                         Icon(
                           Icons.search_off,
                           size: 48,
-                          color: theme.colorScheme.onSurface.withOpacity(0.2),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
                         ),
                         const SizedBox(height: 16),
                         Text(
                           'No donations found.',
                           style: TextStyle(
-                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                           ),
                         ),
                       ],
@@ -587,7 +587,7 @@ class _DonationsSectionState extends State<DonationsSection> {
           '$label: ',
           style: TextStyle(
             fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
           ),
         ),
         Text(
@@ -614,7 +614,7 @@ class _DonationsSectionState extends State<DonationsSection> {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
           ),
         ),
         Text(

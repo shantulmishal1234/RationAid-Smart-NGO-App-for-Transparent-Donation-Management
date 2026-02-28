@@ -209,7 +209,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               'Let\'s set up your profile',
               style: TextStyle(
                 fontSize: 16,
-                color: theme.colorScheme.onSurface.withOpacity(0.7),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
               ),
             ),
             const SizedBox(height: 40),
@@ -239,7 +239,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       'Help others recognize you',
                       style: TextStyle(
                         fontSize: 14,
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
                     const SizedBox(height: 30),
@@ -254,9 +254,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                             height: 150,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: AppColors.donorGreen.withOpacity(0.1),
+                              color: AppColors.donorGreen.withValues(alpha: 0.1),
                               border: Border.all(
-                                color: AppColors.donorGreen.withOpacity(0.3),
+                                color: AppColors.donorGreen.withValues(alpha: 0.3),
                                 width: 3,
                               ),
                               image: _selectedImage != null
@@ -273,7 +273,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                       Icon(
                                         Icons.add_a_photo,
                                         size: 40,
-                                        color: AppColors.donorGreen.withOpacity(
+                                        color: AppColors.donorGreen.withValues(alpha: 
                                           0.6,
                                         ),
                                       ),
@@ -283,7 +283,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: AppColors.donorGreen
-                                              .withOpacity(0.8),
+                                              .withValues(alpha: 0.8),
                                         ),
                                       ),
                                     ],
@@ -296,7 +296,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                               child: Container(
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: Colors.black.withOpacity(0.5),
+                                  color: Colors.black.withValues(alpha: 0.5),
                                 ),
                                 child: const Center(
                                   child: CircularProgressIndicator(
@@ -338,7 +338,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                     color: theme.cardColor,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.2),
+                                        color: Colors.black.withValues(alpha: 0.2),
                                         blurRadius: 4,
                                       ),
                                     ],
@@ -411,7 +411,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           'Skip for now',
                           style: TextStyle(
                             fontSize: 14,
-                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                           ),
                         ),
                       ),
@@ -425,14 +425,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: theme.cardColor.withOpacity(0.9),
+                color: theme.cardColor.withValues(alpha: 0.9),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
                   Icon(
                     Icons.info_outline,
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     size: 20,
                   ),
                   const SizedBox(width: 12),
@@ -441,7 +441,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       'You can always change your photo later from your profile settings.',
                       style: TextStyle(
                         fontSize: 13,
-                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                       ),
                     ),
                   ),
@@ -477,7 +477,7 @@ class _ImageSourceOption extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppColors.donorGreen.withOpacity(0.1),
+              color: AppColors.donorGreen.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, size: 32, color: AppColors.donorGreen),

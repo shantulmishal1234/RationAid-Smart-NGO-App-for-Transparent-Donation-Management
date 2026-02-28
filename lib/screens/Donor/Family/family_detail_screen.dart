@@ -55,7 +55,7 @@ class FamilyDetailScreen extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: AppColors.donorGreen.withOpacity(0.15),
+                            color: AppColors.donorGreen.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: const Icon(
@@ -86,7 +86,7 @@ class FamilyDetailScreen extends StatelessWidget {
                                   fontSize: 14,
                                   color: Theme.of(
                                     context,
-                                  ).colorScheme.onSurface.withOpacity(0.6),
+                                  ).colorScheme.onSurface.withValues(alpha: 0.6),
                                 ),
                               ),
                             ],
@@ -123,7 +123,7 @@ class FamilyDetailScreen extends StatelessWidget {
                             width: double.infinity,
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.1),
+                              color: Colors.green.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Column(
@@ -153,7 +153,7 @@ class FamilyDetailScreen extends StatelessWidget {
                                   Container(
                                     padding: const EdgeInsets.all(8),
                                     decoration: BoxDecoration(
-                                      color: AppColors.donorGreen.withOpacity(
+                                      color: AppColors.donorGreen.withValues(alpha: 
                                         0.1,
                                       ),
                                       borderRadius: BorderRadius.circular(8),
@@ -267,8 +267,8 @@ class FamilyDetailScreen extends StatelessWidget {
                                   color:
                                       (updatedFamily.totalFunded >=
                                           updatedFamily.targetAmount)
-                                      ? Colors.green.withOpacity(0.1)
-                                      : Colors.orange.withOpacity(0.1),
+                                      ? Colors.green.withValues(alpha: 0.1)
+                                      : Colors.orange.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
@@ -315,7 +315,7 @@ class FamilyDetailScreen extends StatelessWidget {
                                       fontSize: 12,
                                       color: Theme.of(
                                         context,
-                                      ).colorScheme.onSurface.withOpacity(0.6),
+                                      ).colorScheme.onSurface.withValues(alpha: 0.6),
                                     ),
                                   ),
                                   Row(
@@ -350,7 +350,7 @@ class FamilyDetailScreen extends StatelessWidget {
                                       fontSize: 12,
                                       color: Theme.of(
                                         context,
-                                      ).colorScheme.onSurface.withOpacity(0.6),
+                                      ).colorScheme.onSurface.withValues(alpha: 0.6),
                                     ),
                                   ),
                                   Text(

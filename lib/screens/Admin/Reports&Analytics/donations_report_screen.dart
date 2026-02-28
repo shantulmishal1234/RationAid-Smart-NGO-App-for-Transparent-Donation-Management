@@ -261,7 +261,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
               child: Text(
                 'No donation data available.',
                 style: TextStyle(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
             );
@@ -388,7 +388,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
                       child: Text(
                         'No donations recorded yet.',
                         style: TextStyle(
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
                     ),
@@ -401,7 +401,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: Colors.amber.withOpacity(0.2),
+                          backgroundColor: Colors.amber.withValues(alpha: 0.2),
                           child: Text(
                             '${index + 1}',
                             style: const TextStyle(
@@ -420,7 +420,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
                         subtitle: Text(
                           '${donor['count']} donations',
                           style: TextStyle(
-                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                           ),
                         ),
                         trailing: Text(
@@ -484,7 +484,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, color: color, size: 20),
@@ -512,7 +512,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
               subtitle,
               style: TextStyle(
                 fontSize: 11,
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
           ],
@@ -545,7 +545,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
           flex: 3,
           child: LinearProgressIndicator(
             value: total > 0 ? count / total : 0,
-            backgroundColor: theme.colorScheme.onSurface.withOpacity(0.1),
+            backgroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.1),
             valueColor: AlwaysStoppedAnimation<Color>(color),
           ),
         ),
@@ -554,7 +554,7 @@ class _DonationsReportScreenState extends State<DonationsReportScreen> {
           '$count ($percentage%)',
           style: TextStyle(
             fontSize: 13,
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
           ),
         ),
       ],

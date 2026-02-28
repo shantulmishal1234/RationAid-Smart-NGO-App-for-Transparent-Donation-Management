@@ -17,22 +17,24 @@ class DonorRoutes {
             builder: (_) => CreateDonationScreen(existingDonation: args),
           );
         } else {
-          final family = args as Family?;
+          final family = args is Family ? args : null;
           return MaterialPageRoute(
             builder: (_) => CreateDonationScreen(selectedFamily: family),
           );
         }
 
       case '/donation-tracking':
-        final donation = settings.arguments as Donation;
+        final args = settings.arguments;
+        if (args is! Donation) return null;
         return MaterialPageRoute(
-          builder: (_) => DonationTrackingScreen(donation: donation),
+          builder: (_) => DonationTrackingScreen(donation: args),
         );
 
       case '/family-detail':
-        final family = settings.arguments as Family;
+        final args = settings.arguments;
+        if (args is! Family) return null;
         return MaterialPageRoute(
-          builder: (_) => FamilyDetailScreen(family: family),
+          builder: (_) => FamilyDetailScreen(family: args),
         );
 
       default:

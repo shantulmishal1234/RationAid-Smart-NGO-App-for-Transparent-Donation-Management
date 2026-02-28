@@ -10,7 +10,6 @@ class FamilyCard extends StatelessWidget {
   final int familySize;
   final String status;
   final VoidCallback onTap;
-  final String? assignedVolunteerName;
   final VoidCallback? onEdit;
   final int? serialNumber;
   final double? targetAmount;
@@ -25,7 +24,6 @@ class FamilyCard extends StatelessWidget {
     required this.address,
     required this.familySize,
     required this.status,
-    required this.assignedVolunteerName,
     required this.onTap,
     this.onEdit,
     this.serialNumber,
@@ -88,8 +86,8 @@ class FamilyCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: isOverFunded
-                  ? Colors.deepOrange.withOpacity(0.5)
-                  : theme.dividerColor.withOpacity(0.6),
+                  ? Colors.deepOrange.withValues(alpha: 0.5)
+                  : theme.dividerColor.withValues(alpha: 0.6),
               width: isOverFunded ? 1.5 : 1.0,
             ),
           ),
@@ -129,7 +127,9 @@ class FamilyCard extends StatelessWidget {
                     Text(
                       area,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                         fontSize: 11,
                       ),
                     ),
@@ -139,25 +139,13 @@ class FamilyCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                         fontSize: 10,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      assignedVolunteerName != null
-                          ? 'Assigned: $assignedVolunteerName'
-                          : 'Assigned: None',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        color: assignedVolunteerName == null
-                            ? theme.colorScheme.onSurface.withOpacity(0.5)
-                            : (isDark ? Colors.greenAccent : Colors.green[700]),
-                      ),
-                    ),
+                    // Removed volunteer assigned name UI
                   ],
                 ),
               ),
@@ -171,10 +159,10 @@ class FamilyCard extends StatelessWidget {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: _statusColor().withOpacity(0.1),
+                      color: _statusColor().withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(
-                        color: _statusColor().withOpacity(0.2),
+                        color: _statusColor().withValues(alpha: 0.2),
                       ),
                     ),
                     child: Text(
@@ -252,7 +240,9 @@ class FamilyCard extends StatelessWidget {
                         child: Icon(
                           Icons.edit_outlined,
                           size: 14,
-                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.5,
+                          ),
                         ),
                       ),
                     ),

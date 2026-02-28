@@ -116,7 +116,10 @@ class ProcurementService {
   static Stream<List<ProcurementRequest>> getInventoryStream() {
     return _firestore
         .collection(_collection)
-        .where('status', isEqualTo: 'verified') // Verified means stocked
+        .where(
+          'status',
+          whereIn: ['verified', 'stocked'],
+        ) // Includes stocked (In Progress)
         .snapshots()
         .map(
           (snapshot) => snapshot.docs
@@ -136,6 +139,19 @@ class ProcurementService {
               .map((doc) => ProcurementRequest.fromFirestore(doc))
               .toList(),
         );
+  }
+
+  /// Smart stream for Home Stats (Global vs Personal based on isSupervisor)
+  static Stream<List<ProcurementRequest>> getSmartHomeStatsStream(
+    String purchaserId,
+    bool isSupervisor,
+  ) {
+    if (isSupervisor) {
+      return getAllRequestsStream(); // Supervisors see global stats
+    } else {
+      // Regular purchasers only see items they claimed or submitted
+      return streamMyRequests(purchaserId);
+    }
   }
 
   // ─── Self-Claim Pool ─────────────────────────────────────────────────────
@@ -186,16 +202,27 @@ class ProcurementService {
     });
   }
 
-  /// UID-filtered history stream — only this purchaser's submitted orders.
-  static Stream<List<ProcurementRequest>> getPurchaserHistoryStream(
+  /// Smart UID-filtered history stream (Global if supervisor, personal if not)
+  static Stream<List<ProcurementRequest>> getSmartHistoryStream(
     String purchaserId,
+    bool isSupervisor,
   ) {
-    return _firestore
-        .collection(_collection)
-        .where('purchaserId', isEqualTo: purchaserId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((s) => s.docs.map(ProcurementRequest.fromFirestore).toList());
+    if (isSupervisor) {
+      return _firestore
+          .collection(_collection)
+          .where('status', whereIn: ['verified', 'rejected', 'delivered'])
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map((s) => s.docs.map(ProcurementRequest.fromFirestore).toList());
+    } else {
+      return _firestore
+          .collection(_collection)
+          .where('purchaserId', isEqualTo: purchaserId)
+          .where('status', whereIn: ['verified', 'rejected', 'delivered'])
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map((s) => s.docs.map(ProcurementRequest.fromFirestore).toList());
+    }
   }
 
   /// How many active claims this purchaser currently has (max allowed: 2).
@@ -267,6 +294,43 @@ class ProcurementService {
     );
   }
 
+  /// Supervisor forces a release from an AWOL purchaser back to the pool.
+  static Future<void> forceReleaseRequest({
+    required String requestId,
+    required String adminName,
+    required String previousPurchaserName,
+  }) async {
+    await _firestore.collection(_collection).doc(requestId).update({
+      'claimedById': null,
+      'claimedByName': null,
+      'claimedAt': null,
+    });
+    await AuditService.logAction(
+      action: 'force_release_purchase_request',
+      entityType: 'procurement',
+      entityId: requestId,
+      details:
+          '$adminName forcibly unassigned the order from $previousPurchaserName',
+    );
+  }
+
+  /// Stream all active claims across the entire system (for supervisors).
+  static Stream<List<ProcurementRequest>> streamAllActiveClaims() {
+    return _firestore
+        .collection(_collection)
+        .where('status', isEqualTo: 'pending')
+        .where('claimedById', isNull: false)
+        .snapshots()
+        .map(
+          (s) => s.docs.map(ProcurementRequest.fromFirestore).toList()
+            ..sort(
+              (a, b) => (b.claimedAt ?? b.createdAt).compareTo(
+                a.claimedAt ?? a.createdAt,
+              ),
+            ),
+        );
+  }
+
   /// Purchaser submits purchase (receipt upload)
   static Future<void> submitPurchase({
     required String requestId,
@@ -314,7 +378,9 @@ class ProcurementService {
       final request = ProcurementRequest.fromFirestore(doc);
 
       // 1. Mark procurement request as verified/stocked
-      await _firestore.collection(_collection).doc(requestId).update({
+      final batch = _firestore.batch();
+
+      batch.update(_firestore.collection(_collection).doc(requestId), {
         'status': 'verified',
         'verifiedAt': FieldValue.serverTimestamp(),
       });
@@ -355,14 +421,18 @@ class ProcurementService {
         assignedPackName: request.packName,
         items: itemsMap,
         procurementRequestId: requestId,
+        batch: batch,
       );
 
       // 5. Update family status to stocked (visible in delivery module)
-      await _firestore.collection('families').doc(request.familyId).update({
+      batch.update(_firestore.collection('families').doc(request.familyId), {
         'fulfillmentStatus': 'stocked',
         'spentAmount': request.totalSpent,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      // Commit the batch to ensure total atomicity
+      await batch.commit();
 
       // 6. Notify purchaser
       if (request.purchaserId != null) {

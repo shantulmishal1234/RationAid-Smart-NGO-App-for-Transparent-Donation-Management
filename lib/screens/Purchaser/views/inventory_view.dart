@@ -4,8 +4,7 @@ import 'package:ration_aid/models/procurement_model.dart';
 import 'package:ration_aid/services/procurement_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/widgets/frosted_panel.dart';
-// ignore: unused_import
-import 'package:firebase_auth/firebase_auth.dart' as import_firebase_auth;
+import 'package:firebase_auth/firebase_auth.dart';
 
 enum InventoryFilter { all, lowStock, highValue }
 
@@ -170,18 +169,18 @@ class _InventoryViewState extends State<InventoryView> {
                   gradient: LinearGradient(
                     colors: [
                       theme.cardColor,
-                      theme.cardColor.withOpacity(0.95),
+                      theme.cardColor.withValues(alpha: 0.95),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: theme.dividerColor.withOpacity(0.5),
+                    color: theme.dividerColor.withValues(alpha: 0.5),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withValues(alpha: 0.03),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -206,8 +205,8 @@ class _InventoryViewState extends State<InventoryView> {
                             'Total Value',
                             style: TextStyle(
                               fontSize: 12,
-                              color: theme.colorScheme.onSurface.withOpacity(
-                                0.6,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
                               ),
                               fontWeight: FontWeight.w500,
                             ),
@@ -218,7 +217,7 @@ class _InventoryViewState extends State<InventoryView> {
                     Container(
                       height: 32,
                       width: 1,
-                      color: theme.dividerColor.withOpacity(0.5),
+                      color: theme.dividerColor.withValues(alpha: 0.5),
                     ),
                     // Low Stock / Overdue equivalent
                     Expanded(
@@ -243,8 +242,8 @@ class _InventoryViewState extends State<InventoryView> {
                               'Low Stock',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: theme.colorScheme.onSurface.withOpacity(
-                                  0.6,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.6,
                                 ),
                                 fontWeight: FontWeight.w500,
                               ),
@@ -256,7 +255,7 @@ class _InventoryViewState extends State<InventoryView> {
                     Container(
                       height: 32,
                       width: 1,
-                      color: theme.dividerColor.withOpacity(0.5),
+                      color: theme.dividerColor.withValues(alpha: 0.5),
                     ),
                     // Urgent Aging / Rejected equivalent
                     Expanded(
@@ -277,8 +276,8 @@ class _InventoryViewState extends State<InventoryView> {
                             'Aging (>7d)',
                             style: TextStyle(
                               fontSize: 12,
-                              color: theme.colorScheme.onSurface.withOpacity(
-                                0.6,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
                               ),
                               fontWeight: FontWeight.w500,
                             ),
@@ -309,7 +308,7 @@ class _InventoryViewState extends State<InventoryView> {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface.withOpacity(0.8),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                     ),
                   ),
                   leading: Icon(
@@ -376,13 +375,17 @@ class _InventoryViewState extends State<InventoryView> {
                         decoration: InputDecoration(
                           hintText: 'Search packs...',
                           hintStyle: TextStyle(
-                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.5,
+                            ),
                             fontSize: 14,
                           ),
                           prefixIcon: Icon(
                             Icons.search,
                             size: 20,
-                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                           filled: true,
                           fillColor: theme.cardColor,
@@ -392,13 +395,13 @@ class _InventoryViewState extends State<InventoryView> {
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: theme.dividerColor.withOpacity(0.6),
+                              color: theme.dividerColor.withValues(alpha: 0.6),
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: theme.dividerColor.withOpacity(0.6),
+                              color: theme.dividerColor.withValues(alpha: 0.6),
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
@@ -423,7 +426,7 @@ class _InventoryViewState extends State<InventoryView> {
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: _selectedFilter == InventoryFilter.all
-                            ? theme.dividerColor.withOpacity(0.6)
+                            ? theme.dividerColor.withValues(alpha: 0.6)
                             : AppColors.purchaserOrange,
                       ),
                     ),
@@ -457,7 +460,9 @@ class _InventoryViewState extends State<InventoryView> {
                               : Icons.filter_list_alt,
                           size: 20,
                           color: _selectedFilter == InventoryFilter.all
-                              ? theme.colorScheme.onSurface.withOpacity(0.7)
+                              ? theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.7,
+                                )
                               : AppColors.purchaserOrange,
                         ),
                       ),
@@ -473,13 +478,15 @@ class _InventoryViewState extends State<InventoryView> {
                       color: theme.cardColor,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: theme.dividerColor.withOpacity(0.6),
+                        color: theme.dividerColor.withValues(alpha: 0.6),
                       ),
                     ),
                     child: PopupMenuButton<InventorySortOption>(
                       icon: Icon(
                         Icons.sort,
-                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
+                        ),
                         size: 20,
                       ),
                       tooltip: 'Sort Items',
@@ -525,7 +532,7 @@ class _InventoryViewState extends State<InventoryView> {
                   'Showing ${filteredPacks.length} of ${packStats.length} pack types',
                   style: TextStyle(
                     fontSize: 12,
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
               ),
@@ -615,9 +622,13 @@ class _InventoryViewState extends State<InventoryView> {
     }
 
     // Check if verified (assuming if has verifiedAt it's verified)
-    final isVerified = requests.any(
-      (r) => r.status == ProcurementStatus.verified,
-    );
+    final verifiedCount = requests
+        .where((r) => r.status == ProcurementStatus.verified)
+        .length;
+    final inProgressCount = requests
+        .where((r) => r.status == ProcurementStatus.stocked)
+        .length;
+    final isVerified = verifiedCount > 0;
 
     return Container(
       decoration: BoxDecoration(
@@ -625,13 +636,13 @@ class _InventoryViewState extends State<InventoryView> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isLowStock
-              ? Colors.orange.withOpacity(0.5)
-              : theme.dividerColor.withOpacity(0.5),
+              ? Colors.orange.withValues(alpha: 0.5)
+              : theme.dividerColor.withValues(alpha: 0.5),
           width: isLowStock ? 1.5 : 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -657,7 +668,7 @@ class _InventoryViewState extends State<InventoryView> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: ageColor.withOpacity(0.1),
+                        color: ageColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
@@ -703,13 +714,17 @@ class _InventoryViewState extends State<InventoryView> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: isLowStock
-                                      ? Colors.orange.withOpacity(0.1)
-                                      : theme.dividerColor.withOpacity(0.1),
+                                      ? Colors.orange.withValues(alpha: 0.1)
+                                      : theme.dividerColor.withValues(
+                                          alpha: 0.1,
+                                        ),
                                   borderRadius: BorderRadius.circular(4),
                                   border: Border.all(
                                     color: isLowStock
-                                        ? Colors.orange.withOpacity(0.3)
-                                        : theme.dividerColor.withOpacity(0.3),
+                                        ? Colors.orange.withValues(alpha: 0.3)
+                                        : theme.dividerColor.withValues(
+                                            alpha: 0.3,
+                                          ),
                                   ),
                                 ),
                                 child: Text(
@@ -720,10 +735,34 @@ class _InventoryViewState extends State<InventoryView> {
                                     color: isLowStock
                                         ? Colors.orange[800]
                                         : theme.colorScheme.onSurface
-                                              .withOpacity(0.7),
+                                              .withValues(alpha: 0.7),
                                   ),
                                 ),
                               ),
+                              if (inProgressCount > 0) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: Colors.blue.withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '$inProgressCount In Progress',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.blue[700],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                           const SizedBox(height: 4),
@@ -743,8 +782,9 @@ class _InventoryViewState extends State<InventoryView> {
                                 '$ageLabel (${daysInStock}d)',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: theme.colorScheme.onSurface
-                                      .withOpacity(0.6),
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.6,
+                                  ),
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
@@ -753,8 +793,9 @@ class _InventoryViewState extends State<InventoryView> {
                                 '•   Rs ${totalValue.toStringAsFixed(0)}',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: theme.colorScheme.onSurface
-                                      .withOpacity(0.6),
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.6,
+                                  ),
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
@@ -769,7 +810,7 @@ class _InventoryViewState extends State<InventoryView> {
                       isExpanded
                           ? Icons.keyboard_arrow_up
                           : Icons.keyboard_arrow_down,
-                      color: theme.colorScheme.onSurface.withOpacity(0.4),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
                     ),
                   ],
                 ),
@@ -777,11 +818,14 @@ class _InventoryViewState extends State<InventoryView> {
 
               // EXPANDED DETAILS
               if (isExpanded) ...[
-                Divider(height: 1, color: theme.dividerColor.withOpacity(0.5)),
+                Divider(
+                  height: 1,
+                  color: theme.dividerColor.withValues(alpha: 0.5),
+                ),
                 Container(
                   width: double.infinity,
-                  color: theme.colorScheme.surface.withOpacity(
-                    0.5,
+                  color: theme.colorScheme.surface.withValues(
+                    alpha: 0.5,
                   ), // Subtle background
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -795,8 +839,8 @@ class _InventoryViewState extends State<InventoryView> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurface.withOpacity(
-                                0.8,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.8,
                               ),
                             ),
                           ),
@@ -826,8 +870,8 @@ class _InventoryViewState extends State<InventoryView> {
                                   horizontal: 12,
                                 ),
                                 side: BorderSide(
-                                  color: theme.colorScheme.error.withOpacity(
-                                    0.5,
+                                  color: theme.colorScheme.error.withValues(
+                                    alpha: 0.5,
                                   ),
                                 ),
                                 shape: RoundedRectangleBorder(
@@ -899,11 +943,15 @@ class _InventoryViewState extends State<InventoryView> {
                                   color: theme.colorScheme.surface,
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: theme.dividerColor.withOpacity(0.2),
+                                    color: theme.dividerColor.withValues(
+                                      alpha: 0.2,
+                                    ),
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.02),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.02,
+                                      ),
                                       blurRadius: 2,
                                     ),
                                   ],
@@ -914,7 +962,7 @@ class _InventoryViewState extends State<InventoryView> {
                                     fontSize: 12,
                                     fontWeight: FontWeight.w500,
                                     color: theme.colorScheme.onSurface
-                                        .withOpacity(0.8),
+                                        .withValues(alpha: 0.8),
                                   ),
                                 ),
                               ),
@@ -948,11 +996,11 @@ class _InventoryViewState extends State<InventoryView> {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
       ),
       child: Column(
         children: [
-          Icon(icon, size: 16, color: finalColor.withOpacity(0.7)),
+          Icon(icon, size: 16, color: finalColor.withValues(alpha: 0.7)),
           const SizedBox(height: 4),
           Text(
             value,
@@ -966,7 +1014,7 @@ class _InventoryViewState extends State<InventoryView> {
             label,
             style: TextStyle(
               fontSize: 10,
-              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
             ),
           ),
         ],
@@ -1095,8 +1143,7 @@ class _InventoryViewState extends State<InventoryView> {
                     context,
                   ).showSnackBar(SnackBar(content: Text('Reporting issue...')));
 
-                  final user =
-                      import_firebase_auth.FirebaseAuth.instance.currentUser;
+                  final user = FirebaseAuth.instance.currentUser;
 
                   await ProcurementService.reportIssue(
                     requestId: targetRequest.id,
@@ -1168,7 +1215,9 @@ class _InventoryViewState extends State<InventoryView> {
           '$label: ',
           style: TextStyle(
             fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.6),
           ),
         ),
         Text(
@@ -1191,13 +1240,17 @@ class _InventoryViewState extends State<InventoryView> {
           Icon(
             Icons.inventory_outlined,
             size: 48,
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.2),
           ),
           const SizedBox(height: 16),
           Text(
             _searchQuery.isNotEmpty ? 'No packs found' : 'Inventory is empty',
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.5),
             ),
           ),
         ],

@@ -143,7 +143,7 @@ class _SplashScreenState extends State<SplashScreen>
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        Colors.white.withOpacity(0.6),
+                        Colors.white.withValues(alpha: 0.6),
                       ),
                     ),
                   ),

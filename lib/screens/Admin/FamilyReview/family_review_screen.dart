@@ -84,7 +84,7 @@ class FamilyReviewScreen extends StatelessWidget {
                 'Cast your vote to reach quorum approval',
                 style: TextStyle(
                   fontSize: 13,
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
             ],
@@ -164,7 +164,7 @@ class _FamilyReviewCard extends StatelessWidget {
                             Icon(
                               Icons.location_on,
                               size: 14,
-                              color: theme.colorScheme.onSurface.withOpacity(
+                              color: theme.colorScheme.onSurface.withValues(alpha: 
                                 0.6,
                               ),
                             ),
@@ -173,7 +173,7 @@ class _FamilyReviewCard extends StatelessWidget {
                               '${family.city}, ${family.area}',
                               style: TextStyle(
                                 fontSize: 13,
-                                color: theme.colorScheme.onSurface.withOpacity(
+                                color: theme.colorScheme.onSurface.withValues(alpha: 
                                   0.6,
                                 ),
                               ),
@@ -191,9 +191,9 @@ class _FamilyReviewCard extends StatelessWidget {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
+                        color: Colors.blue.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -249,7 +249,7 @@ class _FamilyReviewCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -286,7 +286,7 @@ class _FamilyReviewCard extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: theme.colorScheme.onSurface.withOpacity(
+                                color: theme.colorScheme.onSurface.withValues(alpha: 
                                   0.6,
                                 ),
                               ),
@@ -313,10 +313,10 @@ class _FamilyReviewCard extends StatelessWidget {
                     return Container(
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.1),
+                        color: Colors.green.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: Colors.green.withOpacity(0.3),
+                          color: Colors.green.withValues(alpha: 0.3),
                         ),
                       ),
                       child: Row(
@@ -387,14 +387,14 @@ class _FamilyReviewCard extends StatelessWidget {
           Icon(
             icon,
             size: 14,
-            color: theme.colorScheme.onSurface.withOpacity(0.6),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
           ),
           const SizedBox(width: 6),
           Text(
             label,
             style: TextStyle(
               fontSize: 12,
-              color: theme.colorScheme.onSurface.withOpacity(0.7),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
             ),
           ),
         ],
@@ -424,7 +424,7 @@ class _FamilyReviewCard extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           label,
-          style: TextStyle(fontSize: 12, color: color.withOpacity(0.8)),
+          style: TextStyle(fontSize: 12, color: color.withValues(alpha: 0.8)),
         ),
       ],
     );

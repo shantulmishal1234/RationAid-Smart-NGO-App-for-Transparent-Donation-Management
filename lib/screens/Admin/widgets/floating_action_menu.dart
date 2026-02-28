@@ -141,7 +141,7 @@ class _FloatingActionMenuState extends State<FloatingActionMenu>
         animation: _backdropAnimation,
         builder: (context, child) {
           return Container(
-            color: Colors.black.withOpacity(_backdropAnimation.value * 0.5),
+            color: Colors.black.withValues(alpha: _backdropAnimation.value * 0.5),
             child: Stack(
               children: [
                 // Menu items floating from bottom-right
@@ -209,12 +209,12 @@ class _FloatingActionMenuState extends State<FloatingActionMenu>
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: isDark
-                  ? const Color(0xFF1E1E1E).withOpacity(0.95)
-                  : Colors.white.withOpacity(0.95),
+                  ? const Color(0xFF1E1E1E).withValues(alpha: 0.95)
+                  : Colors.white.withValues(alpha: 0.95),
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -236,14 +236,14 @@ class _FloatingActionMenuState extends State<FloatingActionMenu>
             height: 56,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [color, color.withOpacity(0.7)],
+                colors: [color, color.withValues(alpha: 0.7)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: color.withOpacity(0.4),
+                  color: color.withValues(alpha: 0.4),
                   blurRadius: 15,
                   offset: const Offset(0, 6),
                 ),

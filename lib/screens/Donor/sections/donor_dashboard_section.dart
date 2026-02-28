@@ -4,6 +4,7 @@ import 'package:ration_aid/models/donation_model.dart';
 import 'package:ration_aid/screens/Admin/widgets/stat_card.dart';
 import 'package:ration_aid/services/donation_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
+import 'package:ration_aid/screens/Donor/widgets/donor_frosted_panel.dart';
 
 /// Donor Dashboard Section - Overview statistics and quick actions
 /// Matching Admin Dashboard style with frosted panels
@@ -54,8 +55,8 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              AppColors.donorGreen.withOpacity(0.18),
-                              AppColors.accentGreen.withOpacity(0.12),
+                              AppColors.donorGreen.withValues(alpha: 0.18),
+                              AppColors.accentGreen.withValues(alpha: 0.12),
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
@@ -64,8 +65,10 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
                           boxShadow: [
                             BoxShadow(
                               color: isDark
-                                  ? Colors.black.withOpacity(0.3)
-                                  : AppColors.donorGreen.withOpacity(0.18),
+                                  ? Colors.black.withValues(alpha: 0.3)
+                                  : AppColors.donorGreen.withValues(
+                                      alpha: 0.18,
+                                    ),
                               blurRadius: 18,
                               offset: const Offset(0, 8),
                             ),
@@ -94,8 +97,8 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
                             Text(
                               'Thank you for making a difference, ${user.displayName ?? 'Donor'}!',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurface.withOpacity(
-                                  0.7,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.7,
                                 ),
                               ),
                             ),
@@ -121,7 +124,7 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
                     },
                   ),
 
-                  _FrostedPanel(
+                  DonorFrostedPanel(
                     child: StreamBuilder<Map<String, int>>(
                       stream: _donationService.streamDonorStats(user.uid),
                       builder: (context, snapshot) {
@@ -196,7 +199,7 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _FrostedPanel(
+                  DonorFrostedPanel(
                     child: _QuickActionButton(
                       icon: Icons.add_circle,
                       label: 'Make a Donation',
@@ -216,7 +219,7 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  _FrostedPanel(
+                  DonorFrostedPanel(
                     padding: const EdgeInsets.all(12),
                     child: StreamBuilder<List<Donation>>(
                       stream: _donationService.streamRecentDonationsByDonor(
@@ -244,14 +247,14 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
                                     Icons.volunteer_activism_outlined,
                                     size: 48,
                                     color: theme.colorScheme.onSurface
-                                        .withOpacity(0.3),
+                                        .withValues(alpha: 0.3),
                                   ),
                                   const SizedBox(height: 12),
                                   Text(
                                     'No donations yet',
                                     style: TextStyle(
                                       color: theme.colorScheme.onSurface
-                                          .withOpacity(0.6),
+                                          .withValues(alpha: 0.6),
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -261,7 +264,7 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
                                     'Start making a difference today!',
                                     style: TextStyle(
                                       color: theme.colorScheme.onSurface
-                                          .withOpacity(0.4),
+                                          .withValues(alpha: 0.4),
                                       fontSize: 12,
                                     ),
                                   ),
@@ -301,44 +304,6 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
   }
 }
 
-class _FrostedPanel extends StatelessWidget {
-  final Widget child;
-  final EdgeInsetsGeometry? padding;
-
-  const _FrostedPanel({required this.child, this.padding});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor.withOpacity(isDark ? 0.6 : 0.82),
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: isDark
-                ? Colors.black.withOpacity(0.3)
-                : Colors.black.withOpacity(0.06),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withOpacity(0.1)
-              : Colors.white.withOpacity(0.7),
-          width: 0.8,
-        ),
-      ),
-      child: Padding(
-        padding: padding ?? const EdgeInsets.all(14),
-        child: child,
-      ),
-    );
-  }
-}
-
 class _SkeletonStatCard extends StatelessWidget {
   const _SkeletonStatCard();
 
@@ -347,7 +312,7 @@ class _SkeletonStatCard extends StatelessWidget {
     return Container(
       height: 90,
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor.withOpacity(0.6),
+        color: Theme.of(context).cardColor.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(20),
       ),
       child: const Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
@@ -377,19 +342,22 @@ class _QuickActionButton extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
+            colors: [
+              color.withValues(alpha: 0.1),
+              color.withValues(alpha: 0.05),
+            ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.3), width: 1.5),
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.2),
+                color: color.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: color, size: 24),
@@ -431,10 +399,10 @@ class _RecentDonationTile extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: theme.cardColor.withOpacity(0.5),
+          color: theme.cardColor.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: theme.colorScheme.onSurface.withOpacity(0.1),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
             width: 1,
           ),
         ),
@@ -444,7 +412,7 @@ class _RecentDonationTile extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.15),
+                color: statusColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
@@ -494,14 +462,14 @@ class _RecentDonationTile extends StatelessWidget {
               Text(
                 '${donation.items?.length ?? 0} items',
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                   fontWeight: FontWeight.w600,
                 ),
               ),
             const SizedBox(width: 8),
             Icon(
               Icons.chevron_right,
-              color: theme.colorScheme.onSurface.withOpacity(0.4),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
               size: 20,
             ),
           ],
@@ -592,7 +560,7 @@ class _ActiveDonationCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(22),
           boxShadow: [
             BoxShadow(
-              color: gradientColors.first.withOpacity(0.4),
+              color: gradientColors.first.withValues(alpha: 0.4),
               blurRadius: 12,
               offset: const Offset(0, 6),
             ),
@@ -607,7 +575,7 @@ class _ActiveDonationCard extends StatelessWidget {
               child: Icon(
                 icon,
                 size: 100,
-                color: Colors.white.withOpacity(0.1),
+                color: Colors.white.withValues(alpha: 0.1),
               ),
             ),
             Padding(
@@ -623,7 +591,7 @@ class _ActiveDonationCard extends StatelessWidget {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Row(
@@ -667,7 +635,7 @@ class _ActiveDonationCard extends StatelessWidget {
                               subtitle,
                               style: TextStyle(
                                 fontSize: 14,
-                                color: Colors.white.withOpacity(0.9),
+                                color: Colors.white.withValues(alpha: 0.9),
                               ),
                             ),
                           ],
@@ -676,7 +644,7 @@ class _ActiveDonationCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(

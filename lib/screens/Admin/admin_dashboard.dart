@@ -107,7 +107,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget _buildCurrentSection() {
     switch (_currentSection) {
       case AdminSection.dashboard:
-        return const DashboardSection();
+        return DashboardSection(onSectionChanged: _handleSectionChange);
 
       case AdminSection.households:
         return const HouseholdsSection();

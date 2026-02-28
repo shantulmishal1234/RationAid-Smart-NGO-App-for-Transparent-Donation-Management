@@ -70,13 +70,13 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
                     decoration: InputDecoration(
                       hintText: 'Search logs...',
                       hintStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                         fontSize: 14,
                       ),
                       prefixIcon: Icon(
                         Icons.search,
                         size: 20,
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                       ),
                       filled: true,
                       fillColor: theme.cardColor,
@@ -84,13 +84,13 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: theme.dividerColor.withOpacity(0.6),
+                          color: theme.dividerColor.withValues(alpha: 0.6),
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: theme.dividerColor.withOpacity(0.6),
+                          color: theme.dividerColor.withValues(alpha: 0.6),
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -118,7 +118,7 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
                   child: PopupMenuButton<String>(
                     icon: Icon(
                       Icons.filter_list,
-                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                       size: 22,
                     ),
                     tooltip: 'Filter by Type',
@@ -208,7 +208,7 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
                     child: Text(
                       'No audit logs found.',
                       style: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                       ),
                     ),
                   );
@@ -301,7 +301,7 @@ class _AuditLogCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(_getEntityIcon(entityType), color: color, size: 18),
@@ -334,9 +334,9 @@ class _AuditLogCard extends StatelessWidget {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: color.withOpacity(0.1),
+                          color: color.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: color.withOpacity(0.2)),
+                          border: Border.all(color: color.withValues(alpha: 0.2)),
                         ),
                         child: Text(
                           entityType,
@@ -355,7 +355,7 @@ class _AuditLogCard extends StatelessWidget {
                       entityName,
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w500,
-                        color: cs.onSurface.withOpacity(0.8),
+                        color: cs.onSurface.withValues(alpha: 0.8),
                         fontSize: 11,
                       ),
                     ),
@@ -366,7 +366,7 @@ class _AuditLogCard extends StatelessWidget {
                       details,
                       style: TextStyle(
                         fontSize: 11,
-                        color: cs.onSurface.withOpacity(0.6),
+                        color: cs.onSurface.withValues(alpha: 0.6),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -378,7 +378,7 @@ class _AuditLogCard extends StatelessWidget {
                       Icon(
                         Icons.person_outline,
                         size: 12,
-                        color: cs.onSurface.withOpacity(0.5),
+                        color: cs.onSurface.withValues(alpha: 0.5),
                       ),
                       const SizedBox(width: 4),
                       Expanded(
@@ -386,7 +386,7 @@ class _AuditLogCard extends StatelessWidget {
                           performedBy,
                           style: TextStyle(
                             fontSize: 10,
-                            color: cs.onSurface.withOpacity(0.5),
+                            color: cs.onSurface.withValues(alpha: 0.5),
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -394,14 +394,14 @@ class _AuditLogCard extends StatelessWidget {
                       Icon(
                         Icons.access_time,
                         size: 12,
-                        color: cs.onSurface.withOpacity(0.5),
+                        color: cs.onSurface.withValues(alpha: 0.5),
                       ),
                       const SizedBox(width: 4),
                       Text(
                         timeStr,
                         style: TextStyle(
                           fontSize: 10,
-                          color: cs.onSurface.withOpacity(0.5),
+                          color: cs.onSurface.withValues(alpha: 0.5),
                         ),
                       ),
                     ],

@@ -10,6 +10,7 @@ import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 import 'package:ration_aid/services/funding_service.dart';
 import 'package:ration_aid/services/notification_service.dart';
+import 'package:ration_aid/screens/Admin/utils/admin_cache.dart';
 
 class DonationDetailScreen extends StatefulWidget {
   final String donationId;
@@ -347,6 +348,10 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
 
     await ref.update(updateData);
 
+    // Invalidate cached stats so overview refreshes immediately
+    AdminCache.invalidate(CacheKeys.donationOverview);
+    AdminCache.invalidate(CacheKeys.dashboardStats);
+
     // Audit Log
     await AuditService.logDonationAction(
       action: 'Donation marked as ${newStatus.displayName}',
@@ -460,9 +465,11 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
+                      color: Colors.red.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      border: Border.all(
+                        color: Colors.red.withValues(alpha: 0.3),
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -496,11 +503,13 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
             decoration: BoxDecoration(
               color: theme.scaffoldBackgroundColor,
               border: Border(
-                top: BorderSide(color: theme.dividerColor.withOpacity(0.5)),
+                top: BorderSide(
+                  color: theme.dividerColor.withValues(alpha: 0.5),
+                ),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, -5),
                 ),
@@ -591,7 +600,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
       children: [
         CircleAvatar(
           radius: 28,
-          backgroundColor: AppColors.primaryBlue.withOpacity(0.1),
+          backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.1),
           child: Text(
             (donation.donorName?.isNotEmpty == true)
                 ? donation.donorName![0].toUpperCase()
@@ -621,7 +630,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                 donation.donorEmail ?? 'No Email',
                 style: TextStyle(
                   fontSize: 13,
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
               const SizedBox(height: 8),
@@ -632,7 +641,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withOpacity(0.1),
+                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -651,9 +660,9 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: statusColor.withOpacity(0.15),
+            color: statusColor.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: statusColor.withOpacity(0.3)),
+            border: Border.all(color: statusColor.withValues(alpha: 0.3)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -835,7 +844,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                       fontSize: 12,
                       color: Theme.of(
                         context,
-                      ).colorScheme.onSurface.withOpacity(0.7),
+                      ).colorScheme.onSurface.withValues(alpha: 0.7),
                     ),
                   ),
                   Text(
@@ -859,7 +868,9 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
           child: Text(
             label,
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
         ),

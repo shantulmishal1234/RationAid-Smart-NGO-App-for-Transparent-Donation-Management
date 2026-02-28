@@ -282,47 +282,60 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                     _buildSectionHeader('Identity Information'),
                     const SizedBox(height: 16),
                     FrostedPanel(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: _buildTextField(
-                              controller: _familyNameController,
-                              label: 'Family Head Name',
-                              hint: 'Full Name',
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Required';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            flex: 2,
-                            child: _buildTextField(
-                              controller: _cnicController,
-                              label: 'CNIC',
-                              hint: 'XXXXX-XXXXXXX-X',
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(
-                                  RegExp(r'[0-9\-]'),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isSmall = constraints.maxWidth < 450;
+                          final spacing = 16.0;
+                          final nameWidth = isSmall
+                              ? constraints.maxWidth
+                              : (constraints.maxWidth - spacing) * 0.6;
+                          final cnicWidth = isSmall
+                              ? constraints.maxWidth
+                              : (constraints.maxWidth - spacing) * 0.4;
+
+                          return Wrap(
+                            spacing: spacing,
+                            runSpacing: spacing,
+                            children: [
+                              SizedBox(
+                                width: nameWidth,
+                                child: _buildTextField(
+                                  controller: _familyNameController,
+                                  label: 'Family Head Name',
+                                  hint: 'Full Name',
+                                  validator: (value) {
+                                    if (value == null || value.trim().isEmpty) {
+                                      return 'Required';
+                                    }
+                                    return null;
+                                  },
                                 ),
-                              ],
-                              validator: (value) {
-                                if (value != null && value.isNotEmpty) {
-                                  if (value.length < 13) {
-                                    return 'Invalid';
-                                  }
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                        ],
+                              ),
+                              SizedBox(
+                                width: cnicWidth,
+                                child: _buildTextField(
+                                  controller: _cnicController,
+                                  label: 'CNIC',
+                                  hint: 'XXXXX-XXXXXXX-X',
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.allow(
+                                      RegExp(r'[0-9\-]'),
+                                    ),
+                                  ],
+                                  validator: (value) {
+                                    if (value != null && value.isNotEmpty) {
+                                      if (value.length < 13) {
+                                        return 'Invalid';
+                                      }
+                                    }
+                                    return null;
+                                  },
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(height: 32),
@@ -330,46 +343,58 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                     _buildSectionHeader('Demographics & Income'),
                     const SizedBox(height: 16),
                     FrostedPanel(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: _buildTextField(
-                              controller: _adultsController,
-                              label: 'Adults',
-                              hint: '0',
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            flex: 2,
-                            child: _buildTextField(
-                              controller: _childrenController,
-                              label: 'Children',
-                              hint: '0',
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            flex: 3,
-                            child: _buildTextField(
-                              controller: _incomeController,
-                              label: 'Monthly Income',
-                              hint: 'PKR',
-                              keyboardType: TextInputType.number,
-                              prefixText: 'Rs. ',
-                            ),
-                          ),
-                        ],
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isSmall = constraints.maxWidth < 450;
+                          final spacing = 16.0;
+                          final adultChildWidth = isSmall
+                              ? (constraints.maxWidth - spacing) / 2
+                              : (constraints.maxWidth - spacing * 2) * 0.28;
+                          final incomeWidth = isSmall
+                              ? constraints.maxWidth
+                              : (constraints.maxWidth - spacing * 2) * 0.44;
+
+                          return Wrap(
+                            spacing: spacing,
+                            runSpacing: spacing,
+                            children: [
+                              SizedBox(
+                                width: adultChildWidth,
+                                child: _buildTextField(
+                                  controller: _adultsController,
+                                  label: 'Adults',
+                                  hint: '0',
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
+                                ),
+                              ),
+                              SizedBox(
+                                width: adultChildWidth,
+                                child: _buildTextField(
+                                  controller: _childrenController,
+                                  label: 'Children',
+                                  hint: '0',
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
+                                ),
+                              ),
+                              SizedBox(
+                                width: incomeWidth,
+                                child: _buildTextField(
+                                  controller: _incomeController,
+                                  label: 'Monthly Income',
+                                  hint: 'PKR',
+                                  keyboardType: TextInputType.number,
+                                  prefixText: 'Rs. ',
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(height: 32),
@@ -377,26 +402,63 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                     _buildSectionHeader('Contact Details'),
                     const SizedBox(height: 16),
                     FrostedPanel(
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _buildTextField(
-                              controller: _phoneController,
-                              label: 'Phone Number',
-                              hint: '03XX-XXXXXXX',
-                              keyboardType: TextInputType.phone,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildTextField(
-                              controller: _emergencyContactController,
-                              label: 'Emergency Contact',
-                              hint: '03XX-XXXXXXX',
-                              keyboardType: TextInputType.phone,
-                            ),
-                          ),
-                        ],
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isSmall = constraints.maxWidth < 450;
+                          final spacing = 16.0;
+                          final itemWidth = isSmall
+                              ? constraints.maxWidth
+                              : (constraints.maxWidth - spacing) / 2;
+
+                          return Wrap(
+                            spacing: spacing,
+                            runSpacing: spacing,
+                            children: [
+                              SizedBox(
+                                width: itemWidth,
+                                child: _buildTextField(
+                                  controller: _phoneController,
+                                  label: 'Phone Number',
+                                  hint: '03XX-XXXXXXX',
+                                  keyboardType: TextInputType.phone,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(11),
+                                  ],
+                                  validator: (v) {
+                                    if (v == null || v.isEmpty)
+                                      return 'Phone number is required';
+                                    if (v.length != 11)
+                                      return 'Must be 11 digits';
+                                    if (!v.startsWith('03'))
+                                      return 'Must start with 03';
+                                    return null;
+                                  },
+                                ),
+                              ),
+                              SizedBox(
+                                width: itemWidth,
+                                child: _buildTextField(
+                                  controller: _emergencyContactController,
+                                  label: 'Emergency Contact',
+                                  hint: '03XX-XXXXXXX',
+                                  keyboardType: TextInputType.phone,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(11),
+                                  ],
+                                  validator: (v) {
+                                    if (v != null &&
+                                        v.isNotEmpty &&
+                                        v.length != 11)
+                                      return 'Must be 11 digits';
+                                    return null;
+                                  },
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(height: 32),
@@ -406,24 +468,37 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                     FrostedPanel(
                       child: Column(
                         children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildTextField(
-                                  controller: _cityController,
-                                  label: 'City',
-                                  hint: 'City Name',
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildTextField(
-                                  controller: _areaController,
-                                  label: 'Area',
-                                  hint: 'Area Name',
-                                ),
-                              ),
-                            ],
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final isSmall = constraints.maxWidth < 450;
+                              final spacing = 16.0;
+                              final itemWidth = isSmall
+                                  ? constraints.maxWidth
+                                  : (constraints.maxWidth - spacing) / 2;
+
+                              return Wrap(
+                                spacing: spacing,
+                                runSpacing: spacing,
+                                children: [
+                                  SizedBox(
+                                    width: itemWidth,
+                                    child: _buildTextField(
+                                      controller: _cityController,
+                                      label: 'City',
+                                      hint: 'City Name',
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: itemWidth,
+                                    child: _buildTextField(
+                                      controller: _areaController,
+                                      label: 'Area',
+                                      hint: 'Area Name',
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
                           const SizedBox(height: 16),
                           _buildTextField(
@@ -447,8 +522,9 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: theme.colorScheme.onSurface
-                                      .withOpacity(0.8),
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.8,
+                                  ),
                                 ),
                               ),
                             ],
@@ -507,10 +583,10 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.1),
+                                color: Colors.green.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: Colors.green.withOpacity(0.3),
+                                  color: Colors.green.withValues(alpha: 0.3),
                                 ),
                               ),
                               child: Row(
@@ -564,7 +640,9 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
             decoration: BoxDecoration(
               color: theme.scaffoldBackgroundColor,
               border: Border(
-                top: BorderSide(color: theme.dividerColor.withOpacity(0.5)),
+                top: BorderSide(
+                  color: theme.dividerColor.withValues(alpha: 0.5),
+                ),
               ),
             ),
             child: SafeArea(
@@ -639,7 +717,7 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: theme.colorScheme.onSurface.withOpacity(0.7),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
           ),
         ),
         const SizedBox(height: 6),
@@ -656,7 +734,7 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(
-              color: theme.colorScheme.onSurface.withOpacity(0.3),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
               fontSize: 14,
               fontWeight: FontWeight.normal,
             ),
@@ -677,13 +755,13 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: theme.dividerColor.withOpacity(0.8),
+                color: theme.dividerColor.withValues(alpha: 0.8),
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: theme.dividerColor.withOpacity(0.8),
+                color: theme.dividerColor.withValues(alpha: 0.8),
               ),
             ),
             focusedBorder: OutlineInputBorder(
@@ -696,7 +774,7 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: theme.colorScheme.error.withOpacity(0.5),
+                color: theme.colorScheme.error.withValues(alpha: 0.5),
               ),
             ),
           ),
@@ -726,12 +804,12 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
               }
             });
           },
-          selectedColor: theme.colorScheme.primary.withOpacity(0.15),
+          selectedColor: theme.colorScheme.primary.withValues(alpha: 0.15),
           checkmarkColor: theme.colorScheme.primary,
           labelStyle: TextStyle(
             color: isSelected
                 ? theme.colorScheme.primary
-                : theme.colorScheme.onSurface.withOpacity(0.7),
+                : theme.colorScheme.onSurface.withValues(alpha: 0.7),
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
             fontSize: 13,
           ),
@@ -740,7 +818,7 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
             side: BorderSide(
               color: isSelected
                   ? theme.colorScheme.primary
-                  : theme.dividerColor.withOpacity(0.8),
+                  : theme.dividerColor.withValues(alpha: 0.8),
             ),
           ),
           backgroundColor: Colors.transparent,
@@ -796,7 +874,7 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
-                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -806,7 +884,9 @@ class _AddFamilyScreenState extends State<AddFamilyScreen> {
                       'Supports JPG, PNG',
                       style: TextStyle(
                         fontSize: 12,
-                        color: theme.colorScheme.onSurface.withOpacity(0.4),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.4,
+                        ),
                       ),
                     ),
                   ],

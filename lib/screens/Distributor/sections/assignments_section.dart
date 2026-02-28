@@ -10,7 +10,6 @@ import 'package:ration_aid/screens/Distributor/widgets/delivery_card.dart';
 import 'package:ration_aid/services/delivery_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 
-/// Distributor Assignments Section — Self-Claim Pool Model:
 ///
 /// Tab 1 "Available" — shows ALL unassigned ready deliveries (shared pool).
 ///   Sorted by proximity to distributor's current GPS. First to tap "Claim" wins.
@@ -19,7 +18,8 @@ import 'package:ration_aid/theme/app_colors.dart';
 /// Tab 2 "My Deliveries" — shows only deliveries claimed/in-progress by this distributor.
 ///   Has the original filter/search/stat card UX.
 class AssignmentsSection extends StatefulWidget {
-  const AssignmentsSection({super.key});
+  final bool isSupervisor;
+  const AssignmentsSection({super.key, this.isSupervisor = false});
 
   @override
   State<AssignmentsSection> createState() => _AssignmentsSectionState();
@@ -40,7 +40,7 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 2, vsync: this);
+    _tab = TabController(length: widget.isSupervisor ? 3 : 2, vsync: this);
     _fetchLocation();
   }
 
@@ -208,59 +208,55 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
           children: [
             // ── Header ────────────────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.volunteerBlue.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.local_shipping,
-                      color: AppColors.volunteerBlue,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Deliveries',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.3,
+                        'Welcome back,',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
                         ),
                       ),
                       Text(
-                        'Available pool · claim nearest to you',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        displayName.split(' ').first,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: theme.colorScheme.onSurface,
                         ),
                       ),
                     ],
                   ),
-                  const Spacer(),
-                  // GPS indicator
-                  _locationLoading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.volunteerBlue,
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.volunteerBlue.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: _locationLoading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.volunteerBlue,
+                            ),
+                          )
+                        : Icon(
+                            _myPosition != null
+                                ? Icons.gps_fixed
+                                : Icons.gps_off,
+                            size: 24,
+                            color: _myPosition != null
+                                ? Colors.green
+                                : Colors.grey,
                           ),
-                        )
-                      : Icon(
-                          _myPosition != null ? Icons.gps_fixed : Icons.gps_off,
-                          size: 18,
-                          color: _myPosition != null
-                              ? Colors.green
-                              : Colors.grey,
-                        ),
+                  ),
                 ],
               ),
             ),
@@ -281,8 +277,8 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
                 child: TabBar(
                   controller: _tab,
                   labelColor: Colors.white,
-                  unselectedLabelColor: theme.colorScheme.onSurface.withOpacity(
-                    0.6,
+                  unselectedLabelColor: theme.colorScheme.onSurface.withValues(
+                    alpha: 0.6,
                   ),
                   labelStyle: const TextStyle(
                     fontWeight: FontWeight.w700,
@@ -298,9 +294,11 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
                   ),
                   indicatorSize: TabBarIndicatorSize.tab,
                   dividerColor: Colors.transparent,
-                  tabs: const [
-                    Tab(text: '🔓 Available Pool'),
-                    Tab(text: '🚚 My Deliveries'),
+                  tabs: [
+                    const Tab(text: '🔓 Available Pool'),
+                    const Tab(text: '🚚 My Deliveries'),
+                    if (widget.isSupervisor)
+                      const Tab(text: '📊 All Deliveries'),
                   ],
                 ),
               ),
@@ -315,6 +313,7 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
                 children: [
                   _buildAvailablePool(uid, displayName, theme, isDark),
                   _buildMyDeliveries(uid, theme, isDark),
+                  if (widget.isSupervisor) _buildAllDeliveries(theme, isDark),
                 ],
               ),
             ),
@@ -353,7 +352,7 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
         return ListView.separated(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
           itemCount: pool.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, i) {
             final a = pool[i];
             return _buildPoolCard(a, uid, displayName, theme, isDark);
@@ -376,10 +375,12 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.volunteerBlue.withOpacity(0.25)),
+        border: Border.all(
+          color: AppColors.volunteerBlue.withValues(alpha: 0.25),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -399,7 +400,7 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.12),
+                    color: Colors.green.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Row(
@@ -444,7 +445,7 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
               _distanceLabel(a),
               style: TextStyle(
                 fontSize: 13,
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
 
@@ -456,28 +457,28 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
                 Icon(
                   Icons.inventory_2_outlined,
                   size: 14,
-                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
                 const SizedBox(width: 4),
                 Text(
                   '$itemCount items',
                   style: TextStyle(
                     fontSize: 12,
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Icon(
                   Icons.group_outlined,
                   size: 14,
-                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
                 const SizedBox(width: 4),
                 Text(
                   'Family of ${a.familySize}',
                   style: TextStyle(
                     fontSize: 12,
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
               ],
@@ -641,24 +642,32 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                  vertical: 14,
-                  horizontal: 8,
+                  vertical: 20,
+                  horizontal: 16,
                 ),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
+                  gradient: LinearGradient(
+                    colors: [
+                      theme.cardColor,
+                      theme.cardColor.withValues(alpha: 0.95),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: theme.dividerColor.withOpacity(0.4),
+                    color: theme.dividerColor.withValues(alpha: 0.5),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+                      color: Colors.black.withValues(alpha: 0.04),
                       blurRadius: 10,
-                      offset: const Offset(0, 3),
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     _statItem(
                       'Pending',
@@ -666,11 +675,8 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
                       AppColors.volunteerBlue,
                       'pending',
                     ),
-                    _divider(),
                     _statItem('Active', activeCount, Colors.orange, 'active'),
-                    _divider(),
                     _statItem('Done', doneCount, Colors.green, 'done'),
-                    _divider(),
                     _statItem('Failed', failedCount, Colors.red, 'failed'),
                   ],
                 ),
@@ -696,16 +702,16 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
                         decoration: InputDecoration(
                           hintText: 'Search by area, city, pack...',
                           hintStyle: TextStyle(
-                            color: theme.colorScheme.onSurface.withOpacity(
-                              0.45,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.45,
                             ),
                             fontSize: 14,
                           ),
                           prefixIcon: Icon(
                             Icons.search,
                             size: 20,
-                            color: theme.colorScheme.onSurface.withOpacity(
-                              0.45,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.45,
                             ),
                           ),
                           filled: true,
@@ -716,13 +722,13 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: theme.dividerColor.withOpacity(0.5),
+                              color: theme.dividerColor.withValues(alpha: 0.5),
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: theme.dividerColor.withOpacity(0.5),
+                              color: theme.dividerColor.withValues(alpha: 0.5),
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
@@ -745,7 +751,7 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: _statusFilter == 'all'
-                            ? theme.dividerColor.withOpacity(0.5)
+                            ? theme.dividerColor.withValues(alpha: 0.5)
                             : AppColors.volunteerBlue,
                       ),
                     ),
@@ -780,7 +786,9 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
                               Icons.filter_list_alt,
                               size: 20,
                               color: _statusFilter == 'all'
-                                  ? theme.colorScheme.onSurface.withOpacity(0.6)
+                                  ? theme.colorScheme.onSurface.withValues(
+                                      alpha: 0.6,
+                                    )
                                   : AppColors.volunteerBlue,
                             ),
                             if (_statusFilter != 'all') ...[
@@ -812,7 +820,7 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
                   : ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
                       itemCount: filtered.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 0),
+                      separatorBuilder: (_, _) => const SizedBox(height: 0),
                       itemBuilder: (context, i) {
                         final a = filtered[i];
                         return DeliveryCard(
@@ -826,6 +834,259 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
                           ),
                           // Release button shown only when status is notStarted
                           trailing: a.isPending
+                              ? _releaseButton(a, isDark)
+                              : null,
+                        );
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ── Tab 3: All Deliveries (Supervisor Only) ──────────────────────────────────
+  Widget _buildAllDeliveries(ThemeData theme, bool isDark) {
+    return StreamBuilder<List<DeliveryAssignment>>(
+      stream: DeliveryService.streamAllAssignments(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: AppColors.volunteerBlue),
+          );
+        }
+        if (snapshot.hasError) {
+          return _errorState('${snapshot.error}');
+        }
+
+        final all = snapshot.data ?? [];
+        final pendingCount = all.where((a) => a.isPending).length;
+        final activeCount = all.where((a) => a.isActive).length;
+        final doneCount = all.where((a) => a.isCompleted).length;
+        final failedCount = all.where((a) => a.isFailed).length;
+        final filtered = _filterMine(all); // Reuse same front-end filter logic
+
+        return Column(
+          children: [
+            // ── Stats Row ──────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 20,
+                  horizontal: 16,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      theme.cardColor,
+                      theme.cardColor.withValues(alpha: 0.95),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: theme.dividerColor.withValues(alpha: 0.5),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _statItem(
+                      'Pending',
+                      pendingCount,
+                      AppColors.volunteerBlue,
+                      'pending',
+                    ),
+                    _statItem('Active', activeCount, Colors.orange, 'active'),
+                    _statItem('Done', doneCount, Colors.green, 'done'),
+                    _statItem('Failed', failedCount, Colors.red, 'failed'),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // ── Search + Filter (Reused UI) ────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: TextField(
+                        controller: _searchController,
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontSize: 14,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Search across all deliveries...',
+                          hintStyle: TextStyle(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.45,
+                            ),
+                            fontSize: 14,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.search,
+                            size: 20,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.45,
+                            ),
+                          ),
+                          filled: true,
+                          fillColor: isDark
+                              ? const Color(0xFF1E1E2E)
+                              : Colors.white,
+                          contentPadding: EdgeInsets.zero,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: theme.dividerColor.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: theme.dividerColor.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppColors.volunteerBlue,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        onChanged: _onSearchChanged,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _statusFilter == 'all'
+                            ? theme.dividerColor.withValues(alpha: 0.5)
+                            : AppColors.volunteerBlue,
+                      ),
+                    ),
+                    child: PopupMenuButton<String>(
+                      offset: const Offset(0, 46),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      tooltip: 'Filter',
+                      onSelected: (v) => setState(() => _statusFilter = v),
+                      itemBuilder: (_) => [
+                        _filterItem('All Deliveries', 'all', Icons.list_alt),
+                        _filterItem(
+                          'Pending',
+                          'pending',
+                          Icons.hourglass_empty,
+                        ),
+                        _filterItem('Active', 'active', Icons.local_shipping),
+                        _filterItem(
+                          'Completed',
+                          'done',
+                          Icons.check_circle_outline,
+                        ),
+                        _filterItem('Failed', 'failed', Icons.cancel_outlined),
+                      ],
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.filter_list_alt,
+                              size: 20,
+                              color: _statusFilter == 'all'
+                                  ? theme.colorScheme.onSurface.withValues(
+                                      alpha: 0.6,
+                                    )
+                                  : AppColors.volunteerBlue,
+                            ),
+                            if (_statusFilter != 'all') ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                _filterLabel(_statusFilter),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.volunteerBlue,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Result count
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Showing ${filtered.length} global records',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            // ── List ───────────────────────────────────────────────────────
+            Expanded(
+              child: filtered.isEmpty
+                  ? _emptyMineState()
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
+                      itemBuilder: (context, i) {
+                        final a = filtered[i];
+                        return DeliveryCard(
+                          assignment: a,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    DeliveryDetailScreen(assignmentId: a.id),
+                              ),
+                            );
+                          },
+                          // For All Deliveries, supervisors can release active/pending assignments
+                          // that belong to others (like Admin force-release)
+                          trailing: (a.isPending || a.isActive)
                               ? _releaseButton(a, isDark)
                               : null,
                         );
@@ -900,41 +1161,35 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
 
   Widget _statItem(String label, int count, Color color, String filter) {
     final isSelected = _statusFilter == filter;
-    return Expanded(
-      child: InkWell(
-        onTap: () => setState(
-          () => _statusFilter = _statusFilter == filter ? 'all' : filter,
-        ),
-        borderRadius: BorderRadius.circular(8),
-        child: Column(
-          children: [
-            Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-                color: isSelected ? color : color.withOpacity(0.7),
-              ),
+    return GestureDetector(
+      onTap: () => setState(
+        () => _statusFilter = _statusFilter == filter ? 'all' : filter,
+      ),
+      child: Column(
+        children: [
+          Text(
+            '$count',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: isSelected ? color : color.withValues(alpha: 0.7),
             ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                color: isSelected
-                    ? color
-                    : Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-              ),
+          ),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+              color: isSelected
+                  ? color
+                  : Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.6),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
-
-  Widget _divider() =>
-      Container(height: 32, width: 1, color: Colors.grey.withOpacity(0.2));
 
   PopupMenuItem<String> _filterItem(String label, String value, IconData icon) {
     final isSelected = _statusFilter == value;
@@ -947,7 +1202,9 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
             size: 18,
             color: isSelected
                 ? AppColors.volunteerBlue
-                : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                : Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.6),
           ),
           const SizedBox(width: 10),
           Text(
@@ -991,7 +1248,7 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
           Icon(
             Icons.check_circle_outline,
             size: 64,
-            color: Colors.green.withOpacity(0.3),
+            color: Colors.green.withValues(alpha: 0.3),
           ),
           const SizedBox(height: 16),
           const Text(
@@ -1005,7 +1262,10 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
           const SizedBox(height: 6),
           Text(
             'New orders will appear here automatically.',
-            style: TextStyle(fontSize: 13, color: Colors.grey.withOpacity(0.7)),
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.withValues(alpha: 0.7),
+            ),
           ),
         ],
       ),
@@ -1020,7 +1280,7 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
           Icon(
             Icons.local_shipping_outlined,
             size: 64,
-            color: Colors.grey.withOpacity(0.2),
+            color: Colors.grey.withValues(alpha: 0.2),
           ),
           const SizedBox(height: 16),
           const Text(
@@ -1034,7 +1294,10 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
           const SizedBox(height: 6),
           Text(
             'Claim a delivery from the Available Pool tab.',
-            style: TextStyle(fontSize: 13, color: Colors.grey.withOpacity(0.7)),
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.withValues(alpha: 0.7),
+            ),
           ),
         ],
       ),
@@ -1051,7 +1314,7 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
             Icon(
               Icons.wifi_off_rounded,
               size: 56,
-              color: Colors.red.withOpacity(0.5),
+              color: Colors.red.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             const Text(

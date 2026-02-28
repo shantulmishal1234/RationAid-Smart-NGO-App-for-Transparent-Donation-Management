@@ -134,14 +134,14 @@ class _CurrentStatusHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [color, color.withOpacity(0.8)],
+          colors: [color, color.withValues(alpha: 0.8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.4),
+            color: color.withValues(alpha: 0.4),
             blurRadius: 20,
             offset: const Offset(0, 10),
             spreadRadius: -5,
@@ -153,7 +153,7 @@ class _CurrentStatusHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
             child: Icon(_getStatusIcon(), size: 48, color: Colors.white),
@@ -177,7 +177,7 @@ class _CurrentStatusHeader extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.15),
+                color: Colors.black.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
@@ -260,7 +260,7 @@ class _StatusTimeline extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -390,7 +390,7 @@ class _TimelineStep extends StatelessWidget {
                     boxShadow: isCurrent
                         ? [
                             BoxShadow(
-                              color: stepColor.withOpacity(0.4),
+                              color: stepColor.withValues(alpha: 0.4),
                               blurRadius: 8,
                               spreadRadius: 2,
                             ),
@@ -437,7 +437,7 @@ class _TimelineStep extends StatelessWidget {
                               : FontWeight.w500,
                           color: isCurrent || isCompleted
                               ? theme.colorScheme.onSurface
-                              : theme.colorScheme.onSurface.withOpacity(0.5),
+                              : theme.colorScheme.onSurface.withValues(alpha: 0.5),
                         ),
                       ),
                       if (timestamp != null)
@@ -445,7 +445,7 @@ class _TimelineStep extends StatelessWidget {
                           _formatTime(timestamp!),
                           style: TextStyle(
                             fontSize: 12,
-                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -457,7 +457,7 @@ class _TimelineStep extends StatelessWidget {
                       _formatDate(timestamp!),
                       style: TextStyle(
                         fontSize: 12,
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                       ),
                     ),
                   ] else if (isCurrent) ...[
@@ -575,7 +575,7 @@ class _LiveStatusCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF00BCD4).withOpacity(0.4),
+            color: const Color(0xFF00BCD4).withValues(alpha: 0.4),
             blurRadius: 16,
             offset: const Offset(0, 8),
           ),
@@ -589,7 +589,7 @@ class _LiveStatusCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -666,7 +666,7 @@ class _LiveStatusCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF4CAF50).withOpacity(0.4),
+            color: const Color(0xFF4CAF50).withValues(alpha: 0.4),
             blurRadius: 16,
             offset: const Offset(0, 8),
           ),
@@ -680,7 +680,7 @@ class _LiveStatusCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -750,7 +750,7 @@ class _LiveStatusCard extends StatelessWidget {
                       border: Border.all(color: Colors.white, width: 2),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
+                          color: Colors.black.withValues(alpha: 0.2),
                           blurRadius: 8,
                           offset: const Offset(0, 4),
                         ),
@@ -786,7 +786,7 @@ class _LiveStatusCard extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Text(
@@ -810,7 +810,7 @@ class _LiveStatusCard extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: isDark
-            ? const Color(0xFFB71C1C).withOpacity(0.2)
+            ? const Color(0xFFB71C1C).withValues(alpha: 0.2)
             : const Color(0xFFFFEBEE),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: const Color(0xFFEF5350), width: 1.5),
@@ -823,7 +823,7 @@ class _LiveStatusCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEF5350).withOpacity(0.1),
+                  color: const Color(0xFFEF5350).withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -850,7 +850,7 @@ class _LiveStatusCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: const Color(0xFFD32F2F).withOpacity(0.8),
+                color: const Color(0xFFD32F2F).withValues(alpha: 0.8),
                 letterSpacing: 1.2,
               ),
             ),
@@ -901,10 +901,10 @@ class _StatusCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         border: isAction
             ? Border.all(color: iconColor, width: 2)
-            : Border.all(color: iconColor.withOpacity(0.2)),
+            : Border.all(color: iconColor.withValues(alpha: 0.2)),
         boxShadow: [
           BoxShadow(
-            color: iconColor.withOpacity(0.08),
+            color: iconColor.withValues(alpha: 0.08),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -918,7 +918,7 @@ class _StatusCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.1),
+                  color: iconColor.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, color: iconColor, size: 28),
@@ -942,7 +942,7 @@ class _StatusCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 15,
               height: 1.5,
-              color: theme.colorScheme.onSurface.withOpacity(0.7),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
             ),
           ),
           if (extraInfo != null) ...[
@@ -950,7 +950,7 @@ class _StatusCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.05),
+                color: iconColor.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -1039,7 +1039,7 @@ class _DonationDetailsCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1147,7 +1147,7 @@ class _DonationDetailsCard extends StatelessWidget {
               donation.donationNote!,
               style: TextStyle(
                 fontSize: 14,
-                color: theme.colorScheme.onSurface.withOpacity(0.7),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -1175,7 +1175,7 @@ class _UpdateHistoryCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1244,7 +1244,7 @@ class _UpdateItem extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.donorGreen.withOpacity(0.1),
+              color: AppColors.donorGreen.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(_getIcon(), size: 16, color: AppColors.donorGreen),
@@ -1267,7 +1267,7 @@ class _UpdateItem extends StatelessWidget {
                   _formatTimestamp(entry.timestamp),
                   style: TextStyle(
                     fontSize: 12,
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
                 if (entry.note.isNotEmpty) ...[
@@ -1276,7 +1276,7 @@ class _UpdateItem extends StatelessWidget {
                     entry.note,
                     style: TextStyle(
                       fontSize: 13,
-                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                     ),
                   ),
                 ],
@@ -1374,7 +1374,7 @@ class _ActionButtonsState extends State<_ActionButtons> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),

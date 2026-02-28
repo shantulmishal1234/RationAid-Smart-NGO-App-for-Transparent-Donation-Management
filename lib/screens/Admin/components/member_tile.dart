@@ -70,7 +70,7 @@ class MemberTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: theme.cardColor,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: theme.dividerColor.withOpacity(0.6)),
+            border: Border.all(color: theme.dividerColor.withValues(alpha: 0.6)),
           ),
           child: Row(
             children: [
@@ -109,7 +109,7 @@ class MemberTile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                         fontSize: 11,
                       ),
                     ),
@@ -122,7 +122,7 @@ class MemberTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                           fontSize: 10,
                         ),
                       ),
@@ -133,7 +133,7 @@ class MemberTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                           fontSize: 10,
                         ),
                       ),
@@ -143,7 +143,7 @@ class MemberTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                           fontSize: 10,
                         ),
                       ),

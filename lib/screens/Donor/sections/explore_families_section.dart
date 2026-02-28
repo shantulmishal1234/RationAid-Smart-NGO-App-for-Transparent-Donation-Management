@@ -73,6 +73,15 @@ class _ExploreFamiliesSectionState extends State<ExploreFamiliesSection> {
             child: StreamBuilder<List<Family>>(
               stream: _familiesStream,
               builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'Could not load statistics',
+                      style: TextStyle(color: Colors.red[400]),
+                    ),
+                  );
+                }
                 final families = snapshot.data ?? [];
                 final totalCount = families.length;
 
@@ -152,13 +161,17 @@ class _ExploreFamiliesSectionState extends State<ExploreFamiliesSection> {
                     decoration: InputDecoration(
                       hintText: 'Search by area...',
                       hintStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                         fontSize: 14,
                       ),
                       prefixIcon: Icon(
                         Icons.search,
                         size: 20,
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                       suffixIcon: _searchQuery.isNotEmpty
                           ? IconButton(
@@ -177,13 +190,13 @@ class _ExploreFamiliesSectionState extends State<ExploreFamiliesSection> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: theme.dividerColor.withOpacity(0.6),
+                          color: theme.dividerColor.withValues(alpha: 0.6),
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: theme.dividerColor.withOpacity(0.6),
+                          color: theme.dividerColor.withValues(alpha: 0.6),
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -212,13 +225,13 @@ class _ExploreFamiliesSectionState extends State<ExploreFamiliesSection> {
                   color: theme.cardColor,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: theme.dividerColor.withOpacity(0.6),
+                    color: theme.dividerColor.withValues(alpha: 0.6),
                   ),
                 ),
                 child: PopupMenuButton<String>(
                   icon: Icon(
                     Icons.filter_list,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                     size: 22,
                   ),
                   tooltip: 'Filter by Assistance Type',
@@ -310,7 +323,7 @@ class _ExploreFamiliesSectionState extends State<ExploreFamiliesSection> {
                             fontSize: 16,
                             color: Theme.of(
                               context,
-                            ).colorScheme.onSurface.withOpacity(0.6),
+                            ).colorScheme.onSurface.withValues(alpha: 0.6),
                           ),
                         ),
                       ],
@@ -354,7 +367,9 @@ class _ExploreFamiliesSectionState extends State<ExploreFamiliesSection> {
           '$label: ',
           style: TextStyle(
             fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.6),
           ),
         ),
         Text(
@@ -398,12 +413,14 @@ class _FamilyCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: theme.cardColor,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: theme.dividerColor.withOpacity(0.4)),
+            border: Border.all(
+              color: theme.dividerColor.withValues(alpha: 0.4),
+            ),
             boxShadow: [
               BoxShadow(
                 color: isDark
-                    ? Colors.black.withOpacity(0.2)
-                    : Colors.black.withOpacity(0.03),
+                    ? Colors.black.withValues(alpha: 0.2)
+                    : Colors.black.withValues(alpha: 0.03),
                 blurRadius: 4,
                 offset: const Offset(0, 1),
               ),
@@ -414,7 +431,7 @@ class _FamilyCard extends StatelessWidget {
               // Serial Number
               CircleAvatar(
                 radius: 16,
-                backgroundColor: AppColors.donorGreen.withOpacity(0.1),
+                backgroundColor: AppColors.donorGreen.withValues(alpha: 0.1),
                 child: Text(
                   serialNumber.toString(),
                   style: const TextStyle(
@@ -450,14 +467,18 @@ class _FamilyCard extends StatelessWidget {
                         Icon(
                           Icons.people,
                           size: 12,
-                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.5,
+                          ),
                         ),
                         const SizedBox(width: 4),
                         Text(
                           '${family.numberOfAdults + family.numberOfChildren} members • ${family.numberOfChildren} children',
                           style: theme.textTheme.bodySmall?.copyWith(
                             fontSize: 11,
-                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
                       ],
@@ -492,10 +513,10 @@ class _FamilyCard extends StatelessWidget {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.donorGreen.withOpacity(0.1),
+                        color: AppColors.donorGreen.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: AppColors.donorGreen.withOpacity(0.3),
+                          color: AppColors.donorGreen.withValues(alpha: 0.3),
                         ),
                       ),
                       child: Text(
@@ -518,7 +539,7 @@ class _FamilyCard extends StatelessWidget {
               Icon(
                 Icons.arrow_forward_ios,
                 size: 14,
-                color: theme.colorScheme.onSurface.withOpacity(0.4),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
               ),
             ],
           ),

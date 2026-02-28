@@ -143,7 +143,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: c.withOpacity(0.1),
+              color: c.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, size: 28, color: c),
@@ -396,7 +396,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.donorGreen.withOpacity(0.1),
+                    color: AppColors.donorGreen.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
@@ -698,7 +698,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.donorGreen.withOpacity(0.1),
+                  color: AppColors.donorGreen.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
@@ -725,7 +725,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
                     labelText: 'Current Name',
                     prefixIcon: const Icon(Icons.person),
                     filled: true,
-                    fillColor: Colors.grey.withOpacity(0.1),
+                    fillColor: Colors.grey.withValues(alpha: 0.1),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -925,7 +925,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.donorGreen.withOpacity(0.1),
+                color: AppColors.donorGreen.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(
@@ -951,7 +951,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
                   labelText: 'Current Phone',
                   prefixIcon: const Icon(Icons.phone),
                   filled: true,
-                  fillColor: Colors.grey.withOpacity(0.1),
+                  fillColor: Colors.grey.withValues(alpha: 0.1),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -1038,7 +1038,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.logout, color: Colors.red),
@@ -1090,7 +1090,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.donorGreen.withOpacity(0.1),
+                color: AppColors.donorGreen.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(
@@ -1180,7 +1180,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
                       children: [
                         CircleAvatar(
                           radius: 50,
-                          backgroundColor: AppColors.donorGreen.withOpacity(
+                          backgroundColor: AppColors.donorGreen.withValues(alpha: 
                             0.2,
                           ),
                           backgroundImage: _profilePhotoUrl != null
@@ -1200,7 +1200,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
                             child: Container(
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.black.withOpacity(0.5),
+                                color: Colors.black.withValues(alpha: 0.5),
                               ),
                               child: const Center(
                                 child: CircularProgressIndicator(
@@ -1251,7 +1251,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
                       fontSize: 14,
                       color: Theme.of(
                         context,
-                      ).colorScheme.onSurface.withOpacity(0.6),
+                      ).colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
                   if (user?.phoneNumber != null) ...[
@@ -1262,7 +1262,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
                         fontSize: 14,
                         color: Theme.of(
                           context,
-                        ).colorScheme.onSurface.withOpacity(0.6),
+                        ).colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
                   ],
@@ -1380,7 +1380,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.indigo.withOpacity(0.1),
+                        color: Colors.indigo.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
@@ -1403,7 +1403,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
                         fontSize: 12,
                         color: Theme.of(
                           context,
-                        ).colorScheme.onSurface.withOpacity(0.6),
+                        ).colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
                     trailing: Switch(
@@ -1461,7 +1461,7 @@ class _ActivityRow extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.15),
+            color: color.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(icon, color: color, size: 24),
@@ -1514,7 +1514,7 @@ class _SettingsTile extends StatelessWidget {
       leading: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(icon, color: color, size: 22),
@@ -1531,7 +1531,7 @@ class _SettingsTile extends StatelessWidget {
         subtitle,
         style: TextStyle(
           fontSize: 12,
-          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
         ),
       ),
       trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
@@ -1566,7 +1566,7 @@ class _SupportOption extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.donorGreen.withOpacity(0.1),
+                color: AppColors.donorGreen.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: AppColors.donorGreen, size: 22),
@@ -1590,7 +1590,7 @@ class _SupportOption extends StatelessWidget {
                       fontSize: 12,
                       color: Theme.of(
                         context,
-                      ).colorScheme.onSurface.withOpacity(0.6),
+                      ).colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
                 ],

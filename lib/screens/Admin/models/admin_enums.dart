@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ration_aid/theme/app_colors.dart';
 
 /// Enum representing different sections in the Admin Dashboard
 enum AdminSection {
@@ -27,8 +28,9 @@ enum DonationStatusFilter { all, pending, underReview, verified, rejected }
 /// Enum for donation type filters
 enum DonationTypeFilter { all, generalFund, family }
 
-/// Color constants used throughout the Admin Dashboard
+/// @Deprecated('Use AppColors directly')
+/// Kept as alias for backward compatibility across 29 usages.
 class AdminColors {
-  static const Color primaryBlue = Color(0xFF5CB9DD);
-  static const Color accentGreen = Color(0xFF6DD1A1);
+  static const Color primaryBlue = AppColors.primaryBlue;
+  static const Color accentGreen = AppColors.accentGreen;
 }
