@@ -7,13 +7,17 @@ This repository contains my Final Year Project (FYP) developed using Flutter & D
 
 Overall Progress: 10% → 30% → 60% (ongoing)
 
+---> Total 4 Major Modules
+
 Admin Module: ✅ Fully developed
 
 Current Work:
 
- Donor Module (completed But still performing changes according to addition of new modules)
+ Donor Module (completed , But still working on it to make it fully structured, professional and efficient)
 
- Purchaser Module (in progress Currently )
+ Purchaser Module (completed , But still working on it to make it fully structured, professional and efficient)
+
+ Delivery Module (completed , But still working on it to make it fully structured, professional and efficient)
 
  Continuous refinement and optimization of the Admin module
 
