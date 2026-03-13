@@ -101,9 +101,9 @@ class _InventoryViewState extends State<InventoryView> {
 
           if (count < 3) lowStockCount++;
 
-          if (daysInStock > 7)
+          if (daysInStock > 7) {
             urgentCount++;
-          else if (daysInStock >= 4)
+          } else if (daysInStock >= 4)
             reviewCount++;
           else
             freshCount++;
@@ -1092,7 +1092,7 @@ class _InventoryViewState extends State<InventoryView> {
               ),
               SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: issueType,
+                initialValue: issueType,
                 decoration: InputDecoration(
                   labelText: 'Issue Type',
                   border: OutlineInputBorder(),

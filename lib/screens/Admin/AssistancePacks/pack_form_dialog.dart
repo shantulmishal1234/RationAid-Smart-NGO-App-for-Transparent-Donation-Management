@@ -28,9 +28,21 @@ class _PackFormDialogState extends State<PackFormDialog> {
   List<PackItem> _items = [];
   bool _isSaving = false;
 
+  // ── Budget computed helpers ──────────────────────────────────────────
+  double get _budgetAmount => double.tryParse(_budgetController.text) ?? 0.0;
+
+  double get _totalItemsCost =>
+      _items.fold(0.0, (sum, item) => sum + item.estimatedCost);
+
+  bool get _isOverBudget =>
+      _totalItemsCost > _budgetAmount && _budgetAmount > 0;
+
   @override
   void initState() {
     super.initState();
+    _budgetController.addListener(
+      () => setState(() {}),
+    ); // rebuild on budget change
     if (widget.pack != null) {
       _nameController.text = widget.pack!.name;
       _descriptionController.text = widget.pack!.description ?? '';
@@ -123,40 +135,6 @@ class _PackFormDialogState extends State<PackFormDialog> {
                             return 'Name must be at least 3 characters';
                           }
                           return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Pack Type
-                      DropdownButtonFormField<String>(
-                        value: _packType,
-                        decoration: InputDecoration(
-                          labelText: 'Pack Type *',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'food', child: Text('Food')),
-                          DropdownMenuItem(
-                            value: 'clothing',
-                            child: Text('Clothing'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'mixed',
-                            child: Text('Mixed'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'education',
-                            child: Text('Education'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'medical',
-                            child: Text('Medical'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          setState(() => _packType = value ?? 'food');
                         },
                       ),
                       const SizedBox(height: 16),
@@ -287,6 +265,10 @@ class _PackFormDialogState extends State<PackFormDialog> {
                       ),
                       const SizedBox(height: 8),
 
+                      // ── Budget Tracker ──────────────────────────────
+                      if (_budgetAmount > 0) _buildBudgetTracker(),
+                      if (_budgetAmount > 0) const SizedBox(height: 12),
+
                       // Items List
                       if (_items.isEmpty)
                         Container(
@@ -385,13 +367,31 @@ class _PackFormDialogState extends State<PackFormDialog> {
   Widget _buildItemCard(int index, PackItem item) {
     final theme = Theme.of(context);
     return Card(
+      elevation: 0,
       margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.5)),
+      ),
       child: ListTile(
-        leading: const CircleAvatar(
-          backgroundColor: Color(0xFF4285F4),
-          child: Icon(Icons.shopping_bag, color: Colors.white, size: 20),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AdminColors.primaryBlue.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            Icons.shopping_bag_outlined,
+            color: AdminColors.primaryBlue,
+            size: 20,
+          ),
         ),
-        title: Text(item.name),
+        title: Text(
+          item.name,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
         subtitle: Text(
           '${item.quantity} • PKR ${item.estimatedCost.toStringAsFixed(0)}',
           style: TextStyle(fontSize: 12, color: theme.disabledColor),
@@ -409,6 +409,120 @@ class _PackFormDialogState extends State<PackFormDialog> {
     );
   }
 
+  // ── Budget Tracker Widget ────────────────────────────────────────────────
+  Widget _buildBudgetTracker() {
+    final theme = Theme.of(context);
+    final budget = _budgetAmount;
+    final spent = _totalItemsCost;
+    final remaining = budget - spent;
+    final ratio = budget > 0 ? (spent / budget).clamp(0.0, 1.1) : 0.0;
+    final isOver = spent > budget;
+    final isWarning = !isOver && ratio >= 0.8;
+
+    final barColor = isOver
+        ? Colors.red
+        : isWarning
+        ? Colors.orange
+        : Colors.green;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isOver
+            ? Colors.red.withValues(alpha: 0.06)
+            : isWarning
+            ? Colors.orange.withValues(alpha: 0.06)
+            : theme.colorScheme.primary.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isOver
+              ? Colors.red.withValues(alpha: 0.35)
+              : isWarning
+              ? Colors.orange.withValues(alpha: 0.35)
+              : theme.dividerColor.withValues(alpha: 0.4),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Row: label + amounts
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    isOver
+                        ? Icons.warning_amber_rounded
+                        : Icons.account_balance_wallet_outlined,
+                    size: 16,
+                    color: barColor,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Budget Tracker',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: barColor,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                'PKR ${spent.toStringAsFixed(0)} / ${budget.toStringAsFixed(0)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: ratio.clamp(0.0, 1.0),
+              backgroundColor: theme.colorScheme.onSurface.withValues(
+                alpha: 0.1,
+              ),
+              color: barColor,
+              minHeight: 7,
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Remaining / Over-budget label
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                isOver
+                    ? '⚠  Over budget by PKR ${(spent - budget).toStringAsFixed(0)}'
+                    : isWarning
+                    ? '⚡  Only PKR ${remaining.toStringAsFixed(0)} remaining'
+                    : '✓  PKR ${remaining.toStringAsFixed(0)} remaining',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: barColor,
+                ),
+              ),
+              Text(
+                '${(ratio * 100).clamp(0, 100).toInt()}% used',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   void _addItem() {
     final nameController = TextEditingController();
     final quantityController = TextEditingController();
@@ -416,63 +530,129 @@ class _PackFormDialogState extends State<PackFormDialog> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Item'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Item Name',
-                hintText: 'e.g., Rice',
-              ),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, dialogSetState) {
+          final enteredCost = double.tryParse(costController.text) ?? 0.0;
+          final wouldTotal = _totalItemsCost + enteredCost;
+          final budget = _budgetAmount;
+          final remaining = budget - _totalItemsCost;
+          final wouldOverflow =
+              budget > 0 && wouldTotal > budget && enteredCost > 0;
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: quantityController,
-              decoration: const InputDecoration(
-                labelText: 'Quantity',
-                hintText: 'e.g., 5 kg',
-              ),
+            title: const Text(
+              'Add Item',
+              style: TextStyle(fontWeight: FontWeight.w700),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: costController,
-              decoration: const InputDecoration(
-                labelText: 'Estimated Cost (PKR)',
-                prefixText: 'PKR ',
-              ),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (nameController.text.isNotEmpty &&
-                  quantityController.text.isNotEmpty &&
-                  costController.text.isNotEmpty) {
-                setState(() {
-                  _items.add(
-                    PackItem(
-                      name: nameController.text.trim(),
-                      quantity: quantityController.text.trim(),
-                      estimatedCost: double.parse(costController.text),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Remaining budget info
+                if (budget > 0)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
-                  );
-                });
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
+                    decoration: BoxDecoration(
+                      color: wouldOverflow
+                          ? Colors.red.withValues(alpha: 0.08)
+                          : Colors.green.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: wouldOverflow
+                            ? Colors.red.withValues(alpha: 0.3)
+                            : Colors.green.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Text(
+                      wouldOverflow
+                          ? '⚠  This item exceeds remaining budget of PKR ${remaining.toStringAsFixed(0)}'
+                          : '💰  PKR ${remaining.toStringAsFixed(0)} remaining of PKR ${budget.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: wouldOverflow ? Colors.red : Colors.green[700],
+                      ),
+                    ),
+                  ),
+                if (budget > 0) const SizedBox(height: 12),
+                TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    labelText: 'Item Name (e.g., Lemonmax Dish Soap)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    isDense: true,
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: quantityController,
+                  decoration: InputDecoration(
+                    labelText: 'Quantity (e.g., 2 kg / 1 pc)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: costController,
+                  decoration: InputDecoration(
+                    labelText: 'Estimated Cost (PKR)',
+                    prefixText: 'PKR ',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    isDense: true,
+                  ),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onChanged: (_) => dialogSetState(() {}),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (nameController.text.isNotEmpty &&
+                      quantityController.text.isNotEmpty &&
+                      costController.text.isNotEmpty) {
+                    setState(() {
+                      _items.add(
+                        PackItem(
+                          name: nameController.text.trim(),
+                          quantity: quantityController.text.trim(),
+                          estimatedCost: double.parse(costController.text),
+                        ),
+                      );
+                    });
+                    Navigator.pop(dialogContext);
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: wouldOverflow
+                      ? Colors.orange
+                      : AdminColors.primaryBlue,
+                  foregroundColor: Colors.white,
+                ),
+                child: Text(wouldOverflow ? 'Add Anyway' : 'Add'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -487,6 +667,22 @@ class _PackFormDialogState extends State<PackFormDialog> {
         const SnackBar(
           content: Text('Please add at least one item'),
           backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Block save if items exceed budget
+    if (_isOverBudget) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Total item cost (PKR ${_totalItemsCost.toStringAsFixed(0)}) exceeds '
+            'the budget (PKR ${_budgetAmount.toStringAsFixed(0)}). '
+            'Please adjust item costs or increase the budget.',
+          ),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
         ),
       );
       return;

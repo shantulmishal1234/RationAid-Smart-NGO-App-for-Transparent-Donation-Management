@@ -1,60 +1,47 @@
 import 'package:flutter/material.dart';
 import '../../../theme/app_colors.dart'; // Relative import to avoid package resolution issues
+import '../../../models/family_model.dart';
 
 /// Family card widget for displaying family information
 class FamilyCard extends StatelessWidget {
-  final String id;
-  final String name;
-  final String area;
-  final String address;
-  final int familySize;
-  final String status;
+  final Family family;
   final VoidCallback onTap;
   final VoidCallback? onEdit;
   final int? serialNumber;
-  final double? targetAmount;
-  final double? raisedAmount;
-  final double? surplusAmount;
 
   const FamilyCard({
     super.key,
-    required this.id,
-    required this.name,
-    required this.area,
-    required this.address,
-    required this.familySize,
-    required this.status,
+    required this.family,
     required this.onTap,
     this.onEdit,
     this.serialNumber,
-    this.targetAmount,
-    this.raisedAmount,
-    this.surplusAmount,
   });
 
   Color _statusColor() {
-    if ((surplusAmount ?? 0) > 0) return Colors.deepOrange; // Over-funded
-    switch (status) {
+    switch (family.status) {
       case 'accepted':
         return Colors.green;
       case 'rejected':
         return Colors.red;
       case 'discarded':
         return Colors.grey;
+      case 'pending_review':
+        return Colors.deepPurple[300]!;
       default:
         return Colors.orange;
     }
   }
 
   String _statusLabel() {
-    if ((surplusAmount ?? 0) > 0) return 'Over-funded';
-    switch (status) {
+    switch (family.status) {
       case 'accepted':
         return 'Accepted';
       case 'rejected':
         return 'Rejected';
       case 'discarded':
         return 'Discarded';
+      case 'pending_review':
+        return 'Under Review';
       default:
         return 'Pending';
     }
@@ -66,9 +53,11 @@ class FamilyCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     // Calculate progress with surplus
-    final raised = raisedAmount ?? 0;
-    final target = targetAmount ?? 1; // Avoid div by zero
-    final surplus = surplusAmount ?? 0;
+    final raised = family.raisedAmount;
+    final target = family.targetAmount > 0
+        ? family.targetAmount
+        : 1; // Avoid div by zero
+    final surplus = family.surplusAmount;
     final totalAvailable = raised + surplus;
 
     // If overfunded, we clamp progress at 1.0 but change color
@@ -102,7 +91,7 @@ class FamilyCard extends StatelessWidget {
                 child: Text(
                   serialNumber != null
                       ? serialNumber.toString()
-                      : familySize.toString(),
+                      : family.familySize.toString(),
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
@@ -116,7 +105,7 @@ class FamilyCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      name,
+                      family.name ?? 'Unnamed Family',
                       style: theme.textTheme.bodyLarge?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: theme.colorScheme.onSurface,
@@ -125,7 +114,7 @@ class FamilyCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      area,
+                      family.area,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurface.withValues(
                           alpha: 0.6,
@@ -135,7 +124,7 @@ class FamilyCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 1),
                     Text(
-                      address,
+                      family.address ?? '',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -174,9 +163,8 @@ class FamilyCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (status == 'accepted' &&
-                      targetAmount != null &&
-                      targetAmount! > 0) ...[
+                  if (family.status == 'accepted' &&
+                      family.targetAmount > 0) ...[
                     const SizedBox(height: 6),
                     SizedBox(
                       width: 80, // Slightly wider for surplus text

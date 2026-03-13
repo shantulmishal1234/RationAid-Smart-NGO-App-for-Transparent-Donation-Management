@@ -12,6 +12,7 @@ class DonationCard extends StatelessWidget {
   final DonationStatus status;
   final VoidCallback onTap;
   final int? serialNumber;
+  final String? assistanceType;
 
   const DonationCard({
     super.key,
@@ -24,6 +25,7 @@ class DonationCard extends StatelessWidget {
     required this.status,
     required this.onTap,
     this.serialNumber,
+    this.assistanceType,
   });
 
   Color _statusColor() {
@@ -66,7 +68,9 @@ class DonationCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: theme.cardColor,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: theme.dividerColor.withValues(alpha: 0.6)),
+            border: Border.all(
+              color: theme.dividerColor.withValues(alpha: 0.6),
+            ),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,15 +110,19 @@ class DonationCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                         fontSize: 11,
                       ),
                     ),
                     const SizedBox(height: 1),
                     Text(
-                      '$amount $currency • $method',
+                      '$amount $currency • $method${assistanceType != null ? ' • $assistanceType' : ''}',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                         fontSize: 10,
                       ),
                     ),
@@ -127,7 +135,9 @@ class DonationCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: _statusColor().withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: _statusColor().withValues(alpha: 0.2)),
+                  border: Border.all(
+                    color: _statusColor().withValues(alpha: 0.2),
+                  ),
                 ),
                 child: Text(
                   _statusLabel(),

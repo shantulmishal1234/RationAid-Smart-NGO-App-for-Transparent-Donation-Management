@@ -37,18 +37,12 @@ class _DonationSuccessScreenState extends State<DonationSuccessScreen>
 
     _controller.forward();
 
-    // Auto-navigate after 3 seconds
-    Timer(const Duration(seconds: 3), () {
-      if (mounted) {
-        // Pop until we are back at the dashboard (or appropriate root)
-        // Then push tracking screen
-        Navigator.of(context).popUntil((route) => route.isFirst);
-        Navigator.pushNamed(
-          context,
-          '/donation-tracking',
-          arguments: widget.donation,
-        );
-      }
+    // Auto-navigate after 3 seconds safely
+    Future.delayed(const Duration(seconds: 3), () {
+      if (!mounted) return;
+
+      // Return cleanly back to CreateDonationScreen's awaited root
+      Navigator.pop(context, true);
     });
   }
 

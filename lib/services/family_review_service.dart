@@ -46,9 +46,11 @@ class FamilyReviewService {
       // Add to family_reviews collection
       await _firestore.collection('family_reviews').add(review.toFirestore());
 
-      // Update family vote counts
+      // Update family vote counts and safely check quorum inside the transaction
       final familyRef = _firestore.collection('families').doc(familyId);
-      await _firestore.runTransaction((transaction) async {
+      final bool justReachedQuorum = await _firestore.runTransaction((
+        transaction,
+      ) async {
         final familyDoc = await transaction.get(familyRef);
         if (!familyDoc.exists) throw Exception('Family not found');
 
@@ -59,6 +61,10 @@ class FamilyReviewService {
             (familyDoc.data()?['approveCount'] ?? 0) as int;
         final currentRejectCount =
             (familyDoc.data()?['rejectCount'] ?? 0) as int;
+        final quorumThreshold =
+            (familyDoc.data()?['quorumThreshold'] ?? 3) as int;
+        final alreadyReached =
+            (familyDoc.data()?['quorumReached'] ?? false) as bool;
 
         // Add reviewer to list
         currentReviewerIds.add(currentUser.uid);
@@ -71,18 +77,24 @@ class FamilyReviewService {
             ? currentRejectCount + 1
             : currentRejectCount;
 
+        // Determine if this exact vote crossed the threshold atomically
+        final bool isNowReached =
+            (newApproveCount >= quorumThreshold) ||
+            (newRejectCount >= quorumThreshold);
+        final bool triggerQuorumEvent = !alreadyReached && isNowReached;
+
         transaction.update(familyRef, {
           'reviewerIds': currentReviewerIds,
           'approveCount': newApproveCount,
           'rejectCount': newRejectCount,
+          if (triggerQuorumEvent) 'quorumReached': true,
           'updatedAt': FieldValue.serverTimestamp(),
         });
+
+        return triggerQuorumEvent;
       });
 
-      // Check if quorum reached
-      await checkQuorum(familyId);
-
-      // Log audit trail
+      // Log abstract vote audit trail
       await AuditService.logAction(
         action: 'family_review_vote',
         entityType: 'family',
@@ -97,45 +109,20 @@ class FamilyReviewService {
         },
       );
 
-      return true;
-    } catch (e) {
-      print('Error submitting vote: $e');
-      rethrow;
-    }
-  }
-
-  /// Check if quorum threshold has been reached and update family
-  static Future<void> checkQuorum(String familyId) async {
-    try {
-      final familyDoc = await _firestore
-          .collection('families')
-          .doc(familyId)
-          .get();
-      if (!familyDoc.exists) return;
-
-      final data = familyDoc.data()!;
-      final quorumThreshold = data['quorumThreshold'] ?? 3;
-      final approveCount = data['approveCount'] ?? 0;
-      final rejectCount = data['rejectCount'] ?? 0;
-      final quorumReached = data['quorumReached'] ?? false;
-
-      // Check if quorum just reached
-      if (!quorumReached &&
-          (approveCount >= quorumThreshold || rejectCount >= quorumThreshold)) {
-        // Update family
-        await _firestore.collection('families').doc(familyId).update({
-          'quorumReached': true,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
+      // If this specific transaction pushed the family over the edge, run strict workflows
+      if (justReachedQuorum) {
         // Send notification to Final Approvers (Admins)
-        // Send notification to Final Approvers (Admins)
+        final familyDoc = await familyRef.get();
+        final approveCount = familyDoc.data()?['approveCount'] ?? 0;
+        final rejectCount = familyDoc.data()?['rejectCount'] ?? 0;
+        final quorumThreshold = familyDoc.data()?['quorumThreshold'] ?? 3;
+
         await NotificationService.notifyQuorumReached(
           familyId,
           approveCount + rejectCount,
         );
 
-        // Log audit
+        // Log Quorum audit
         await AuditService.logAction(
           action: 'quorum_reached',
           entityType: 'family',
@@ -149,8 +136,11 @@ class FamilyReviewService {
           },
         );
       }
+
+      return true;
     } catch (e) {
-      print('Error checking quorum: $e');
+      print('Error submitting vote: $e');
+      rethrow;
     }
   }
 

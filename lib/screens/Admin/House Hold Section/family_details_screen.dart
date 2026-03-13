@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +10,8 @@ import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 import 'package:ration_aid/screens/Admin/widgets/family_voting_widget.dart';
+import 'package:ration_aid/services/final_approval_service.dart';
+import 'package:ration_aid/services/assistance_pack_service.dart';
 import 'edit_family_screen.dart';
 
 class FamilyDetailScreen extends StatefulWidget {
@@ -39,26 +42,68 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
   List<dynamic> _documents = [];
   List<String> _assistanceNeeds = [];
 
-  // Removed explicit volunteer assignment variables as Distributors utilize a pooling system
+  bool _isFinalApprover = false;
+
+  // Issue #8 Fix: real-time stream subscription keeps _familyData fresh
+  StreamSubscription<DocumentSnapshot>? _docSub;
 
   @override
   void initState() {
     super.initState();
     _familyData = widget.initialData;
-    _loadFamilyModel(); // Load Family model
     _status = _familyData['status'] ?? 'pending';
     _remarksController.text = _familyData['remarks'] ?? '';
     _documents = List<dynamic>.from(_familyData['documents'] ?? []);
     _assistanceNeeds = List<String>.from(_familyData['assistanceNeeds'] ?? []);
-    // Removed _loadDistributors() call
+    _checkFinalApproverStatus();
+    _subscribeToFamilyDoc(); // Issue #8: subscribe to live updates
+  }
+
+  Future<void> _checkFinalApproverStatus() async {
+    final isApprover = await FinalApprovalService.isCurrentUserFinalApprover();
+    if (mounted) {
+      setState(() {
+        _isFinalApprover = isApprover;
+      });
+    }
   }
 
   @override
   void dispose() {
+    _docSub?.cancel(); // Issue #8: clean up stream subscription
     _remarksController.dispose();
     super.dispose();
   }
 
+  // Issue #8 Fix: subscribe to real-time family document updates.
+  // Keeps _familyData, _family, _status, _documents, and _assistanceNeeds fresh
+  // automatically whenever Firestore changes (e.g., another admin makes edits).
+  void _subscribeToFamilyDoc() {
+    _docSub = FirebaseFirestore.instance
+        .collection('families')
+        .doc(widget.familyId)
+        .snapshots()
+        .listen((doc) {
+          if (doc.exists && mounted) {
+            final data = doc.data()!;
+            setState(() {
+              _familyData = data;
+              _family = Family.fromFirestore(doc);
+              // Only update status if the admin isn't currently editing it
+              if (!_isUpdatingStatus) {
+                _status = data['status'] ?? 'pending';
+                _remarksController.text = data['remarks'] ?? '';
+              }
+              _documents = List<dynamic>.from(data['documents'] ?? []);
+              _assistanceNeeds = List<String>.from(
+                data['assistanceNeeds'] ?? [],
+              );
+            });
+          }
+        });
+  }
+
+  // Kept for backward compatibility (called after GRF/surplus dialog)
   Future<void> _loadFamilyModel() async {
     try {
       final doc = await FirebaseFirestore.instance
@@ -68,6 +113,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
       if (doc.exists && mounted) {
         setState(() {
           _family = Family.fromFirestore(doc);
+          _familyData = doc.data()!;
         });
       }
     } catch (e) {
@@ -78,6 +124,42 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
   // Removed _loadDistributors()
 
   Future<void> _updateStatus() async {
+    // Issue #14 Fix: Guard against accidentally downgrading an emergency family.
+    final bool isEmergency = _familyData['isEmergency'] == true;
+    final String previousStatus = _familyData['status'] ?? 'pending';
+    if (isEmergency && previousStatus == 'accepted' && _status != 'accepted') {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Emergency Family Warning'),
+            ],
+          ),
+          content: const Text(
+            'This family is currently marked as EMERGENCY. '
+            'Removing accepted status will suspend all active procurement '
+            'and delivery operations for this family.\n\n'
+            'Are you sure you want to proceed?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Proceed Anyway'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return;
+    }
+
     setState(() => _isUpdatingStatus = true);
     try {
       final user = _currentUser;
@@ -87,10 +169,14 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
           .collection('families')
           .doc(widget.familyId);
 
-      await ref.update({
+      // Issue #3 Fix — when re-accepting a family, reset the fulfillment
+      // and funding lifecycle so new procurement orders can be generated.
+      final Map<String, dynamic> updatePayload = {
         'status': _status,
         'remarks': _remarksController.text.trim(),
         'updatedAt': FieldValue.serverTimestamp(),
+        'lastStatusChangedAt': FieldValue.serverTimestamp(),
+        'lastStatusChangedByUid': user?.uid,
         'decisionByUid': user?.uid,
         'decisionByName': user?.displayName ?? user?.email ?? 'Unknown admin',
         'decisionByEmail': user?.email,
@@ -104,7 +190,21 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
             'adminEmail': user?.email,
           },
         ]),
-      });
+      };
+
+      // Issue #3: Reset operational lifecycle when re-accepting a family so
+      // stale fulfillment state doesn't block new procurement generation.
+      if (_status == 'accepted') {
+        final previousStatus = _familyData['status'] ?? '';
+        if (previousStatus != 'accepted') {
+          updatePayload['fulfillmentStatus'] = 'pending';
+          updatePayload['fundingStatus'] = 'pending';
+          updatePayload['raisedAmount'] = 0.0;
+          updatePayload['pendingRaisedAmount'] = 0.0;
+        }
+      }
+
+      await ref.update(updatePayload);
 
       await AuditService.logFamilyAction(
         action: 'Family status updated to $_status',
@@ -144,118 +244,271 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
 
   // Removed _assignVolunteerFromDropdown()
 
-  // ─── Pool Management ────────────────────────────────────────────────────────
+  // ─── Emergency Status ───────────────────────────────────────────────────
+
+  Widget _buildEmergencyToggle(BuildContext context) {
+    if (_family == null) return const SizedBox.shrink();
+
+    return SwitchListTile(
+      title: const Text(
+        'Mark as Emergency',
+        style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red),
+      ),
+      subtitle: const Text(
+        'Bypasses priority queue for immediate allocation focus',
+        style: TextStyle(fontSize: 11),
+      ),
+      value: _family!.isEmergency,
+      activeThumbColor: Colors.red,
+      onChanged: (val) async {
+        setState(() {
+          _isUpdatingStatus = true;
+        });
+        try {
+          await FirebaseFirestore.instance
+              .collection('families')
+              .doc(widget.familyId)
+              .update({'isEmergency': val});
+          await _loadFamilyModel();
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  val
+                      ? 'Family marked as EMERGENCY'
+                      : 'Emergency status removed',
+                ),
+                backgroundColor: val ? Colors.red : Colors.green,
+              ),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to update emergency status: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        } finally {
+          if (mounted) setState(() => _isUpdatingStatus = false);
+        }
+      },
+      secondary: const Icon(Icons.warning_amber_rounded, color: Colors.red),
+    );
+  }
+
+  // ─── Pool Management ────────────────────────────────────────────────────
 
   Widget _buildPoolManagementSection(BuildContext context) {
     final theme = Theme.of(context);
     final family = _family;
     if (family == null) return const SizedBox.shrink();
 
-    final surplus = family.surplusAmount;
-    final remaining = family.remainingAmount;
+    final surplus = family.computedSurplusAmount;
+    final remaining = family.computedRemainingAmount;
     final isOverFunded = surplus > 0;
     final isUnderfunded = remaining > 0;
 
-    if (!isOverFunded && !isUnderfunded) return const SizedBox.shrink();
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('families')
+          .doc('general_relief_fund')
+          .snapshots(),
+      builder: (context, snapshot) {
+        double grfBalance = 0.0;
+        if (snapshot.hasData &&
+            snapshot.data != null &&
+            snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>?;
+          grfBalance = (data?['raisedAmount'] as num?)?.toDouble() ?? 0.0;
+        }
 
-    return FrostedPanel(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        final bool canAllocate = isUnderfunded && grfBalance > 0;
+
+        return FrostedPanel(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.account_balance_wallet_outlined,
-                size: 18,
-                color: isOverFunded ? Colors.deepOrange : Colors.blue,
+              Row(
+                children: [
+                  Icon(
+                    Icons.account_balance_wallet_outlined,
+                    size: 18,
+                    color: isOverFunded ? Colors.deepOrange : Colors.blue,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Pool Management',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (isOverFunded)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.deepOrange.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '+ PKR ${surplus.toStringAsFixed(0)} Surplus',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.deepOrange,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Text(
-                'Pool Management',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                  color: theme.colorScheme.onSurface,
+              const SizedBox(height: 12),
+
+              // Funds Overview
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 16,
                 ),
-              ),
-              const Spacer(),
-              if (isOverFunded)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.3,
                   ),
-                  decoration: BoxDecoration(
-                    color: Colors.deepOrange.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    '+ PKR ${surplus.toStringAsFixed(0)} Surplus',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.deepOrange,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.colorScheme.outlineVariant.withValues(
+                      alpha: 0.5,
                     ),
                   ),
                 ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Family Gap:',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        Text(
+                          'PKR ${remaining.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: isUnderfunded ? Colors.blue : Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Live GRF Balance:',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        Text(
+                          'PKR ${grfBalance.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: grfBalance > 0
+                                ? Colors.green
+                                : theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: canAllocate
+                      ? () => _showGRFAllocationDialog(family, grfBalance)
+                      : null, // Disabled if fully funded or 0 GRF
+                  icon: const Icon(Icons.monetization_on, size: 16),
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      isUnderfunded
+                          ? 'Allocate from GRF'
+                          : 'Family Fully Funded',
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey.withValues(alpha: 0.2),
+                    disabledForegroundColor: Colors.grey.shade600,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+              if (isOverFunded) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showSurplusTransferDialog(family),
+                    icon: const Icon(Icons.swap_horiz, size: 16),
+                    label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Transfer Surplus (PKR ${surplus.toStringAsFixed(0)})',
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.deepOrange,
+                      side: const BorderSide(color: Colors.deepOrange),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
-          const SizedBox(height: 12),
-          if (isUnderfunded)
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => _showGRFAllocationDialog(context, family),
-                icon: const Icon(Icons.monetization_on, size: 16),
-                label: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    'Allocate from GRF (Gap: PKR ${remaining.toStringAsFixed(0)})',
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  elevation: 0,
-                ),
-              ),
-            ),
-          if (isUnderfunded && isOverFunded) const SizedBox(height: 8),
-          if (isOverFunded)
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => _showSurplusTransferDialog(context, family),
-                icon: const Icon(Icons.swap_horiz, size: 16),
-                label: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    'Transfer Surplus (PKR ${surplus.toStringAsFixed(0)})',
-                  ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.deepOrange,
-                  side: const BorderSide(color: Colors.deepOrange),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
-            ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   Future<void> _showGRFAllocationDialog(
-    BuildContext context,
     Family family,
+    double grfBalance,
   ) async {
     final amountController = TextEditingController();
     final noteController = TextEditingController(
       text: 'Allocated from General Relief Fund pool',
     );
     bool isProcessing = false;
+
+    // Use minimum of gap and available GRF as a suggested amount
+    final maxAllocatable = family.computedRemainingAmount < grfBalance
+        ? family.computedRemainingAmount
+        : grfBalance;
+
+    amountController.text = maxAllocatable.toStringAsFixed(0);
 
     await showDialog(
       context: context,
@@ -270,23 +523,68 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                 style: TextStyle(fontSize: 12, color: Colors.grey[600]),
               ),
               const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Family Gap: PKR ${family.remainingAmount.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue,
-                    fontSize: 13,
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Family Gap:',
+                            style: TextStyle(fontSize: 11, color: Colors.blue),
+                          ),
+                          Text(
+                            'PKR ${family.computedRemainingAmount.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'GRF Available:',
+                            style: TextStyle(fontSize: 11, color: Colors.green),
+                          ),
+                          Text(
+                            'PKR ${grfBalance.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               TextField(
@@ -331,7 +629,32 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                         );
                         return;
                       }
+                      if (amount > grfBalance) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Amount exceeds available GRF balance',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      if (amount > family.computedRemainingAmount) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Amount exceeds family gap'),
+                          ),
+                        );
+                        return;
+                      }
+
                       setDlgState(() => isProcessing = true);
+
+                      // Capture UI contexts before the async gap to prevent freezes
+                      final navigator = Navigator.of(ctx);
+                      final scaffoldMessenger = ScaffoldMessenger.of(context);
+                      final rootContext = context;
+
                       try {
                         await FundingService.allocateFromGRF(
                           targetFamilyId: widget.familyId,
@@ -339,10 +662,12 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                           adminNote: noteController.text.trim(),
                           adminUid: _currentUser?.uid,
                         );
-                        if (context.mounted) Navigator.pop(ctx);
-                        if (mounted) {
+
+                        navigator.pop(); // Safely dismiss the dialog
+
+                        if (rootContext.mounted) {
                           _loadFamilyModel();
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          scaffoldMessenger.showSnackBar(
                             SnackBar(
                               content: Text(
                                 '✅ PKR ${amount.toStringAsFixed(0)} allocated from GRF',
@@ -353,8 +678,8 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                         }
                       } catch (e) {
                         setDlgState(() => isProcessing = false);
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                        if (rootContext.mounted) {
+                          scaffoldMessenger.showSnackBar(
                             SnackBar(
                               content: Text('Error: $e'),
                               backgroundColor: Colors.red,
@@ -387,10 +712,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     noteController.dispose();
   }
 
-  Future<void> _showSurplusTransferDialog(
-    BuildContext context,
-    Family family,
-  ) async {
+  Future<void> _showSurplusTransferDialog(Family family) async {
     final amountController = TextEditingController();
     final noteController = TextEditingController(text: 'Surplus transfer');
     String? selectedTargetId;
@@ -454,7 +776,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  'Available Surplus: PKR ${family.surplusAmount.toStringAsFixed(0)}',
+                  'Available Surplus: PKR ${family.computedSurplusAmount.toStringAsFixed(0)}',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.deepOrange,
@@ -464,7 +786,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: selectedTargetId,
+                initialValue: selectedTargetId,
                 hint: const Text('Select destination'),
                 items: families
                     .map(
@@ -543,6 +865,10 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                         return;
                       }
                       setDlgState(() => isProcessing = true);
+
+                      final navigator = Navigator.of(ctx);
+                      final scaffoldMessenger = ScaffoldMessenger.of(context);
+
                       try {
                         await FundingService.transferSurplus(
                           fromFamilyId: widget.familyId,
@@ -551,10 +877,10 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                           adminNote: noteController.text.trim(),
                           adminUid: _currentUser?.uid,
                         );
-                        if (context.mounted) Navigator.pop(ctx);
+                        navigator.pop(); // dismiss the dialog
                         if (mounted) {
                           _loadFamilyModel();
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          scaffoldMessenger.showSnackBar(
                             SnackBar(
                               content: Text(
                                 '✅ PKR ${amount.toStringAsFixed(0)} transferred to $selectedTargetName',
@@ -566,7 +892,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                       } catch (e) {
                         setDlgState(() => isProcessing = false);
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          scaffoldMessenger.showSnackBar(
                             SnackBar(
                               content: Text('Error: $e'),
                               backgroundColor: Colors.red,
@@ -599,19 +925,23 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     noteController.dispose();
   }
 
-  Future<void> _confirmDelete() async {
+  /// Issue #1 Fix — Soft archive instead of hard delete.
+  /// Preserves all financial history (donations, procurement records) and
+  /// allows the master ledger to remain consistent.
+  Future<void> _confirmArchive() async {
     final theme = Theme.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: theme.cardColor,
         title: Text(
-          'Delete family',
+          'Archive family record',
           style: TextStyle(color: theme.colorScheme.onSurface),
         ),
         content: Text(
-          'Are you sure you want to delete this family record? '
-          'This action cannot be undone.',
+          'This will hide the family from all active lists and block any new '
+          'funding or procurement actions. Financial history is preserved.\n\n'
+          'This action can be reversed by a system administrator via Firestore.',
           style: TextStyle(
             color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
           ),
@@ -626,7 +956,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('Archive', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -637,25 +967,36 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     try {
       final familyName = _familyData['name'] ?? 'Unnamed family';
 
+      // Soft archive — preserves all fundraising + procurement history
       await FirebaseFirestore.instance
           .collection('families')
           .doc(widget.familyId)
-          .delete();
+          .update({
+            'isArchived': true,
+            'archivedAt': FieldValue.serverTimestamp(),
+            'archivedByUid': _currentUser?.uid,
+            'archivedByName':
+                _currentUser?.displayName ??
+                _currentUser?.email ??
+                'Unknown admin',
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
 
       await AuditService.logFamilyAction(
-        action: 'Family deleted',
+        action: 'Family archived',
         familyId: widget.familyId,
         familyName: familyName,
-        details: 'Family record permanently removed from system',
+        details:
+            'Family record archived (soft delete). Financial history preserved.',
       );
 
       if (!mounted) return;
-      Navigator.pop(context);
+      Navigator.pop(context, 'archived');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to delete: $e'),
+          content: Text('Failed to archive: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -735,78 +1076,53 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
           : SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildHeader(context),
-                  const SizedBox(height: 32),
+                  _buildMissingPackBanner(),
+                  _buildBasicInfo(context),
+                  const SizedBox(height: 24),
 
-                  _buildSectionHeader(context, 'Demographics & Income'),
+                  _buildSectionHeader(context, 'Demographics & Dependents'),
                   const SizedBox(height: 16),
-                  FrostedPanel(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final isSmall = constraints.maxWidth < 400;
-                        final crossAxisCount = isSmall ? 2 : 4;
-                        final spacing = 12.0;
-                        final itemWidth =
-                            (constraints.maxWidth -
-                                (spacing * (crossAxisCount - 1))) /
-                            crossAxisCount;
-
-                        return Wrap(
-                          spacing: spacing,
-                          runSpacing: spacing,
-                          children: [
-                            SizedBox(
-                              width: itemWidth,
-                              child: _buildCompactInfoItem(
-                                'Adults',
-                                (_familyData['adults'] ?? 0).toString(),
-                                Icons.person,
-                              ),
-                            ),
-                            SizedBox(
-                              width: itemWidth,
-                              child: _buildCompactInfoItem(
-                                'Children',
-                                (_familyData['children'] ?? 0).toString(),
-                                Icons.child_care,
-                              ),
-                            ),
-                            SizedBox(
-                              width: itemWidth,
-                              child: _buildCompactInfoItem(
-                                'Family Size',
-                                (_familyData['familySize'] ?? 0).toString(),
-                                Icons.groups,
-                              ),
-                            ),
-                            SizedBox(
-                              width: itemWidth,
-                              child: _buildCompactInfoItem(
-                                'Income',
-                                _familyData['monthlyIncome'] != null
-                                    ? _formatCurrency(
-                                        _familyData['monthlyIncome'],
-                                      )
-                                    : '-',
-                                Icons.attach_money,
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
+                  FrostedPanel(child: _buildExtendedDemographics(context)),
                   const SizedBox(height: 32),
 
-                  if (_family != null && _family!.targetAmount > 0) ...[
+                  _buildSectionHeader(context, 'Housing & Living Conditions'),
+                  const SizedBox(height: 16),
+                  FrostedPanel(child: _buildHousingInfo(context)),
+                  const SizedBox(height: 32),
+
+                  _buildSectionHeader(context, 'Assets & Electronics'),
+                  const SizedBox(height: 16),
+                  FrostedPanel(child: _buildAssetsInfo(context)),
+                  const SizedBox(height: 32),
+
+                  if (_familyData['biography'] != null &&
+                      _familyData['biography'].toString().isNotEmpty) ...[
+                    _buildSectionHeader(context, 'Biography & Story'),
+                    const SizedBox(height: 16),
+                    FrostedPanel(child: _buildBiographyInfo(context)),
+                    const SizedBox(height: 32),
+                  ],
+                  const SizedBox(height: 32),
+
+                  if (_family != null &&
+                      _family!.targetAmount > 0 &&
+                      _status == 'accepted') ...[
                     _buildSectionHeader(context, 'Funding Progress'),
                     const SizedBox(height: 16),
                     FrostedPanel(child: _buildFundingSection(context)),
                     const SizedBox(height: 16),
                     // Pool Management Actions
                     _buildPoolManagementSection(context),
+                    const SizedBox(height: 32),
+                  ],
+
+                  if (_status == 'accepted') ...[
+                    // Emergency Control
+                    _buildSectionHeader(context, 'Emergency Status'),
+                    const SizedBox(height: 16),
+                    FrostedPanel(child: _buildEmergencyToggle(context)),
                     const SizedBox(height: 32),
                   ],
 
@@ -835,7 +1151,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                         },
                       ),
                     ),
-                  ] else ...[
+                  ] else if (_isFinalApprover) ...[
                     _buildSectionHeader(context, 'Verification Decision'),
                     const SizedBox(height: 16),
                     FrostedPanel(child: _buildDecisionSection(context)),
@@ -860,14 +1176,14 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
 
                   Center(
                     child: TextButton.icon(
-                      onPressed: _confirmDelete,
+                      onPressed: _confirmArchive,
                       icon: Icon(
-                        Icons.delete_outline,
+                        Icons.archive_outlined,
                         color: theme.colorScheme.error,
                         size: 20,
                       ),
                       label: Text(
-                        'Delete family record',
+                        'Archive family record',
                         style: TextStyle(
                           color: theme.colorScheme.error,
                           fontWeight: FontWeight.w600,
@@ -882,7 +1198,99 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildMissingPackBanner() {
+    final bool isAccepted = _status == 'accepted';
+    final double targetAmount = (_familyData['targetAmount'] ?? 0.0).toDouble();
+    final bool needsFood = _assistanceNeeds.contains('Food');
+
+    // Only show if accepted, needs food, but has 0 budget
+    if (!isAccepted || targetAmount > 0 || !needsFood) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.1),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Action Required: Missing Assistance Pack',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'This family was approved but has no target budget. This usually happens if they were approved before any Assistance Packs existed in the system.',
+            style: TextStyle(
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.8),
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                setState(() => _isLoading = true);
+                final success = await AssistancePackService.rescueFamilyPack(
+                  widget.familyId,
+                  _familyData['familySize'] ?? 1,
+                );
+                setState(() => _isLoading = false);
+
+                if (mounted) {
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Successfully assigned missing pack!'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Failed: No matching pack found for this family size.',
+                        ),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.auto_fix_high),
+              label: const Text('Auto-Assign Pack Now'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBasicInfo(BuildContext context) {
     final theme = Theme.of(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -970,6 +1378,204 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
         fontWeight: FontWeight.w700,
         color: theme.colorScheme.primary,
         letterSpacing: 0.5,
+      ),
+    );
+  }
+
+  // --- NEW EXTENDED DATA BUILDERS ---
+
+  Widget _buildExtendedDemographics(BuildContext context) {
+    final theme = Theme.of(context);
+    final String husbandName = _familyData['husbandName'] ?? '';
+    final bool isWidow = _familyData['isWidow'] == true;
+    final childrenDetails = List<Map<String, dynamic>>.from(
+      _familyData['childrenDetails'] ?? [],
+    );
+    final income = _familyData['monthlyIncome'] ?? 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (husbandName.isNotEmpty) ...[
+          _buildCompactInfoItem(
+            'Husband/Spouse Name',
+            husbandName,
+            Icons.person_outline,
+          ),
+          const SizedBox(height: 12),
+        ],
+        Row(
+          children: [
+            Expanded(
+              child: _buildCompactInfoItem(
+                'Total Adults',
+                '${_familyData['adults'] ?? 0}',
+                Icons.people,
+              ),
+            ),
+            Expanded(
+              child: _buildCompactInfoItem(
+                'Total Children',
+                '${_familyData['children'] ?? 0}',
+                Icons.child_care,
+              ),
+            ),
+            Expanded(
+              child: _buildCompactInfoItem(
+                'Income',
+                _formatCurrency(income),
+                Icons.attach_money,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            if (isWidow)
+              Chip(
+                label: const Text(
+                  'Widow',
+                  style: TextStyle(fontSize: 12, color: Colors.white),
+                ),
+                backgroundColor: Colors.purple.withValues(alpha: 0.8),
+                visualDensity: VisualDensity.compact,
+              ),
+          ],
+        ),
+        if (childrenDetails.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 8),
+          Text(
+            'Children Details',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...childrenDetails.map(
+            (c) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.person, size: 16, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${c['name']} - '
+                      '${c['isStudying'] == true ? 'Studying at ${c['schoolName']}' : 'Not Studying'} '
+                      '${c['isWorking'] == true ? '· Working (${c['workType']}) PKR ${c['earningAmount']}' : ''}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.8,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildHousingInfo(BuildContext context) {
+    final status = _familyData['houseStatus'] ?? 'Unknown';
+    final rent = _familyData['rentAmount'] ?? 0;
+    final condition = _familyData['houseCondition'] ?? 'Unknown';
+    final size = _familyData['houseSize'] ?? 'Unknown';
+
+    return Row(
+      children: [
+        Expanded(child: _buildCompactInfoItem('Ownership', status, Icons.home)),
+        if (status.toString().toLowerCase() == 'rented')
+          Expanded(
+            child: _buildCompactInfoItem(
+              'Rent Amount',
+              _formatCurrency(rent),
+              Icons.monetization_on,
+            ),
+          ),
+        Expanded(
+          child: _buildCompactInfoItem('Condition', condition, Icons.analytics),
+        ),
+        Expanded(child: _buildCompactInfoItem('Size', size, Icons.square_foot)),
+      ],
+    );
+  }
+
+  Widget _buildAssetsInfo(BuildContext context) {
+    final hasTransport = _familyData['hasTransport'] == true;
+    final transportDetails = _familyData['transportDetails'] ?? '';
+    final electronics = List<String>.from(
+      _familyData['electronicsOwned'] ?? [],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              hasTransport ? Icons.directions_car : Icons.directions_walk,
+              size: 20,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                hasTransport
+                    ? 'Owns Transport: $transportDetails'
+                    : 'No Transport Owned',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'Electronics Owned:',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        electronics.isEmpty
+            ? const Text(
+                'None',
+                style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic),
+              )
+            : Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: electronics
+                    .map(
+                      (e) => Chip(
+                        label: Text(e, style: const TextStyle(fontSize: 11)),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    )
+                    .toList(),
+              ),
+      ],
+    );
+  }
+
+  Widget _buildBiographyInfo(BuildContext context) {
+    final String bio = _familyData['biography'] ?? '';
+    return Text(
+      bio,
+      style: TextStyle(
+        fontSize: 13,
+        height: 1.5,
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
       ),
     );
   }
@@ -1094,23 +1700,29 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     if (_status == 'pending' || _status == 'pending_review') {
       // For pending families, show all options
       availableStatuses = [
-        {'value': 'pending', 'label': 'Pending'},
+        {'value': 'pending_review', 'label': 'Pending'},
         {'value': 'accepted', 'label': 'Accept'},
         {'value': 'rejected', 'label': 'Reject'},
-        {'value': 'discarded', 'label': 'Discard'},
       ];
+      if (_isFinalApprover) {
+        availableStatuses.add({'value': 'discarded', 'label': 'Discard'});
+      }
     } else if (_status == 'accepted') {
       // For accepted families, only show discard option
       availableStatuses = [
         {'value': 'accepted', 'label': 'Accepted'},
-        {'value': 'discarded', 'label': 'Discard'},
       ];
+      if (_isFinalApprover) {
+        availableStatuses.add({'value': 'discarded', 'label': 'Discard'});
+      }
     } else if (_status == 'rejected') {
       // For rejected families, only show discard option
       availableStatuses = [
         {'value': 'rejected', 'label': 'Rejected'},
-        {'value': 'discarded', 'label': 'Discard'},
       ];
+      if (_isFinalApprover) {
+        availableStatuses.add({'value': 'discarded', 'label': 'Discard'});
+      }
     } else if (_status == 'discarded') {
       // For discarded families, show read-only
       availableStatuses = [
@@ -1352,8 +1964,12 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     );
   }
 
-  String _formatCurrency(int amount) {
-    return amount.toString().replaceAllMapped(
+  String _formatCurrency(dynamic amount) {
+    if (amount == null) return '0';
+    final intValue = (amount is num)
+        ? amount.toInt()
+        : (int.tryParse(amount.toString()) ?? 0);
+    return intValue.toString().replaceAllMapped(
       RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
       (Match m) => '${m[1]},',
     );

@@ -121,15 +121,62 @@ class ProcurementCard extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    request.packName,
-                                    style: theme.textTheme.titleMedium
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 15,
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
                                         ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                        margin: const EdgeInsets.only(right: 6),
+                                        decoration: BoxDecoration(
+                                          color: request.category == 'Medicine'
+                                              ? Colors.blue.withValues(
+                                                  alpha: 0.1,
+                                                )
+                                              : AppColors.donorGreen.withValues(
+                                                  alpha: 0.1,
+                                                ),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                          border: Border.all(
+                                            color:
+                                                request.category == 'Medicine'
+                                                ? Colors.blue.withValues(
+                                                    alpha: 0.3,
+                                                  )
+                                                : AppColors.donorGreen
+                                                      .withValues(alpha: 0.3),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          request.category == 'Medicine'
+                                              ? '💊 Medicine'
+                                              : '🍲 Food Pack',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w700,
+                                            color:
+                                                request.category == 'Medicine'
+                                                ? Colors.blue
+                                                : AppColors.donorGreen,
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: Text(
+                                          request.packName,
+                                          style: theme.textTheme.titleMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 15,
+                                              ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   const SizedBox(height: 2),
                                   Row(

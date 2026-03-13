@@ -8,6 +8,9 @@ import 'screens/Startup & Authentication/splash_screen.dart';
 import 'screens/Startup & Authentication/auth_screen.dart';
 import 'screens/donor_dashboard.dart';
 import 'screens/dashboard_router.dart';
+import 'models/donation_model.dart' as ration_donation;
+import 'screens/Donor/Donation/donation_tracking_screen.dart'
+    as tracking_screen;
 
 // Global theme provider instance
 final themeProvider = ThemeProvider();
@@ -226,6 +229,16 @@ class _MyAppState extends State<MyApp> {
         '/login': (context) => const AuthScreen(),
         '/donor-dashboard': (context) => const DonorDashboard(),
         '/dashboard': (context) => const DashboardRouter(),
+      },
+      onGenerateRoute: (settings) {
+        if (settings.name == '/donation-tracking') {
+          final donation = settings.arguments as ration_donation.Donation;
+          return MaterialPageRoute(
+            builder: (context) =>
+                tracking_screen.DonationTrackingScreen(donation: donation),
+          );
+        }
+        return null;
       },
     );
   }

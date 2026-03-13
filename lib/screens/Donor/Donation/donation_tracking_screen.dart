@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/models/donation_model.dart';
 import 'package:ration_aid/services/donation_service.dart';
@@ -26,6 +27,26 @@ class _DonationTrackingScreenState extends State<DonationTrackingScreen> {
     _donationStream = _donationService.streamDonation(widget.donation.id);
   }
 
+  String _getDynamicTitle(DonationStatus status) {
+    switch (status) {
+      case DonationStatus.draft:
+        return 'Complete Your Donation';
+      case DonationStatus.pending:
+        return 'Action Required';
+      case DonationStatus.underVerification:
+        return 'Verification in Progress';
+      case DonationStatus.verified:
+      case DonationStatus.inProcess:
+      case DonationStatus.outForDelivery:
+        return 'Track Your Donation';
+      case DonationStatus.delivered:
+      case DonationStatus.closed:
+        return 'Donation Receipt';
+      case DonationStatus.rejected:
+        return 'Donation Required Action';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<Donation?>(
@@ -36,7 +57,7 @@ class _DonationTrackingScreenState extends State<DonationTrackingScreen> {
         final donation = snapshot.data ?? widget.donation;
 
         return DonorScaffold(
-          title: 'Donation #${donation.id.substring(0, 8)}',
+          title: _getDynamicTitle(donation.status),
           showBackButton: true,
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -46,8 +67,12 @@ class _DonationTrackingScreenState extends State<DonationTrackingScreen> {
                 _CurrentStatusHeader(donation: donation),
                 const SizedBox(height: 20),
 
-                // Status Timeline
-                _StatusTimeline(donation: donation),
+                // Status Timeline vs Micro-Ledger Tracker
+                if (donation.familyId == 'general_relief_fund' &&
+                    donation.status == DonationStatus.verified)
+                  _MicroLedgerTracker(donation: donation)
+                else
+                  _StatusTimeline(donation: donation),
                 const SizedBox(height: 20),
 
                 // Live Status Card (dynamic based on current status)
@@ -58,9 +83,7 @@ class _DonationTrackingScreenState extends State<DonationTrackingScreen> {
                 _DonationDetailsCard(donation: donation),
                 const SizedBox(height: 20),
 
-                // Update History
-                if (donation.statusHistory.isNotEmpty)
-                  _UpdateHistoryCard(donation: donation),
+                // Update History removed and merged into StatusTimeline
 
                 // Action Buttons for drafts
                 if (donation.isEditable || donation.isDeletable) ...[
@@ -129,43 +152,36 @@ class _CurrentStatusHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _getStatusColor();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color, color.withValues(alpha: 0.8)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: isDark
+            ? color.withValues(alpha: 0.1)
+            : color.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.4),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-            spreadRadius: -5,
-          ),
-        ],
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              color: color.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(_getStatusIcon(), size: 48, color: Colors.white),
+            child: Icon(_getStatusIcon(), size: 48, color: color),
           ),
           const SizedBox(height: 20),
           Text(
             donation.status.displayName,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w800,
-              color: Colors.white,
+              color: color,
               letterSpacing: 0.5,
             ),
           ),
@@ -177,24 +193,20 @@ class _CurrentStatusHeader extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.15),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
-                    Icons.access_time,
-                    size: 14,
-                    color: Colors.white70,
-                  ),
+                  Icon(Icons.access_time, size: 14, color: color),
                   const SizedBox(width: 6),
                   Text(
                     'Est. Delivery: ${_formatDate(donation.estimatedDelivery!)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      color: color,
                     ),
                   ),
                 ],
@@ -225,6 +237,18 @@ class _StatusTimeline extends StatelessWidget {
         DonationStatus.rejected,
       ];
     }
+
+    // For GRF donations, timeline stops at closed since funds are pooled and consumed virtually.
+    if (donation.familyId == 'general_relief_fund' ||
+        donation.allocationMode == 'general') {
+      return [
+        DonationStatus.draft,
+        DonationStatus.underVerification,
+        DonationStatus.verified,
+        DonationStatus.closed,
+      ];
+    }
+
     return [
       DonationStatus.draft,
       DonationStatus.underVerification,
@@ -248,23 +272,23 @@ class _StatusTimeline extends StatelessWidget {
       if (currentIndex == -1) {
         // Handle intermediate states mapping
         if (donation.status == DonationStatus.pending) currentIndex = 0;
-        if (donation.status == DonationStatus.inProcess)
+        if (donation.status == DonationStatus.inProcess) {
           currentIndex = 2; // Map to Verified
+        }
       }
     }
+
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: theme.cardColor,
+        color: isDark ? Colors.grey[850] : Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        border: Border.all(
+          color: theme.dividerColor.withValues(alpha: 0.2),
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -289,13 +313,23 @@ class _StatusTimeline extends StatelessWidget {
               final isCurrent = index == currentIndex;
               final isLast = index == steps.length - 1;
 
+              final relevantEntry = _getEntryForStatus(status);
+
               return _TimelineStep(
                 status: status,
                 isCompleted: isCompleted,
                 isCurrent: isCurrent,
                 isLast: isLast,
                 isRejected: status == DonationStatus.rejected,
-                timestamp: _getTimestampForStatus(status),
+                isGrf:
+                    donation.familyId == 'general_relief_fund' ||
+                    donation.allocationMode == 'general',
+                timestamp: relevantEntry?.timestamp != DateTime(0)
+                    ? relevantEntry?.timestamp
+                    : null,
+                note: relevantEntry?.note.isNotEmpty == true
+                    ? relevantEntry!.note
+                    : null,
               );
             },
           ),
@@ -304,9 +338,9 @@ class _StatusTimeline extends StatelessWidget {
     );
   }
 
-  DateTime? _getTimestampForStatus(DonationStatus status) {
+  StatusHistoryEntry? _getEntryForStatus(DonationStatus status) {
     try {
-      final relevantEntry = donation.statusHistory.lastWhere(
+      return donation.statusHistory.lastWhere(
         (entry) {
           // Map intermediate history statuses to simplified timeline steps
           if (status == DonationStatus.verified) {
@@ -325,9 +359,6 @@ class _StatusTimeline extends StatelessWidget {
           note: '',
         ),
       );
-
-      if (relevantEntry.timestamp.year == 0) return null;
-      return relevantEntry.timestamp;
     } catch (e) {
       return null;
     }
@@ -340,7 +371,9 @@ class _TimelineStep extends StatelessWidget {
   final bool isCurrent;
   final bool isLast;
   final bool isRejected;
+  final bool isGrf;
   final DateTime? timestamp;
+  final String? note;
 
   const _TimelineStep({
     required this.status,
@@ -348,7 +381,9 @@ class _TimelineStep extends StatelessWidget {
     required this.isCurrent,
     required this.isLast,
     this.isRejected = false,
+    this.isGrf = false,
     this.timestamp,
+    this.note,
   });
 
   @override
@@ -437,7 +472,9 @@ class _TimelineStep extends StatelessWidget {
                               : FontWeight.w500,
                           color: isCurrent || isCompleted
                               ? theme.colorScheme.onSurface
-                              : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.5,
+                                ),
                         ),
                       ),
                       if (timestamp != null)
@@ -445,7 +482,9 @@ class _TimelineStep extends StatelessWidget {
                           _formatTime(timestamp!),
                           style: TextStyle(
                             fontSize: 12,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.5,
+                            ),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -457,7 +496,9 @@ class _TimelineStep extends StatelessWidget {
                       _formatDate(timestamp!),
                       style: TextStyle(
                         fontSize: 12,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                     ),
                   ] else if (isCurrent) ...[
@@ -468,6 +509,43 @@ class _TimelineStep extends StatelessWidget {
                         fontSize: 12,
                         fontStyle: FontStyle.italic,
                         color: stepColor,
+                      ),
+                    ),
+                  ],
+                  if (note != null && note!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.grey[800] : Colors.grey[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: stepColor.withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.format_quote,
+                            size: 14,
+                            color: stepColor.withValues(alpha: 0.7),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              note!,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.8,
+                                ),
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -482,6 +560,9 @@ class _TimelineStep extends StatelessWidget {
 
   String _getDisplayName(DonationStatus status) {
     if (status == DonationStatus.outForDelivery) return 'Out for Delivery';
+    if (isGrf && status == DonationStatus.verified)
+      return 'Awaiting Allocation';
+    if (isGrf && status == DonationStatus.closed) return 'Fund Deployed';
     return status.displayName;
   }
 
@@ -529,6 +610,8 @@ class _LiveStatusCard extends StatelessWidget {
       title: 'Action Required',
       message: 'Please upload your payment proof to proceed with verification.',
       isAction: true,
+      donation: donation,
+      actionButtonText: 'Upload Proof Now',
     );
   }
 
@@ -543,11 +626,18 @@ class _LiveStatusCard extends StatelessWidget {
   }
 
   Widget _buildVerifiedCard(BuildContext context) {
+    final isGrf =
+        donation.familyId == 'general_relief_fund' ||
+        donation.allocationMode == 'general';
     return _StatusCard(
-      icon: Icons.verified_user_outlined,
+      icon: isGrf
+          ? Icons.account_balance_wallet_outlined
+          : Icons.verified_user_outlined,
       iconColor: const Color(0xFF4CAF50),
-      title: 'Verified & Approved',
-      message: 'Your donation has been approved and is ready for processing.',
+      title: isGrf ? 'Awaiting Allocation' : 'Verified & Approved',
+      message: isGrf
+          ? 'Your contribution is secured in the General Relief Fund vault. It will be dispatched dynamically to close emergency gaps.'
+          : 'Your donation has been approved and is ready for processing.',
     );
   }
 
@@ -564,22 +654,18 @@ class _LiveStatusCard extends StatelessWidget {
   }
 
   Widget _buildOutForDeliveryCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF00BCD4), Color(0xFF0097A7)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: isDark ? Colors.grey[850] : Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF00BCD4).withValues(alpha: 0.4),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        border: Border.all(
+          color: const Color(0xFF00BCD4).withValues(alpha: 0.3),
+          width: 1.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -589,32 +675,37 @@ class _LiveStatusCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
+                  color: const Color(0xFF00BCD4).withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.local_shipping_outlined,
-                  color: Colors.white,
+                  color: Color(0xFF00BCD4),
                   size: 28,
                 ),
               ),
               const SizedBox(width: 16),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'On the Way!',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                        color: Color(0xFF00BCD4),
                       ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
                       'Your donation is fast approaching.',
-                      style: TextStyle(fontSize: 14, color: Colors.white70),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -622,14 +713,18 @@ class _LiveStatusCard extends StatelessWidget {
             ],
           ),
           if (donation.driverName != null) ...[
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 20),
-              child: Divider(color: Colors.white24, height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Divider(
+                color: theme.dividerColor.withValues(alpha: 0.2),
+                height: 1,
+              ),
             ),
             _InfoRow(
               icon: Icons.person_outline,
               label: 'Driver Name',
               value: donation.driverName!,
+              iconColor: const Color(0xFF00BCD4),
             ),
             if (donation.driverPhone != null) ...[
               const SizedBox(height: 16),
@@ -637,6 +732,7 @@ class _LiveStatusCard extends StatelessWidget {
                 icon: Icons.phone_outlined,
                 label: 'Contact',
                 value: donation.driverPhone!,
+                iconColor: const Color(0xFF00BCD4),
                 isPhone: true,
               ),
             ],
@@ -646,6 +742,7 @@ class _LiveStatusCard extends StatelessWidget {
                 icon: Icons.directions_car_outlined,
                 label: 'Vehicle',
                 value: donation.vehicleNumber!,
+                iconColor: const Color(0xFF00BCD4),
               ),
             ],
           ],
@@ -655,22 +752,18 @@ class _LiveStatusCard extends StatelessWidget {
   }
 
   Widget _buildDeliveredCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF4CAF50), Color(0xFF388E3C)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: isDark ? Colors.grey[850] : Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF4CAF50).withValues(alpha: 0.4),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        border: Border.all(
+          color: const Color(0xFF4CAF50).withValues(alpha: 0.3),
+          width: 1.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -680,23 +773,23 @@ class _LiveStatusCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
+                  color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.check_rounded,
-                  color: Colors.white,
+                  color: Color(0xFF4CAF50),
                   size: 32,
                 ),
               ),
               const SizedBox(width: 16),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Mission Complete!',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    color: Colors.white,
+                    color: isDark ? Colors.white : Colors.black87,
                   ),
                 ),
               ),
@@ -706,9 +799,9 @@ class _LiveStatusCard extends StatelessWidget {
           if (donation.deliveredAt != null) ...[
             Text(
               'Delivered on ${_formatDate(donation.deliveredAt!)}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
-                color: Colors.white70,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -717,9 +810,9 @@ class _LiveStatusCard extends StatelessWidget {
           if (donation.receivedBy != null) ...[
             Text(
               'Received by: ${donation.receivedBy}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
-                color: Colors.white,
+                color: theme.colorScheme.onSurface,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -727,12 +820,12 @@ class _LiveStatusCard extends StatelessWidget {
           ],
 
           if (donation.deliveryPhotos.isNotEmpty) ...[
-            const Text(
+            Text(
               'Proof of Delivery',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
+                color: theme.colorScheme.onSurface,
                 letterSpacing: 0.5,
               ),
             ),
@@ -747,14 +840,10 @@ class _LiveStatusCard extends StatelessWidget {
                     margin: const EdgeInsets.only(right: 12),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white, width: 2),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                      border: Border.all(
+                        color: theme.dividerColor.withValues(alpha: 0.2),
+                        width: 1,
+                      ),
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(10),
@@ -767,10 +856,10 @@ class _LiveStatusCard extends StatelessWidget {
                           return Container(
                             width: 100,
                             height: 100,
-                            color: Colors.white24,
-                            child: const Icon(
+                            color: isDark ? Colors.grey[800] : Colors.grey[200],
+                            child: Icon(
                               Icons.image_not_supported_outlined,
-                              color: Colors.white,
+                              color: theme.colorScheme.onSurface,
                             ),
                           );
                         },
@@ -786,7 +875,7 @@ class _LiveStatusCard extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
+                color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Text(
@@ -794,7 +883,7 @@ class _LiveStatusCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  color: Color(0xFF4CAF50),
                 ),
               ),
             ),
@@ -881,6 +970,8 @@ class _StatusCard extends StatelessWidget {
   final String message;
   final String? extraInfo;
   final bool isAction;
+  final Donation? donation;
+  final String? actionButtonText;
 
   const _StatusCard({
     required this.icon,
@@ -889,26 +980,25 @@ class _StatusCard extends StatelessWidget {
     required this.message,
     this.extraInfo,
     this.isAction = false,
+    this.donation,
+    this.actionButtonText,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: theme.cardColor,
+        color: isDark ? Colors.grey[850] : Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: isAction
-            ? Border.all(color: iconColor, width: 2)
-            : Border.all(color: iconColor.withValues(alpha: 0.2)),
-        boxShadow: [
-          BoxShadow(
-            color: iconColor.withValues(alpha: 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        border: Border.all(
+          color: isAction
+              ? iconColor
+              : theme.dividerColor.withValues(alpha: 0.2),
+          width: isAction ? 1.5 : 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -963,6 +1053,31 @@ class _StatusCard extends StatelessWidget {
               ),
             ),
           ],
+          if (isAction && actionButtonText != null && donation != null) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/create-donation',
+                    arguments: donation,
+                  );
+                },
+                icon: const Icon(Icons.arrow_forward),
+                label: Text(actionButtonText!),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.donorGreen,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -974,20 +1089,23 @@ class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+  final Color iconColor;
   final bool isPhone;
 
   const _InfoRow({
     required this.icon,
     required this.label,
     required this.value,
+    this.iconColor = Colors.grey,
     this.isPhone = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Row(
       children: [
-        Icon(icon, color: Colors.white, size: 20),
+        Icon(icon, color: iconColor, size: 20),
         const SizedBox(width: 8),
         Expanded(
           child: Column(
@@ -995,14 +1113,17 @@ class _InfoRow extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(fontSize: 12, color: Colors.white70),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
               ),
               Text(
                 value,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
             ],
@@ -1016,7 +1137,7 @@ class _InfoRow extends StatelessWidget {
                 await launchUrl(phoneUri);
               }
             },
-            icon: const Icon(Icons.phone, color: Colors.white),
+            icon: Icon(Icons.phone, color: iconColor),
           ),
       ],
     );
@@ -1033,17 +1154,16 @@ class _DonationDetailsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: theme.cardColor,
+        color: Theme.of(context).brightness == Brightness.dark
+            ? Colors.grey[850]
+            : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(
+          color: theme.dividerColor.withValues(alpha: 0.2),
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1067,12 +1187,18 @@ class _DonationDetailsCard extends StatelessWidget {
             children: [
               Icon(Icons.people, size: 20, color: theme.colorScheme.onSurface),
               const SizedBox(width: 8),
-              Text(
-                'Beneficiary: ${donation.familyId == 'general_relief_fund' ? 'General Relief Fund' : 'Family Support'}',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.onSurface,
+              Expanded(
+                child: Text(
+                  'Beneficiary: ${donation.familyId == 'general_relief_fund'
+                      ? 'General Relief Fund'
+                      : donation.allocationMode == 'smart'
+                      ? 'Smart Give (Auto-Allocated)'
+                      : 'Family Support'}',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
+                  ),
                 ),
               ),
             ],
@@ -1157,141 +1283,9 @@ class _DonationDetailsCard extends StatelessWidget {
   }
 }
 
-/// Update History Card
-class _UpdateHistoryCard extends StatelessWidget {
-  final Donation donation;
-
-  const _UpdateHistoryCard({required this.donation});
-
-  @override
-  Widget build(BuildContext context) {
-    final reversedHistory = donation.statusHistory.reversed.toList();
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.history, color: AppColors.donorGreen),
-              const SizedBox(width: 8),
-              Text(
-                'Updates & Activity',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-            ],
-          ),
-          const Divider(height: 24),
-          ...reversedHistory.map((entry) {
-            return _UpdateItem(entry: entry);
-          }),
-        ],
-      ),
-    );
-  }
-}
-
-/// Individual Update Item
-class _UpdateItem extends StatelessWidget {
-  final StatusHistoryEntry entry;
-
-  const _UpdateItem({required this.entry});
-
-  IconData _getIcon() {
-    switch (entry.status) {
-      case DonationStatus.pending:
-        return Icons.upload_file;
-      case DonationStatus.underVerification:
-        return Icons.search;
-      case DonationStatus.verified:
-        return Icons.verified;
-      case DonationStatus.inProcess:
-        return Icons.inventory;
-      case DonationStatus.outForDelivery:
-        return Icons.local_shipping;
-      case DonationStatus.delivered:
-        return Icons.check_circle;
-      default:
-        return Icons.circle;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.donorGreen.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(_getIcon(), size: 16, color: AppColors.donorGreen),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  entry.status.displayName,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _formatTimestamp(entry.timestamp),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-                if (entry.note.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    entry.note,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatTimestamp(DateTime dt) {
-    return '${dt.day}/${dt.month}/${dt.year}, ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
-  }
-}
+// Update History Card intentionally removed.
+// Admin notes and status changes have been strictly integrated directly into
+// the `_StatusTimeline` vertical tracking tree to vastly improve UX efficiency and reduce height.
 
 /// Action Buttons Widget - Edit and Delete for drafts
 class _ActionButtons extends StatefulWidget {
@@ -1368,17 +1362,16 @@ class _ActionButtonsState extends State<_ActionButtons> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: Theme.of(context).brightness == Brightness.dark
+            ? Colors.grey[850]
+            : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(
+          color: Theme.of(context).dividerColor.withValues(alpha: 0.2),
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1435,6 +1428,251 @@ class _ActionButtonsState extends State<_ActionButtons> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MicroLedgerTracker extends StatelessWidget {
+  final Donation donation;
+
+  const _MicroLedgerTracker({required this.donation});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final double effective = donation.effectiveAmount > 0
+        ? donation.effectiveAmount
+        : (donation.amount ?? 0);
+    final double allocated = donation.allocatedAmount;
+    final double percentage = effective > 0
+        ? (allocated / effective).clamp(0.0, 1.0)
+        : 0.0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? Colors.grey[900] : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: theme.dividerColor.withValues(alpha: 0.15),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black26
+                : Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  isDark
+                      ? Colors.blue.shade900.withValues(alpha: 0.3)
+                      : Colors.blue.shade50,
+                  isDark
+                      ? Colors.indigo.shade900.withValues(alpha: 0.3)
+                      : Colors.indigo.shade50,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+              border: Border(
+                bottom: BorderSide(
+                  color: theme.dividerColor.withValues(alpha: 0.1),
+                ),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.account_balance_wallet,
+                        color: isDark
+                            ? Colors.blueAccent
+                            : Colors.blue.shade700,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Your Impact Ledger',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: isDark
+                              ? Colors.blueAccent
+                              : Colors.blue.shade900,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Progress Bar
+                LinearProgressIndicator(
+                  value: percentage,
+                  backgroundColor: Colors.blue.withValues(alpha: 0.2),
+                  color: Colors.blue,
+                  minHeight: 8,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'PKR ${allocated.toStringAsFixed(0)} Deployed',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    Text(
+                      'PKR ${(effective - allocated).toStringAsFixed(0)} Remaining',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Allocations List
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child:
+                (donation.grfAllocations == null ||
+                    donation.grfAllocations!.isEmpty)
+                ? Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.grey.shade800
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'Awaiting first family allocation gap...',
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Recent Deployments',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ...donation.grfAllocations!.reversed.map((alloc) {
+                        final fId = alloc['familyId'].toString();
+                        final shortId = fId.length > 6
+                            ? fId.substring(0, 6)
+                            : fId;
+                        final amt = (alloc['amount'] as num).toDouble();
+                        final ts = alloc['date'] as Timestamp;
+                        final dt = ts.toDate();
+                        final dateStr =
+                            '${dt.day}/${dt.month} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12.0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.check,
+                                  size: 14,
+                                  color: Colors.green,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Family Need Fulfilled',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: theme.colorScheme.onSurface,
+                                      ),
+                                    ),
+                                    Text(
+                                      'ID: $shortId... • $dateStr',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: theme.colorScheme.onSurface
+                                            .withValues(alpha: 0.6),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                'PKR ${amt.toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ],
+                  ),
+          ),
         ],
       ),
     );

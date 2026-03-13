@@ -369,7 +369,7 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
     ThemeData theme,
     bool isDark,
   ) {
-    final itemCount = a.items.values.fold(0, (sum, qty) => sum + qty);
+    final num itemCount = a.items.values.fold<num>(0, (sum, qty) => sum + qty);
 
     return Container(
       decoration: BoxDecoration(

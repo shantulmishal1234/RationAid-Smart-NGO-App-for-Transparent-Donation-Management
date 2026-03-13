@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/models/donation_model.dart';
@@ -20,24 +22,117 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
   DonationFilter _selectedFilter = DonationFilter.all;
   String _searchQuery = '';
 
+  // P6 Fix — Single cached stream subscription drives both stats panel and list.
+  // Previously two separate StreamBuilders queried the same Firestore path,
+  // doubling read cost and connection overhead.
+  List<Donation> _cachedDonations = [];
+  bool _isLoading = true;
+  String? _streamError;
+  StreamSubscription<List<Donation>>? _donationsSubscription;
+
+  // P2 Fix — Debounce timer: setState fires 300ms after user stops typing.
+  Timer? _searchDebounce;
+
+  @override
+  void initState() {
+    super.initState();
+    final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (userId.isNotEmpty) {
+      _donationsSubscription = _donationService
+          .streamDonationsByDonor(userId)
+          .listen(
+            (donations) {
+              if (mounted) {
+                setState(() {
+                  _cachedDonations = donations;
+                  _isLoading = false;
+                  _streamError = null;
+                });
+              }
+            },
+            onError: (Object error) {
+              if (mounted) {
+                setState(() {
+                  _isLoading = false;
+                  _streamError = error.toString();
+                });
+              }
+            },
+          );
+    } else {
+      _isLoading = false;
+    }
+  }
+
   @override
   void dispose() {
+    _donationsSubscription?.cancel();
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
+  // P2 Fix — Debounced search.
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) setState(() => _searchQuery = value.toLowerCase());
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-
     final theme = Theme.of(context);
+
+    // P6 Fix — compute stats from cached list; no second stream needed
+    final donations = _cachedDonations;
+    final filteredByStatus = _selectedFilter == DonationFilter.all
+        ? donations
+        : donations
+              .where(
+                (d) =>
+                    d.status.toFirestore() ==
+                    _getDonationStatus(_selectedFilter).toFirestore(),
+              )
+              .toList();
+    final filteredDonations = _searchQuery.isEmpty
+        ? filteredByStatus
+        : filteredByStatus.where((donation) {
+            final type = donation.donationType.displayName.toLowerCase();
+            final status = donation.status.displayName.toLowerCase();
+            final amount = donation.amount?.toString() ?? '';
+            final date =
+                '${donation.createdAt.day}/${donation.createdAt.month}/${donation.createdAt.year}';
+            return type.contains(_searchQuery) ||
+                status.contains(_searchQuery) ||
+                amount.contains(_searchQuery) ||
+                date.contains(_searchQuery);
+          }).toList();
+
+    // Stats from all donations (unfiltered)
+    final statusCounts = <String, int>{
+      'Total': donations.length,
+      'Draft': donations.where((d) => d.status == DonationStatus.draft).length,
+      'Under Verification': donations
+          .where((d) => d.status == DonationStatus.underVerification)
+          .length,
+      'Verified': donations
+          .where((d) => d.status == DonationStatus.verified)
+          .length,
+      'Delivered': donations
+          .where((d) => d.status == DonationStatus.delivered)
+          .length,
+      'Rejected': donations
+          .where((d) => d.status == DonationStatus.rejected)
+          .length,
+    };
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header - Centered
+          // Header
           Center(
             child: Column(
               children: [
@@ -60,77 +155,47 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
           ),
           const SizedBox(height: 16),
 
-          // Overview & Statistics Panel
+          // P6 Fix — Overview panel reads from state, no second StreamBuilder
           DonorFrostedPanel(
             padding: EdgeInsets.zero,
-            child: StreamBuilder<List<Donation>>(
-              stream: _donationService.streamDonationsByDonor(userId ?? ''),
-              builder: (context, snapshot) {
-                final donations = snapshot.data ?? [];
-
-                // Count by status
-                final statusCounts = <String, int>{
-                  'Total': donations.length,
-                  'Draft': donations
-                      .where((d) => d.status == DonationStatus.draft)
-                      .length,
-                  'Under Verification': donations
-                      .where(
-                        (d) => d.status == DonationStatus.underVerification,
-                      )
-                      .length,
-                  'Verified': donations
-                      .where((d) => d.status == DonationStatus.verified)
-                      .length,
-                  'Delivered': donations
-                      .where((d) => d.status == DonationStatus.delivered)
-                      .length,
-                  'Rejected': donations
-                      .where((d) => d.status == DonationStatus.rejected)
-                      .length,
-                };
-
-                return ExpansionTile(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+            child: ExpansionTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              collapsedShape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Text(
+                'Overview & Statistics',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Wrap(
+                    spacing: 16,
+                    runSpacing: 12,
+                    alignment: WrapAlignment.center,
+                    children: statusCounts.entries.map((entry) {
+                      return _statItem(
+                        entry.key,
+                        entry.value.toString(),
+                        _getStatusColor(entry.key),
+                      );
+                    }).toList(),
                   ),
-                  collapsedShape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  title: Text(
-                    'Overview & Statistics',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  ),
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      child: Wrap(
-                        spacing: 16,
-                        runSpacing: 12,
-                        alignment: WrapAlignment.center,
-                        children: statusCounts.entries.map((entry) {
-                          return _statItem(
-                            entry.key,
-                            entry.value.toString(),
-                            _getStatusColor(entry.key),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ],
-                );
-              },
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
 
-          // Toolbar: Search | Filter (matching Explore Families)
+          // Toolbar: Search | Filter
           Row(
             children: [
-              // Search Bar
               Expanded(
                 child: SizedBox(
                   height: 48,
@@ -143,25 +208,28 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
                     decoration: InputDecoration(
                       hintText: 'Search donations...',
                       hintStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                         fontSize: 14,
                       ),
                       prefixIcon: Icon(
                         Icons.search,
                         size: 20,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                       suffixIcon: _searchQuery.isNotEmpty
                           ? IconButton(
                               icon: const Icon(Icons.clear, size: 20),
                               onPressed: () {
                                 _searchController.clear();
-                                setState(() {
-                                  _searchQuery = '';
-                                });
+                                setState(() => _searchQuery = '');
                               },
                             )
                           : null,
+
                       filled: true,
                       fillColor: theme.cardColor,
                       contentPadding: const EdgeInsets.symmetric(vertical: 0),
@@ -185,11 +253,8 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
                         ),
                       ),
                     ),
-                    onChanged: (value) {
-                      setState(() {
-                        _searchQuery = value.toLowerCase();
-                      });
-                    },
+                    // P2 Fix — debounced search, not setState on every key
+                    onChanged: _onSearchChanged,
                   ),
                 ),
               ),
@@ -255,81 +320,61 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
 
           // Donations list
           Expanded(
-            child: userId == null
-                ? const Center(child: Text('Please log in'))
-                : StreamBuilder<List<Donation>>(
-                    stream: _selectedFilter == DonationFilter.all
-                        ? _donationService.streamDonationsByDonor(userId)
-                        : _donationService.streamDonationsByDonorAndStatus(
-                            userId,
-                            _getDonationStatus(_selectedFilter),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _streamError != null
+                // P8 Fix — typed error, not raw error string exposed to user
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.cloud_off,
+                          size: 56,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          _streamError!.contains('PERMISSION_DENIED')
+                              ? 'Access denied. Please log in again.'
+                              : 'Unable to load donations. Check connection.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  )
+                // P6 Fix — use filteredDonations from state (computed in build)
+                : filteredDonations.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.volunteer_activism,
+                          size: 80,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No donations found',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.6),
                           ),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-
-                      if (snapshot.hasError) {
-                        return Center(child: Text('Error: ${snapshot.error}'));
-                      }
-
-                      final donations = snapshot.data ?? [];
-
-                      // Apply search filter
-                      final filteredDonations = _searchQuery.isEmpty
-                          ? donations
-                          : donations.where((donation) {
-                              final type = donation.donationType.displayName
-                                  .toLowerCase();
-                              final status = donation.status.displayName
-                                  .toLowerCase();
-                              final amount = donation.amount?.toString() ?? '';
-                              final items =
-                                  donation.items?.length.toString() ?? '';
-                              final date =
-                                  '${donation.createdAt.day}/${donation.createdAt.month}/${donation.createdAt.year}';
-
-                              return type.contains(_searchQuery) ||
-                                  status.contains(_searchQuery) ||
-                                  amount.contains(_searchQuery) ||
-                                  items.contains(_searchQuery) ||
-                                  date.contains(_searchQuery);
-                            }).toList();
-
-                      if (filteredDonations.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.volunteer_activism,
-                                size: 80,
-                                color: Colors.grey[400],
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No donations found',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurface.withValues(alpha: 0.6),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-
-                      return ListView.builder(
-                        padding: const EdgeInsets.only(bottom: 100),
-                        itemCount: filteredDonations.length,
-                        itemBuilder: (context, index) {
-                          return _DonationCard(
-                            donation: filteredDonations[index],
-                            serialNumber: index + 1,
-                          );
-                        },
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 100),
+                    itemCount: filteredDonations.length,
+                    itemBuilder: (context, index) {
+                      return _DonationCard(
+                        donation: filteredDonations[index],
+                        serialNumber: index + 1,
                       );
                     },
                   ),
@@ -377,7 +422,9 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
           '$label: ',
           style: TextStyle(
             fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.6),
           ),
         ),
         Text(
@@ -440,7 +487,9 @@ class _DonationCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: theme.cardColor,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: theme.dividerColor.withValues(alpha: 0.4)),
+            border: Border.all(
+              color: theme.dividerColor.withValues(alpha: 0.4),
+            ),
             boxShadow: [
               BoxShadow(
                 color: isDark
@@ -471,7 +520,7 @@ class _DonationCard extends StatelessWidget {
               // Type Icon
               Icon(
                 donation.donationType == DonationType.cash
-                    ? Icons.attach_money
+                    ? Icons.payments
                     : Icons.inventory_2,
                 size: 20,
                 color: AppColors.donorGreen,
@@ -484,18 +533,49 @@ class _DonationCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Type + Amount/Items
-                    Text(
-                      donation.donationType == DonationType.cash
-                          ? 'Cash: Rs. ${donation.amount?.toStringAsFixed(0) ?? '0'}'
-                          : 'In-Kind: ${donation.items?.length ?? 0} items',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    // Type + Amount/Items + GRF Badge
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            donation.donationType == DonationType.cash
+                                ? 'Cash: Rs. ${donation.amount?.toStringAsFixed(0) ?? '0'}'
+                                : 'In-Kind: ${donation.items?.length ?? 0} items',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (donation.familyId == 'general_relief_fund' ||
+                            donation.allocationMode == 'general') ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: Colors.blue.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: const Text(
+                              'GRF',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 3),
                     // Date
@@ -503,7 +583,9 @@ class _DonationCard extends StatelessWidget {
                       'Created: ${_formatDate(donation.createdAt)}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontSize: 11,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                     ),
                   ],
@@ -515,7 +597,9 @@ class _DonationCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _getStatusBadgeColor(donation.status).withValues(alpha: 0.1),
+                  color: _getStatusBadgeColor(
+                    donation.status,
+                  ).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: _getStatusBadgeColor(
@@ -524,10 +608,11 @@ class _DonationCard extends StatelessWidget {
                   ),
                 ),
                 child: Text(
-                  donation.status.displayName,
+                  _getDisplayStatus(donation),
                   style: TextStyle(
                     fontSize: 10,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
                     color: _getStatusBadgeColor(donation.status),
                   ),
                 ),
@@ -545,6 +630,15 @@ class _DonationCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _getDisplayStatus(Donation d) {
+    if ((d.familyId == 'general_relief_fund' ||
+            d.allocationMode == 'general') &&
+        d.status == DonationStatus.verified) {
+      return 'AWAITING ALLOCATION';
+    }
+    return d.status.displayName.toUpperCase();
   }
 
   String _formatDate(DateTime date) {

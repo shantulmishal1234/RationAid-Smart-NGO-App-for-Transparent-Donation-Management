@@ -35,15 +35,14 @@ android {
 
     buildTypes {
         release {
-            // Temporarily disabled - causing issues with Flutter 3.38.x
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             
             // Use ProGuard rules (when minification is enabled)
-            // proguardFiles(
-            //     getDefaultProguardFile("proguard-android-optimize.txt"),
-            //     "proguard-rules.pro"
-            // )
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             
             // TODO: Add your own signing config for the release build.
             signingConfig = signingConfigs.getByName("debug")

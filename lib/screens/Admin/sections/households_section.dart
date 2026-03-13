@@ -4,13 +4,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/screens/Admin/models/admin_enums.dart';
 import 'package:ration_aid/screens/Admin/utils/admin_queries.dart';
-import 'package:ration_aid/screens/Admin/utils/admin_helpers.dart';
-import 'package:ration_aid/screens/Admin/utils/admin_cache.dart';
 import 'package:ration_aid/screens/Admin/components/family_card.dart';
 import 'package:ration_aid/screens/Admin/House Hold Section/add_family_screen.dart';
 import 'package:ration_aid/screens/Admin/House Hold Section/family_details_screen.dart';
 import 'package:ration_aid/screens/Admin/House Hold Section/edit_family_screen.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
+import 'package:ration_aid/screens/Admin/components/admin_grf_wallet_card.dart';
+import 'package:ration_aid/models/family_model.dart';
 
 /// Households section for managing families
 /// Optimized: Debounced search, cached overview stats
@@ -29,19 +29,44 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
   Timer? _debounce;
   final _searchController = TextEditingController();
 
-  // Cache overview future
-  late Future<Map<String, int>> _overviewFuture;
+  Future<Map<String, int>>? _statsFuture;
 
   @override
   void initState() {
     super.initState();
-    _loadOverview();
+    _refreshStats();
   }
 
-  void _loadOverview({bool forceRefresh = false}) {
-    _overviewFuture = AdminHelpers.loadHouseholdOverview(
-      forceRefresh: forceRefresh,
-    );
+  void _refreshStats() {
+    setState(() {
+      _statsFuture = _fetchStats();
+    });
+  }
+
+  // O(1) Firestore Aggregation: Fetch stats precisely using count() to avoid
+  // O(N) reads that can crash scale or spike billing.
+  Future<Map<String, int>> _fetchStats() async {
+    final base = FirebaseFirestore.instance
+        .collection('families')
+        .where('isArchived', isEqualTo: false);
+
+    final results = await Future.wait([
+      base.count().get(),
+      base.where('status', isEqualTo: 'pending').count().get(),
+      base.where('status', isEqualTo: 'pending_review').count().get(),
+      base.where('status', isEqualTo: 'accepted').count().get(),
+      base.where('status', isEqualTo: 'rejected').count().get(),
+      base.where('status', isEqualTo: 'discarded').count().get(),
+    ]);
+
+    return {
+      'total': results[0].count ?? 0,
+      'pending': results[1].count ?? 0,
+      'pendingReview': results[2].count ?? 0,
+      'accepted': results[3].count ?? 0,
+      'rejected': results[4].count ?? 0,
+      'discarded': results[5].count ?? 0,
+    };
   }
 
   void _onSearchChanged(String value) {
@@ -57,10 +82,9 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
     });
   }
 
+  // Called when returning from add/edit screens to refresh data
   void _invalidateCacheAndRefresh() {
-    AdminCache.invalidate(CacheKeys.householdOverview);
-    _loadOverview(forceRefresh: true);
-    setState(() {});
+    _refreshStats();
   }
 
   @override
@@ -105,13 +129,25 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
               collapsedShape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              title: Text(
-                'Overview & Statistics',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-                ),
+              title: Row(
+                children: [
+                  Text(
+                    'Overview & Statistics',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, size: 18),
+                    onPressed: _refreshStats,
+                    tooltip: 'Refresh Stats',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
               ),
               leading: Icon(
                 Icons.analytics_outlined,
@@ -120,17 +156,8 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
               childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               children: [
                 FutureBuilder<Map<String, int>>(
-                  future: _overviewFuture,
+                  future: _statsFuture,
                   builder: (context, snapshot) {
-                    final d =
-                        snapshot.data ??
-                        {
-                          'total': 0,
-                          'pending': 0,
-                          'accepted': 0,
-                          'rejected': 0,
-                          'discarded': 0,
-                        };
                     final loading =
                         snapshot.connectionState == ConnectionState.waiting;
 
@@ -147,6 +174,19 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
                       );
                     }
 
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Text(
+                          'Error loading stats',
+                          style: TextStyle(
+                            color: theme.colorScheme.error,
+                            fontSize: 13,
+                          ),
+                        ),
+                      );
+                    }
+
+                    final data = snapshot.data ?? {};
                     return Wrap(
                       spacing: 12,
                       runSpacing: 12,
@@ -154,27 +194,32 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
                       children: [
                         _statItem(
                           'Total',
-                          d['total'].toString(),
+                          (data['total'] ?? 0).toString(),
                           AdminColors.primaryBlue,
                         ),
                         _statItem(
                           'Pending',
-                          d['pending'].toString(),
+                          (data['pending'] ?? 0).toString(),
                           Colors.amber[700]!,
                         ),
                         _statItem(
+                          'Review',
+                          (data['pendingReview'] ?? 0).toString(),
+                          Colors.deepPurple[300]!,
+                        ),
+                        _statItem(
                           'Accepted',
-                          d['accepted'].toString(),
+                          (data['accepted'] ?? 0).toString(),
                           Colors.green[600]!,
                         ),
                         _statItem(
                           'Rejected',
-                          d['rejected'].toString(),
+                          (data['rejected'] ?? 0).toString(),
                           Colors.red[400]!,
                         ),
                         _statItem(
                           'Discarded',
-                          d['discarded'].toString(),
+                          (data['discarded'] ?? 0).toString(),
                           Colors.grey[600]!,
                         ),
                       ],
@@ -185,7 +230,12 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+
+        // General Relief Fund Wallet Overview
+        const AdminGRFWalletCard(
+          onManage:
+              null, // To be implemented with a surplus/allocation dialog if needed
+        ),
 
         // Toolbar: Search | Filter | Add
         Padding(
@@ -274,16 +324,24 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
                       child: Text('All Status'),
                     ),
                     const PopupMenuItem(
+                      value: 'pending',
+                      child: Text('⏳ Pending'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'pending_review',
+                      child: Text('🔍 Under Review'),
+                    ),
+                    const PopupMenuItem(
                       value: 'accepted',
-                      child: Text('Accepted'),
+                      child: Text('✅ Accepted'),
                     ),
                     const PopupMenuItem(
                       value: 'rejected',
-                      child: Text('Rejected'),
+                      child: Text('❌ Rejected'),
                     ),
                     const PopupMenuItem(
                       value: 'discarded',
-                      child: Text('Discarded'),
+                      child: Text('🗑️ Discarded'),
                     ),
                   ],
                 ),
@@ -347,6 +405,11 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
 
                 var docs = snapshot.data?.docs ?? [];
 
+                // Issue #1 Fix: exclude soft-archived families from the list
+                docs = docs
+                    .where((d) => d.data()['isArchived'] != true)
+                    .toList();
+
                 // Sort by createdAt (oldest first)
                 docs.sort((a, b) {
                   final t1 = a.data()['createdAt'] as Timestamp?;
@@ -406,17 +469,11 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
                     final data = doc.data();
                     final id = doc.id;
 
+                    final family = Family.fromFirestore(doc);
+
                     return FamilyCard(
-                      id: id,
+                      family: family,
                       serialNumber: index + 1,
-                      name: data['name'] ?? 'Unnamed family',
-                      area: data['area'] ?? 'Unknown area',
-                      address: data['address'] ?? '',
-                      familySize: (data['familySize'] ?? 0) as int,
-                      status: data['status'] ?? 'pending',
-                      targetAmount: (data['targetAmount'] ?? 0).toDouble(),
-                      raisedAmount: (data['raisedAmount'] ?? 0).toDouble(),
-                      surplusAmount: (data['surplusAmount'] ?? 0).toDouble(),
                       onTap: () async {
                         await Navigator.push(
                           context,

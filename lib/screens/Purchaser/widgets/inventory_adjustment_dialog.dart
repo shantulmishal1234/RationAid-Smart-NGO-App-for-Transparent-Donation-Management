@@ -75,7 +75,7 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           DropdownButtonFormField<String>(
-            value: _type,
+            initialValue: _type,
             items: const [
               DropdownMenuItem(value: 'damage', child: Text('Damage')),
               DropdownMenuItem(value: 'loss', child: Text('Loss / Theft')),

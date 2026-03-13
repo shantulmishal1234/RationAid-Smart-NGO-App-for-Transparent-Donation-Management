@@ -1056,14 +1056,20 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () async {
+            onPressed: () {
+              // 1. Pop the confirmation dialog
               Navigator.pop(context);
-              await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.of(
-                  context,
-                ).pushNamedAndRemoveUntil('/login', (route) => false);
-              }
+
+              // 2. Tear down the entire authenticated widget tree immediately
+              Navigator.of(
+                context,
+              ).pushNamedAndRemoveUntil('/login', (route) => false);
+
+              // 3. Kill the auth session slightly *after* the UI unmounts,
+              // ensuring active Firebase Streams don't throw permission errors.
+              Future.delayed(const Duration(milliseconds: 400), () async {
+                await FirebaseAuth.instance.signOut();
+              });
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
@@ -1180,8 +1186,8 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
                       children: [
                         CircleAvatar(
                           radius: 50,
-                          backgroundColor: AppColors.donorGreen.withValues(alpha: 
-                            0.2,
+                          backgroundColor: AppColors.donorGreen.withValues(
+                            alpha: 0.2,
                           ),
                           backgroundImage: _profilePhotoUrl != null
                               ? NetworkImage(_profilePhotoUrl!)

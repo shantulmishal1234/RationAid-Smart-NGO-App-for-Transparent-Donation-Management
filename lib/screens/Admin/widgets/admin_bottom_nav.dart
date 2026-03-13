@@ -5,13 +5,10 @@ import 'package:ration_aid/screens/Admin/models/admin_enums.dart';
 class AdminBottomNav extends StatefulWidget {
   final AdminSection currentSection;
   final ValueChanged<AdminSection> onSectionChanged;
-  final VoidCallback onMoreTapped;
-
   const AdminBottomNav({
     super.key,
     required this.currentSection,
     required this.onSectionChanged,
-    required this.onMoreTapped,
   });
 
   @override
@@ -72,8 +69,10 @@ class _AdminBottomNavState extends State<AdminBottomNav>
         return 2;
       case AdminSection.hrm:
         return 3;
+      case AdminSection.more:
+        return 4;
       default:
-        return -1; // For sections in floating menu
+        return -1; // For modules inside the Grid Hub
     }
   }
 
@@ -182,7 +181,13 @@ class _AdminBottomNavState extends State<AdminBottomNav>
                         section: AdminSection.hrm,
                         itemWidth: itemWidth,
                       ),
-                      _buildMoreButton(itemWidth),
+                      _buildNavItem(
+                        icon: Icons.grid_view_rounded,
+                        label: 'More',
+                        index: 4,
+                        section: AdminSection.more,
+                        itemWidth: itemWidth,
+                      ),
                     ],
                   ),
                 ),
@@ -251,42 +256,6 @@ class _AdminBottomNavState extends State<AdminBottomNav>
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMoreButton(double itemWidth) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: widget.onMoreTapped,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          width: itemWidth,
-          padding: const EdgeInsets.only(top: 15, bottom: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.more_horiz,
-                color: isDark ? Colors.grey[400] : Colors.grey[600],
-                size: 24,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'More',
-                style: TextStyle(
-                  color: isDark ? Colors.grey[400] : Colors.grey[600],
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
               ),
             ],
           ),

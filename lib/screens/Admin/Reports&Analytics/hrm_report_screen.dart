@@ -27,41 +27,10 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
     );
   }
 
-  Future<Map<String, dynamic>> _loadHrmSummary() async {
-    final usersRef = FirebaseFirestore.instance.collection('users');
-
-    // Basic counts
-    final totalAgg = await usersRef.count().get();
-    final purchasersAgg = await usersRef
-        .where('roles', arrayContains: 'purchaser')
-        .count()
-        .get();
-    final distributorsAgg = await usersRef
-        .where('roles', arrayContains: 'distributor')
-        .count()
-        .get();
-
-    final totalMembers = totalAgg.count ?? 0;
-    final purchasers = purchasersAgg.count ?? 0;
-    final distributors = distributorsAgg.count ?? 0;
-
-    // Hierarchy counts
-    final headsAgg = await usersRef
-        .where('roles', arrayContains: 'head')
-        .count()
-        .get();
-    final subHeadsAgg = await usersRef
-        .where('roles', arrayContains: 'sub_head')
-        .count()
-        .get();
-    final membersAgg = await usersRef
-        .where('roles', arrayContains: 'member')
-        .count()
-        .get();
-
-    final heads = headsAgg.count ?? 0;
-    final subHeads = subHeadsAgg.count ?? 0;
-    final members = membersAgg.count ?? 0;
+  Map<String, dynamic> _computeSummary(QuerySnapshot allUsersSnap) {
+    int totalMembers = allUsersSnap.docs.length;
+    int purchasers = 0;
+    int distributors = 0;
 
     // Activity tracking
     final now = DateTime.now();
@@ -72,12 +41,18 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
     int activeLastWeek = 0;
     int activeLastMonth = 0;
     int neverLoggedIn = 0;
+    int recentlyJoined = 0;
 
-    final allUsersSnap = await usersRef.get();
     for (final doc in allUsersSnap.docs) {
-      final data = doc.data();
-      final lastLoginTs = data['lastLoginAt'] as Timestamp?;
+      final data = doc.data() as Map<String, dynamic>;
 
+      // Role counts
+      final roles = List<String>.from(data['roles'] ?? []);
+      if (roles.contains('purchaser')) purchasers++;
+      if (roles.contains('distributor')) distributors++;
+
+      // Activity counts
+      final lastLoginTs = data['lastLoginAt'] as Timestamp?;
       if (lastLoginTs == null) {
         neverLoggedIn++;
         inactiveCount++;
@@ -92,12 +67,8 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
           inactiveCount++;
         }
       }
-    }
 
-    // Recently joined (last 30 days)
-    int recentlyJoined = 0;
-    for (final doc in allUsersSnap.docs) {
-      final data = doc.data();
+      // Join counts
       final joiningTs = data['joiningDate'] as Timestamp?;
       if (joiningTs != null) {
         final joiningDate = joiningTs.toDate();
@@ -111,9 +82,6 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
       'totalMembers': totalMembers,
       'purchasers': purchasers,
       'distributors': distributors,
-      'heads': heads,
-      'subHeads': subHeads,
-      'members': members,
       'inactiveCount': inactiveCount,
       'activeLastWeek': activeLastWeek,
       'activeLastMonth': activeLastMonth,
@@ -129,7 +97,12 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Generating report...')));
 
-      final data = await _loadHrmSummary();
+      // Fetch all users (purchasers, distributors, and donors) for the report data
+      final usersSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .get();
+
+      final data = _computeSummary(usersSnapshot);
 
       final csvContent = StringBuffer();
 
@@ -147,21 +120,6 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
       csvContent.writeln('Recently Joined (30d),${data['recentlyJoined']}');
       csvContent.writeln('');
 
-      // Hierarchy Section
-      csvContent.writeln('HIERARCHY DISTRIBUTION');
-      csvContent.writeln('Level,Count,Percentage');
-      final total = data['totalMembers'] as int;
-      csvContent.writeln(
-        'Heads,${data['heads']},${total > 0 ? ((data['heads'] as int) / total * 100).toStringAsFixed(1) : '0.0'}%',
-      );
-      csvContent.writeln(
-        'Sub-heads,${data['subHeads']},${total > 0 ? ((data['subHeads'] as int) / total * 100).toStringAsFixed(1) : '0.0'}%',
-      );
-      csvContent.writeln(
-        'Members,${data['members']},${total > 0 ? ((data['members'] as int) / total * 100).toStringAsFixed(1) : '0.0'}%',
-      );
-      csvContent.writeln('');
-
       // Activity Section
       csvContent.writeln('ACTIVITY & ENGAGEMENT');
       csvContent.writeln('Status,Count');
@@ -177,16 +135,15 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
         'Name,Email,Roles,Department,Assigned Area,Joining Date,Last Login,Delivery Count,Status',
       );
 
-      // Fetch all users (purchasers, distributors, and donors)
-      final usersSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .where(
-            'roles',
-            arrayContainsAny: ['purchaser', 'distributor', 'donor'],
-          )
-          .get();
+      // Using the same snapshot minus admin users where possible
+      final filteredDocs = usersSnapshot.docs.where((doc) {
+        final r = List<String>.from((doc.data() as Map)['roles'] ?? []);
+        return r.contains('purchaser') ||
+            r.contains('distributor') ||
+            r.contains('donor');
+      }).toList();
 
-      for (final doc in usersSnapshot.docs) {
+      for (final doc in filteredDocs) {
         final userData = doc.data();
         final name = userData['name'] ?? 'N/A';
         final email = userData['email'] ?? 'N/A';
@@ -263,7 +220,6 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return AdminScaffold(
       title: 'HRM Report',
@@ -274,13 +230,13 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
           onPressed: _exportReport,
         ),
       ],
-      body: FutureBuilder<Map<String, dynamic>>(
-        future: _loadHrmSummary(),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('users').snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (!snapshot.hasData) {
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return Center(
               child: Text(
                 'No HR data available.',
@@ -291,13 +247,10 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
             );
           }
 
-          final data = snapshot.data!;
+          final data = _computeSummary(snapshot.data!);
           final totalMembers = data['totalMembers'] as int;
           final purchasers = data['purchasers'] as int;
           final distributors = data['distributors'] as int;
-          final heads = data['heads'] as int;
-          final subHeads = data['subHeads'] as int;
-          final members = data['members'] as int;
           final inactiveCount = data['inactiveCount'] as int;
           final activeLastWeek = data['activeLastWeek'] as int;
           final activeLastMonth = data['activeLastMonth'] as int;
@@ -358,26 +311,6 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
                       ),
                     ),
                   ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // Hierarchy distribution
-                _sectionTitle('Hierarchy distribution'),
-                const SizedBox(height: 12),
-                FrostedPanel(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        _hierarchyRow('Heads', heads, totalMembers),
-                        const SizedBox(height: 8),
-                        _hierarchyRow('Sub-heads', subHeads, totalMembers),
-                        const SizedBox(height: 8),
-                        _hierarchyRow('Members', members, totalMembers),
-                      ],
-                    ),
-                  ),
                 ),
 
                 const SizedBox(height: 24),
@@ -453,7 +386,9 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
                         '• Plan recruitment, training, and restructuring',
                         style: TextStyle(
                           fontSize: 13,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.7,
+                          ),
                           height: 1.5,
                         ),
                       ),
@@ -549,44 +484,6 @@ class _HrmReportScreenState extends State<HrmReportScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _hierarchyRow(String label, int count, int total) {
-    final theme = Theme.of(context);
-    final percentage = total > 0
-        ? (count / total * 100).toStringAsFixed(1)
-        : '0.0';
-    return Row(
-      children: [
-        Expanded(
-          flex: 2,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: theme.colorScheme.onSurface,
-            ),
-          ),
-        ),
-        Expanded(
-          flex: 3,
-          child: LinearProgressIndicator(
-            value: total > 0 ? count / total : 0,
-            backgroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.1),
-            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryBlue),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Text(
-          '$count ($percentage%)',
-          style: TextStyle(
-            fontSize: 13,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-          ),
-        ),
-      ],
     );
   }
 

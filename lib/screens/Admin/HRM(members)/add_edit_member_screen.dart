@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:ration_aid/services/audit_service.dart';
+import 'package:ration_aid/services/final_approval_service.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 
@@ -26,27 +27,27 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
   final _passwordCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _designationCtrl = TextEditingController();
-  final _teamHeadIdCtrl = TextEditingController();
+  final _assignedAreaCtrl = TextEditingController();
 
-  String _department = 'Distribution';
   String _mainRole = 'distributor'; // purchaser or distributor
-  String _level = 'member'; // head / sub_head / member
-  bool _isSupervisor = false; // For Head Purchaser role
+  bool _isSupervisor = false;
+  bool _isFinalApprover = false;
 
   bool _isSaving = false;
+  bool _isCurrentUserFinalApprover = false;
+  bool _obscurePassword = true;
 
   @override
   void initState() {
     super.initState();
+    _checkCurrentUserPrivileges();
     if (widget.isEdit && widget.initialData != null) {
       final d = widget.initialData!;
       _nameCtrl.text = d['name'] ?? '';
       _emailCtrl.text = d['email'] ?? '';
       _phoneCtrl.text = d['phone'] ?? '';
       _designationCtrl.text = d['designation'] ?? '';
-      _teamHeadIdCtrl.text = d['teamHeadId'] ?? '';
-
-      _department = d['department'] ?? _department;
+      _assignedAreaCtrl.text = d['assignedArea'] ?? '';
 
       final roles = List<String>.from(d['roles'] ?? []);
       if (roles.contains('purchaser')) {
@@ -55,16 +56,15 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
         _mainRole = 'distributor';
       }
 
-      if (roles.contains('head')) {
-        _level = 'head';
-      } else if (roles.contains('sub_head')) {
-        _level = 'sub_head';
-      } else if (roles.contains('member')) {
-        _level = 'member';
-      }
-
-      // Check if they are a Head Purchaser
       _isSupervisor = d['isSupervisor'] ?? false;
+      _isFinalApprover = d['isFinalApprover'] ?? false;
+    }
+  }
+
+  Future<void> _checkCurrentUserPrivileges() async {
+    final isFA = await FinalApprovalService.isCurrentUserFinalApprover();
+    if (mounted) {
+      setState(() => _isCurrentUserFinalApprover = isFA);
     }
   }
 
@@ -75,16 +75,20 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
     _passwordCtrl.dispose();
     _phoneCtrl.dispose();
     _designationCtrl.dispose();
-    _teamHeadIdCtrl.dispose();
+    _assignedAreaCtrl.dispose();
     super.dispose();
   }
 
-  /// Check if the current user being edited is a donor
+  /// Check if the current member being edited is a donor
   bool _isDonor() {
     if (widget.initialData == null) return false;
     final roles = List<String>.from(widget.initialData!['roles'] ?? []);
     return roles.contains('donor');
   }
+
+  /// Department is auto-derived from role — no manual override needed
+  String get _department =>
+      _mainRole == 'purchaser' ? 'Warehouse' : 'Distribution';
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -112,9 +116,6 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
       } else if (_mainRole == 'distributor') {
         roles.add('distributor');
       }
-      if (_level == 'head') roles.add('head');
-      if (_level == 'sub_head') roles.add('sub_head');
-      if (_level == 'member') roles.add('member');
 
       final docRef = FirebaseFirestore.instance.collection('users').doc(uid);
 
@@ -125,27 +126,34 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
         'designation': _designationCtrl.text.trim(),
         'department': _department,
         'phone': _phoneCtrl.text.trim(),
-        'teamHeadId': _teamHeadIdCtrl.text.trim().isEmpty
-            ? null
-            : _teamHeadIdCtrl.text.trim(),
+        'assignedArea': _assignedAreaCtrl.text.trim(),
+        'isDeactivated': false,
       };
 
       if (isEdit) {
-        await docRef.update({...data, 'isSupervisor': _isSupervisor});
+        final updateData = {...data, 'isSupervisor': _isSupervisor};
+        // Only a Final Approver can change the isFinalApprover flag
+        if (_isCurrentUserFinalApprover) {
+          updateData['isFinalApprover'] = _isFinalApprover;
+        }
+        await docRef.update(updateData);
 
         await AuditService.logUserAction(
           action: 'Member profile updated',
           userId: uid,
           userName: memberName,
           details:
-              'Updated roles: ${roles.join(", ")}, Department: $_department, Supervisor: $_isSupervisor',
+              'Updated roles: ${roles.join(", ")}, Department: $_department, Supervisor: $_isSupervisor, FinalApprover: $_isFinalApprover',
         );
       } else {
         await docRef.set({
           ...data,
           'isSupervisor': _isSupervisor,
+          'isFinalApprover':
+              false, // always false on creation — must be promoted deliberately
           'joiningDate': FieldValue.serverTimestamp(),
           'deliveryCount': 0,
+          'procurementCount': 0,
           'lastLoginAt': null,
           'lastActionAt': null,
         });
@@ -154,7 +162,8 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
           action: 'New member created',
           userId: uid,
           userName: memberName,
-          details: 'Role: $_mainRole, Level: $_level, Department: $_department',
+          details:
+              'Role: $_mainRole, Department: $_department, Supervisor: $_isSupervisor',
         );
       }
 
@@ -196,7 +205,7 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
     }
   }
 
-  Future<void> _confirmDeleteMember() async {
+  Future<void> _confirmDeactivateMember() async {
     final uid = widget.uid;
     if (uid == null) return;
 
@@ -206,13 +215,14 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: theme.cardColor,
         title: Text(
-          'Delete member',
+          'Deactivate member',
           style: TextStyle(color: theme.colorScheme.onSurface),
         ),
         content: Text(
-          'This will remove this member profile from HRM and they will no longer '
-          'appear in the system. This does NOT automatically delete their '
-          'Firebase login account.\n\nAre you sure you want to continue?',
+          'This will mark this member as deactivated. They will no longer appear '
+          'in the active HRM list and will be blocked on next sign-in.\n\n'
+          'Their Firebase Auth account will be flagged as inactive via a Firestore flag. '
+          'Are you sure you want to continue?',
           style: TextStyle(
             color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
           ),
@@ -227,7 +237,10 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text(
+              'Deactivate',
+              style: TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -239,22 +252,27 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
     try {
       final memberName = widget.initialData?['name'] ?? 'Unknown member';
 
-      await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+      // Mark as deactivated instead of hard deleting — preserves audit history
+      // and effectively blocks login via Firestore security rules check on isDeactivated
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'isDeactivated': true,
+        'deactivatedAt': FieldValue.serverTimestamp(),
+      });
 
       await AuditService.logUserAction(
-        action: 'Member deleted',
+        action: 'Member deactivated',
         userId: uid,
         userName: memberName,
-        details: 'Member profile permanently removed from HRM',
+        details: 'Member account deactivated from HRM — login access revoked',
       );
 
       if (!mounted) return;
-      Navigator.pop(context, 'Member deleted successfully');
+      Navigator.pop(context, 'Member deactivated successfully');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to delete member: $e'),
+          content: Text('Failed to deactivate member: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -316,25 +334,20 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
                             enabled: !isEdit,
                             validator: (v) {
                               if (v == null || v.trim().isEmpty) {
-                                return 'Valid email required';
+                                return 'Email is required';
                               }
-                              if (!v.contains('@')) {
-                                return 'Valid email required';
+                              final emailRegex = RegExp(
+                                r'^[\w.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}$',
+                              );
+                              if (!emailRegex.hasMatch(v.trim())) {
+                                return 'Enter a valid email address';
                               }
                               return null;
                             },
                           ),
                           if (!isEdit) ...[
                             const SizedBox(height: 16),
-                            _buildTextField(
-                              controller: _passwordCtrl,
-                              label: 'Temporary Password',
-                              hint: 'Minimum 6 characters',
-                              obscureText: true,
-                              validator: (v) => v == null || v.length < 6
-                                  ? 'Min 6 characters'
-                                  : null,
-                            ),
+                            _buildPasswordField(),
                           ],
                           const SizedBox(height: 16),
                           _buildTextField(
@@ -381,25 +394,8 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
                               hint: 'e.g. Field Officer',
                             ),
                             const SizedBox(height: 16),
-                            _buildDropdown<String>(
-                              label: 'Department',
-                              value: _department,
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'Distribution',
-                                  child: Text('Distribution'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'Warehouse',
-                                  child: Text('Warehouse'),
-                                ),
-                              ],
-                              onChanged: (v) {
-                                if (v == null) return;
-                                setState(() => _department = v);
-                              },
-                            ),
-                            const SizedBox(height: 16),
+
+                            // Role selector
                             _buildDropdown<String>(
                               label: 'Main Role',
                               helperText:
@@ -421,83 +417,78 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
                               },
                             ),
                             const SizedBox(height: 16),
-                            _buildDropdown<String>(
-                              label: 'Hierarchy Level',
-                              value: _level,
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'head',
-                                  child: Text('Head'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'sub_head',
-                                  child: Text('Sub-head'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'member',
-                                  child: Text('Member'),
-                                ),
-                              ],
-                              onChanged: (v) {
-                                if (v == null) return;
-                                setState(() => _level = v);
-                              },
+
+                            // Department — auto-locked based on role (read-only display)
+                            _buildReadOnlyField(
+                              label: 'Department',
+                              value: _department,
+                              helperText:
+                                  'Auto-assigned based on role — Purchasers → Warehouse, Distributors → Distribution',
                             ),
                             const SizedBox(height: 16),
-                            _buildTextField(
-                              controller: _teamHeadIdCtrl,
-                              label: 'Team Head UID (Optional)',
-                              hint: 'UID of head / sub-head',
-                            ),
-                            if (_mainRole == 'purchaser') ...[
-                              const SizedBox(height: 16),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: theme.scaffoldBackgroundColor,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: theme.dividerColor.withValues(
-                                      alpha: 0.5,
-                                    ),
-                                  ),
-                                ),
-                                child: SwitchListTile(
-                                  title: const Text(
-                                    'Head Purchaser (Supervisor)',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  subtitle: const Text(
-                                    'Grants access to team reports, global financials, and history.',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                  value: _isSupervisor,
-                                  activeColor: theme.colorScheme.primary,
-                                  onChanged: (val) {
-                                    setState(() => _isSupervisor = val);
-                                  },
-                                ),
+
+                            // Assigned Area — only for Distributors
+                            if (_mainRole == 'distributor') ...[
+                              _buildTextField(
+                                controller: _assignedAreaCtrl,
+                                label: 'Assigned Area',
+                                hint: 'e.g. Lahore - Gulberg, Model Town',
                               ),
+                              const SizedBox(height: 16),
                             ],
+
+                            // isSupervisor — label adapts to role
+                            _buildSwitchTile(
+                              title: _mainRole == 'purchaser'
+                                  ? 'Supervisor Purchaser'
+                                  : 'Supervisor Distributor',
+                              subtitle: _mainRole == 'purchaser'
+                                  ? 'Grants access to team-wide procurement reports, inventory, and history.'
+                                  : 'Grants access to team-wide delivery assignments, history, and performance.',
+                              value: _isSupervisor,
+                              onChanged: (val) =>
+                                  setState(() => _isSupervisor = val),
+                              activeColor: theme.colorScheme.primary,
+                            ),
                           ],
                         ),
                       ),
                     ],
 
-                    // Hide delete button for donors (view-only)
+                    // isFinalApprover — only shown to admins who are already Final Approvers
+                    if (!_isDonor() && _isCurrentUserFinalApprover) ...[
+                      const SizedBox(height: 32),
+                      _buildSectionHeader('Approval Privileges'),
+                      const SizedBox(height: 16),
+                      FrostedPanel(
+                        child: _buildSwitchTile(
+                          title: 'Final Approver',
+                          subtitle:
+                              'Grants power to make final approval/rejection decisions on families that have reached review quorum. Use with caution.',
+                          value: _isFinalApprover,
+                          onChanged: (val) =>
+                              setState(() => _isFinalApprover = val),
+                          activeColor: Colors.deepOrange,
+                          icon: Icons.gavel_rounded,
+                        ),
+                      ),
+                    ],
+
+                    // Deactivate button (replaces hard delete)
                     if (isEdit && !_isDonor()) ...[
                       const SizedBox(height: 40),
                       Center(
                         child: TextButton.icon(
-                          onPressed: _isSaving ? null : _confirmDeleteMember,
+                          onPressed: _isSaving
+                              ? null
+                              : _confirmDeactivateMember,
                           icon: Icon(
-                            Icons.delete_outline,
+                            Icons.person_off_outlined,
                             color: theme.colorScheme.error,
                             size: 20,
                           ),
                           label: Text(
-                            'Delete member profile',
+                            'Deactivate member account',
                             style: TextStyle(
                               color: theme.colorScheme.error,
                               fontWeight: FontWeight.w600,
@@ -576,6 +567,229 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
     );
   }
 
+  /// Password field with strength hint and visibility toggle
+  Widget _buildPasswordField() {
+    final theme = Theme.of(context);
+    final password = _passwordCtrl.text;
+
+    // Strength calculation
+    int strength = 0;
+    if (password.length >= 6) strength++;
+    if (password.length >= 10) strength++;
+    if (password.contains(RegExp(r'[A-Z]'))) strength++;
+    if (password.contains(RegExp(r'[0-9]'))) strength++;
+    if (password.contains(RegExp(r'[!@#\$%^&*]'))) strength++;
+
+    Color strengthColor = Colors.red;
+    String strengthLabel = 'Weak';
+    if (strength >= 4) {
+      strengthColor = Colors.green;
+      strengthLabel = 'Strong';
+    } else if (strength >= 2) {
+      strengthColor = Colors.orange;
+      strengthLabel = 'Fair';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Temporary Password',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: _passwordCtrl,
+          obscureText: _obscurePassword,
+          onChanged: (_) => setState(() {}),
+          validator: (v) =>
+              v == null || v.length < 6 ? 'Min 6 characters' : null,
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
+            fontWeight: FontWeight.w500,
+          ),
+          decoration: InputDecoration(
+            hintText: 'Minimum 6 characters',
+            hintStyle: TextStyle(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+              fontSize: 14,
+              fontWeight: FontWeight.normal,
+            ),
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 14,
+            ),
+            filled: true,
+            fillColor: theme.colorScheme.surface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.dividerColor.withValues(alpha: 0.8),
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.dividerColor.withValues(alpha: 0.8),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.colorScheme.primary,
+                width: 1.5,
+              ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: theme.colorScheme.error.withValues(alpha: 0.5),
+              ),
+            ),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                size: 20,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+              onPressed: () =>
+                  setState(() => _obscurePassword = !_obscurePassword),
+            ),
+          ),
+        ),
+        if (password.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              ...List.generate(5, (i) {
+                return Expanded(
+                  child: Container(
+                    height: 4,
+                    margin: EdgeInsets.only(right: i < 4 ? 3 : 0),
+                    decoration: BoxDecoration(
+                      color: i < strength
+                          ? strengthColor
+                          : theme.dividerColor.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(width: 8),
+              Text(
+                strengthLabel,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: strengthColor,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildReadOnlyField({
+    required String label,
+    required String value,
+    String? helperText,
+  }) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: theme.dividerColor.withValues(alpha: 0.5),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.lock_outline,
+                size: 14,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (helperText != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            helperText,
+            style: TextStyle(
+              fontSize: 11,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSwitchTile({
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required Color activeColor,
+    IconData? icon,
+  }) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.scaffoldBackgroundColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
+      ),
+      child: SwitchListTile(
+        secondary: icon != null
+            ? Icon(
+                icon,
+                color: value
+                    ? activeColor
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+              )
+            : null,
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+        value: value,
+        activeColor: activeColor,
+        onChanged: onChanged,
+      ),
+    );
+  }
+
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -588,7 +802,6 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
     List<TextInputFormatter>? inputFormatters,
   }) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -632,9 +845,7 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
               vertical: 14,
             ),
             filled: true,
-            fillColor: isDark
-                ? theme.colorScheme.surface
-                : theme.colorScheme.surface,
+            fillColor: theme.colorScheme.surface,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
@@ -674,7 +885,6 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
     required ValueChanged<T?> onChanged,
   }) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -709,9 +919,7 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
               vertical: 14,
             ),
             filled: true,
-            fillColor: isDark
-                ? theme.colorScheme.surface
-                : theme.colorScheme.surface,
+            fillColor: theme.colorScheme.surface,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(

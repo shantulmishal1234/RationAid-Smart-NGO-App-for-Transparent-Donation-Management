@@ -410,11 +410,12 @@ class _DashboardSectionState extends State<DashboardSection> {
           );
         }
         if (snapshot.hasError) {
+          debugPrint('Live Alerts Error: ${snapshot.error}');
           return FrostedPanel(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: AlertTile(
               icon: Icons.error_outline,
-              text: 'Could not load alerts. Pull to refresh.',
+              text: 'Error: ${snapshot.error}',
               color: const Color(0xFFEF5350),
             ),
           );

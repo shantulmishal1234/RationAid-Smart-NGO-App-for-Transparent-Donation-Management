@@ -3,6 +3,7 @@ import 'package:ration_aid/models/family_model.dart';
 import 'package:ration_aid/models/family_review_model.dart';
 import 'package:ration_aid/services/family_review_service.dart';
 import 'package:ration_aid/services/final_approval_service.dart';
+import 'package:intl/intl.dart';
 
 /// Dialog for Final Approver to review and make final decision
 class FinalApprovalDialog extends StatefulWidget {
@@ -138,7 +139,9 @@ class _FinalApprovalDialogState extends State<FinalApprovalDialog> {
                           'Family ID: ${widget.family.id.substring(widget.family.id.length - 8)}',
                           style: TextStyle(
                             fontSize: 12,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
                       ],
@@ -391,72 +394,136 @@ class _FinalApprovalDialogState extends State<FinalApprovalDialog> {
   Widget _buildReviewCard(ThemeData theme, FamilyReview review) {
     final isApprove = review.decision == 'approve';
     final color = isApprove ? Colors.green : Colors.red;
+    final dateStr = DateFormat('MMM d, hh:mm a').format(review.createdAt);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.scaffoldBackgroundColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
-      ),
+      margin: const EdgeInsets.only(bottom: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            isApprove ? Icons.check_circle : Icons.cancel,
-            color: color,
-            size: 20,
+          // Timeline indicator
+          Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: color, width: 2),
+                ),
+                child: Icon(
+                  isApprove ? Icons.check : Icons.close,
+                  color: color,
+                  size: 16,
+                ),
+              ),
+              const SizedBox(height: 4),
+              // Tiny vertical line
+              Container(
+                width: 2,
+                height: 30, // Adjust dynamically or keep fixed
+                color: theme.dividerColor.withValues(alpha: 0.5),
+              ),
+            ],
           ),
           const SizedBox(width: 12),
+          // Review bubble Content
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        review.reviewerName,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.scaffoldBackgroundColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: theme.dividerColor.withValues(alpha: 0.3),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.02),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Reviewer & Date
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          review.reviewerName,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
+                      Text(
+                        dateStr,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.5,
+                          ),
+                        ),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  // Decision Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      isApprove ? 'VOTED: APPROVE' : 'VOTED: REJECT',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                        color: color.withValues(alpha: 0.9),
+                      ),
+                    ),
+                  ),
+                  // Comment Area
+                  if (review.comment != null && review.comment!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(4),
+                        color: theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: theme.dividerColor.withValues(alpha: 0.3),
+                        ),
                       ),
                       child: Text(
-                        isApprove ? 'APPROVE' : 'REJECT',
+                        '"${review.comment!}"',
                         style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: color,
+                          fontSize: 13,
+                          height: 1.4,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.8,
+                          ),
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
                     ),
                   ],
-                ),
-                if (review.comment != null && review.comment!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    review.comment!,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
                 ],
-              ],
+              ),
             ),
           ),
         ],

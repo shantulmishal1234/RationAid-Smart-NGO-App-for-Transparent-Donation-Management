@@ -72,6 +72,7 @@ class ProcurementRequest {
   final String familyAddress; // Masked/Area only
   final String packId;
   final String packName;
+  final String category; // 'Food' or 'Medicine'
   final List<ProcurementItem> items;
   final double budgetLimit;
   final double totalSpent;
@@ -108,6 +109,7 @@ class ProcurementRequest {
     required this.familyAddress,
     required this.packId,
     required this.packName,
+    required this.category,
     required this.items,
     required this.budgetLimit,
     this.totalSpent = 0.0,
@@ -138,6 +140,7 @@ class ProcurementRequest {
       'familyAddress': familyAddress,
       'packId': packId,
       'packName': packName,
+      'category': category,
       'items': items.map((e) => e.toMap()).toList(),
       'budgetLimit': budgetLimit,
       'totalSpent': totalSpent,
@@ -166,6 +169,9 @@ class ProcurementRequest {
       familyAddress: data['familyAddress'] ?? '',
       packId: data['packId'] ?? '',
       packName: data['packName'] ?? '',
+      category:
+          data['category'] ??
+          'Food', // Default to Food for backward compatibility
       items:
           (data['items'] as List<dynamic>?)
               ?.map((e) => ProcurementItem.fromMap(e))

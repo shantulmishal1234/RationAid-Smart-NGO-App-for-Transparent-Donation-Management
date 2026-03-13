@@ -199,4 +199,50 @@ class AssistancePackService {
       rethrow;
     }
   }
+
+  /// Emergency Rescue: Finds and assigns a matching pack to a family that was
+  /// approved BEFORE packs existed in the system (stranded with 0 budget).
+  static Future<bool> rescueFamilyPack(String familyId, int familySize) async {
+    try {
+      final matchingPack = await findMatchingPack(familySize);
+      if (matchingPack == null) return false;
+
+      final Map<String, num> packNeeds = {};
+      for (var item in matchingPack.items) {
+        // Extract leading decimal number: "3.5 kg" → 3.5, "5 kg" → 5
+        final qtyMatch = RegExp(r'[\d.]+').firstMatch(item.quantity);
+        final num qty = qtyMatch != null
+            ? (double.tryParse(qtyMatch.group(0)!) ?? 1.0)
+            : 1;
+        packNeeds[item.name] = qty;
+      }
+
+      await _firestore.collection('families').doc(familyId).update({
+        'assignedPackId': matchingPack.id,
+        'assignedPackName': matchingPack.name,
+        'assignedPackBudget': matchingPack.budgetAmount,
+        'targetAmount': matchingPack.budgetAmount,
+        'remainingAmount': matchingPack.budgetAmount,
+        'needs': packNeeds,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      await AuditService.logAction(
+        action: 'retro_assign_pack',
+        entityType: 'family',
+        entityId: familyId,
+        details: 'Retroactively assigned missing pack: "${matchingPack.name}"',
+        metadata: {
+          'packId': matchingPack.id,
+          'budgetAssigned': matchingPack.budgetAmount,
+          'familySize': familySize,
+        },
+      );
+
+      return true;
+    } catch (e) {
+      print('Error rescuing family pack: $e');
+      return false;
+    }
+  }
 }

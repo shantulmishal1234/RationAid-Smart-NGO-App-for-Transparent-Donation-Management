@@ -24,13 +24,23 @@ class ProcurementService {
       final family = Family.fromFirestore(familyDoc);
 
       // Criteria:
-      // 1. Fully Funded (or raised + pending >= target)
-      // 2. Pack Assigned
+      // 1. Fully Funded via combined progress (cash + in-kind value >= target)
+      // 2. Based on Assistance Category (Food or Medicine)
       // 3. No existing active request
-
       final isFunded =
-          (family.raisedAmount + family.pendingAmount) >= family.targetAmount;
-      if (!isFunded || family.assignedPackId == null) return;
+          family.combinedProgress >= family.targetAmount ||
+          family.raisedAmount >= family.targetAmount;
+      if (!isFunded) return;
+
+      final isMedicine = family.assistanceNeeds.contains('Medicine');
+      final isFood = family.assistanceNeeds.contains('Food');
+
+      if (!isMedicine && !isFood) return; // Unknown type
+
+      // If Food, it must have an assigned pack
+      if (isFood &&
+          (family.assignedPackId == null || family.assignedPackId!.isEmpty))
+        return;
 
       // Check existing — include 'stocked' to prevent double-ordering
       final existingQuery = await _firestore
@@ -44,38 +54,116 @@ class ProcurementService {
 
       if (existingQuery.docs.isNotEmpty) return; // Already exists
 
-      // Retrieve Pack Details
-      final packDoc = await _firestore
-          .collection('assistance_packs')
-          .doc(family.assignedPackId)
-          .get();
-      if (!packDoc.exists) return;
-      final pack = AssistancePack.fromFirestore(packDoc);
+      // \u2500\u2500 Phase IK: Query warehouse_stock to subtract already-donated items \u2500\u2500\u2500\u2500\u2500\u2500
+      // Get all 'received' in-kind batches reserved for this family.
+      final Map<String, num> alreadyStocked = {};
+      if (isFood) {
+        final stockSnaps = await _firestore
+            .collection('warehouse_stock')
+            .where('familyId', isEqualTo: familyId)
+            .where('status', isEqualTo: 'received')
+            .get();
+        for (final doc in stockSnaps.docs) {
+          final data = doc.data();
+          final batchItems = Map<String, dynamic>.from(
+            data['items'] as Map? ?? {},
+          );
+          batchItems.forEach(
+            (k, v) => alreadyStocked[k] = (alreadyStocked[k] ?? 0) + (v as num),
+          );
+        }
+      }
+      // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
-      // Create Request
-      final request = ProcurementRequest(
-        id: '', // Auto-id
-        familyId: family.id,
-        familyAddress: family.area, // Only show Area to purchaser
-        packId: pack.id,
-        packName: pack.name,
-        items: pack.items
-            .map(
-              (item) => ProcurementItem(
-                name: item.name,
-                quantity: item.quantity,
-                estimatedCost: item.estimatedCost,
-              ),
-            )
-            .toList(),
-        // Budget = sum of pack's estimated item costs (not family donation target)
-        budgetLimit: pack.items.fold(
-          0.0,
-          (acc, item) => acc + item.estimatedCost,
-        ),
-        createdAt: DateTime.now(),
-        status: ProcurementStatus.pending,
-      );
+      ProcurementRequest request;
+
+      if (isMedicine) {
+        request = ProcurementRequest(
+          id: '',
+          familyId: family.id,
+          familyAddress: family.area,
+          packId: '',
+          packName: 'Medical Prescription Support',
+          category: 'Medicine',
+          items: [
+            ProcurementItem(
+              name: 'Assessed Medical Supplies',
+              quantity: '1 Month Supply',
+              estimatedCost: family.customMedicineBudget,
+            ),
+          ],
+          budgetLimit: family.customMedicineBudget,
+          createdAt: DateTime.now(),
+          status: ProcurementStatus.pending,
+        );
+      } else {
+        // Retrieve Pack Details for Food
+        final packDoc = await _firestore
+            .collection('assistance_packs')
+            .doc(family.assignedPackId)
+            .get();
+        if (!packDoc.exists) return;
+        final pack = AssistancePack.fromFirestore(packDoc);
+
+        // Build a SMART item list — subtract what's already in warehouse
+        final List<ProcurementItem> smartItems = [];
+        double smartBudget = 0.0;
+
+        for (final item in pack.items) {
+          // Parse quantity from pack (e.g., "10" or "10kg" — extract the number)
+          final rawQty =
+              double.tryParse(
+                item.quantity.replaceAll(RegExp(r'[^0-9.]'), ''),
+              ) ??
+              1.0;
+          final stocked = alreadyStocked[item.name] ?? 0;
+          final needToBuy = rawQty - stocked;
+
+          if (needToBuy <= 0) {
+            // Fully covered by in-kind donation — skip this item
+            debugPrint(
+              '[Procurement] Skipping ${item.name} — already in warehouse ($stocked units)',
+            );
+            continue;
+          }
+
+          // Partially or fully needed
+          final ratio = needToBuy / rawQty;
+          final adjustedCost = item.estimatedCost * ratio;
+          smartItems.add(
+            ProcurementItem(
+              name: item.name,
+              quantity: needToBuy.toStringAsFixed(0),
+              estimatedCost: adjustedCost,
+            ),
+          );
+          smartBudget += adjustedCost;
+        }
+
+        // All items fully covered by in-kind donations — skip procurement entirely
+        if (smartItems.isEmpty) {
+          debugPrint(
+            '[Procurement] All items for family $familyId are in warehouse. Skipping procurement.',
+          );
+          await _firestore.collection('families').doc(familyId).update({
+            'fulfillmentStatus': 'ready_for_dispatch',
+          });
+          return;
+        }
+
+        request = ProcurementRequest(
+          id: '', // Auto-id
+          familyId: family.id,
+          familyAddress: family.area,
+          packId: pack.id,
+          packName: pack.name,
+          category: 'Food',
+          items: smartItems,
+          budgetLimit: smartBudget,
+          createdAt: DateTime.now(),
+          status: ProcurementStatus.pending,
+        );
+      }
 
       await _firestore.collection(_collection).add(request.toFirestore());
 
@@ -86,12 +174,14 @@ class ProcurementService {
 
       // Notify all purchasers
       await NotificationService.notifyAllPurchasers(
-        title: 'New Request Available 📦',
-        message:
-            'A new pack "${pack.name}" is ready for purchase in ${family.area}.',
+        title: isMedicine
+            ? 'New Medical Support Request 💊'
+            : 'New Request Available 📦',
+        message: isMedicine
+            ? 'A medical prescription requires procurement in ${family.area}.'
+            : 'A new pack "${request.packName}" is ready for purchase in ${family.area}.',
         actionType: 'new_request',
-        actionId:
-            family.id, // Using family ID as action ID to maybe filter/highlight
+        actionId: family.id,
       );
     } catch (e) {
       debugPrint('Error generating procurement request: $e');
@@ -399,11 +489,11 @@ class ProcurementService {
       final locationVerified = family.verifiedLocation != null;
 
       // 3. Build items map from procurement items
-      // ProcurementItem.quantity is a String like "10kg" — extract leading int
-      final itemsMap = <String, int>{};
+      // ProcurementItem.quantity is a String like "3.5kg" — extract leading num
+      final itemsMap = <String, num>{};
       for (final item in request.items) {
-        final qtyStr = RegExp(r'\d+').stringMatch(item.quantity);
-        itemsMap[item.name] = qtyStr != null ? int.parse(qtyStr) : 1;
+        final qtyStr = RegExp(r'[\d.]+').stringMatch(item.quantity);
+        itemsMap[item.name] = qtyStr != null ? double.parse(qtyStr) : 1;
       }
 
       // 4. Auto-create DeliveryAssignment (links purchaser → distributor pipeline)

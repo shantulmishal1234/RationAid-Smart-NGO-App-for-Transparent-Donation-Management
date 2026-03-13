@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/models/family_model.dart';
@@ -61,6 +62,21 @@ class _FamilyVotingWidgetState extends State<FamilyVotingWidget> {
         _reviews = reviews;
         _loadingReviews = false;
       });
+
+      // AUTO-HEAL: If the family mathematically met quorum but the DB is stuck
+      if (!widget.family.quorumReached &&
+          (widget.family.approveCount >= widget.family.quorumThreshold ||
+              widget.family.rejectCount >= widget.family.quorumThreshold)) {
+        try {
+          // Immediately fix the DB boolean so it proceeds to Final Approver queue
+          FirebaseFirestore.instance
+              .collection('families')
+              .doc(widget.family.id)
+              .update({'quorumReached': true});
+        } catch (e) {
+          debugPrint('Error auto-healing family: $e');
+        }
+      }
     }
   }
 

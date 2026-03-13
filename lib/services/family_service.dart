@@ -13,7 +13,10 @@ class FamilyService {
         .where('status', isEqualTo: 'accepted')
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs.map((doc) => Family.fromFirestore(doc)).toList();
+          return snapshot.docs
+              .map((doc) => Family.fromFirestore(doc))
+              .where((f) => f.id != 'general_relief_fund')
+              .toList();
         });
   }
 
@@ -45,7 +48,10 @@ class FamilyService {
         .where('area', isEqualTo: area)
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs.map((doc) => Family.fromFirestore(doc)).toList();
+          return snapshot.docs
+              .map((doc) => Family.fromFirestore(doc))
+              .where((f) => f.id != 'general_relief_fund')
+              .toList();
         });
   }
 
@@ -59,7 +65,7 @@ class FamilyService {
 
       final areas = snapshot.docs
           .map((doc) => (doc.data()['area'] ?? '') as String)
-          .where((area) => area.isNotEmpty)
+          .where((area) => area.isNotEmpty && area != 'General Relief Fund')
           .toSet()
           .toList();
 
@@ -78,7 +84,9 @@ class FamilyService {
           .where('status', isEqualTo: 'accepted')
           .get();
 
-      return snapshot.docs.length;
+      return snapshot.docs
+          .where((doc) => doc.id != 'general_relief_fund')
+          .length;
     } catch (e) {
       return 0;
     }
@@ -94,6 +102,7 @@ class FamilyService {
 
       final families = snapshot.docs
           .map((doc) => Family.fromFirestore(doc))
+          .where((f) => f.id != 'general_relief_fund')
           .where(
             (family) =>
                 family.area.toLowerCase().contains(searchQuery.toLowerCase()),

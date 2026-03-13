@@ -290,30 +290,35 @@ class _DistributorProfileSectionState extends State<DistributorProfileSection> {
     int strength = 0;
     List<String> feedback = [];
 
-    if (password.length >= 8)
+    if (password.length >= 8) {
       strength++;
-    else
+    } else {
       feedback.add('At least 8 characters');
+    }
 
-    if (password.contains(RegExp(r'[A-Z]')))
+    if (password.contains(RegExp(r'[A-Z]'))) {
       strength++;
-    else
+    } else {
       feedback.add('One uppercase letter');
+    }
 
-    if (password.contains(RegExp(r'[a-z]')))
+    if (password.contains(RegExp(r'[a-z]'))) {
       strength++;
-    else
+    } else {
       feedback.add('One lowercase letter');
+    }
 
-    if (password.contains(RegExp(r'[0-9]')))
+    if (password.contains(RegExp(r'[0-9]'))) {
       strength++;
-    else
+    } else {
       feedback.add('One number');
+    }
 
-    if (password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]')))
+    if (password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) {
       strength++;
-    else
+    } else {
       feedback.add('One special character (!@#\$%^&*)');
+    }
 
     String label;
     Color color;
@@ -463,10 +468,12 @@ class _DistributorProfileSectionState extends State<DistributorProfileSection> {
                         ),
                       ),
                       validator: (val) {
-                        if (val == null || val.isEmpty)
+                        if (val == null || val.isEmpty) {
                           return 'Enter new password';
-                        if (val.length < 8)
+                        }
+                        if (val.length < 8) {
                           return 'Must be at least 8 characters';
+                        }
                         return null;
                       },
                     ),
@@ -508,8 +515,9 @@ class _DistributorProfileSectionState extends State<DistributorProfileSection> {
                         ),
                       ),
                       validator: (val) {
-                        if (val != newPasswordController.text)
+                        if (val != newPasswordController.text) {
                           return 'Passwords do not match';
+                        }
                         return null;
                       },
                     ),
@@ -769,8 +777,9 @@ class _DistributorProfileSectionState extends State<DistributorProfileSection> {
                 ),
                 validator: (val) {
                   if (val == null || val.isEmpty) return 'Enter phone number';
-                  if (!RegExp(r'^(\+92|0)?3[0-9]{9}$').hasMatch(val))
+                  if (!RegExp(r'^(\+92|0)?3[0-9]{9}$').hasMatch(val)) {
                     return 'Invalid Pakistan phone';
+                  }
                   return null;
                 },
               ),
@@ -896,14 +905,15 @@ class _DistributorProfileSectionState extends State<DistributorProfileSection> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () async {
+            onPressed: () {
               Navigator.pop(context);
-              await AuthService().signOut();
-              if (context.mounted) {
-                Navigator.of(
-                  context,
-                ).pushNamedAndRemoveUntil('/login', (route) => false);
-              }
+              Navigator.of(
+                context,
+              ).pushNamedAndRemoveUntil('/login', (route) => false);
+
+              Future.delayed(const Duration(milliseconds: 400), () async {
+                await AuthService().signOut();
+              });
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
@@ -1118,7 +1128,7 @@ class _DistributorProfileSectionState extends State<DistributorProfileSection> {
                     ),
                     trailing: Switch(
                       value: theme.brightness == Brightness.dark,
-                      activeColor: AppColors.volunteerBlue,
+                      activeThumbColor: AppColors.volunteerBlue,
                       onChanged: (val) => themeProvider.toggleTheme(),
                     ),
                   ),

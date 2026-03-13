@@ -107,9 +107,14 @@ class FinalApprovalService {
           updateData['locationVerifiedBy'] = userName;
         }
 
-        // Auto-assign assistance pack based on family size
         final familySize = familyData?['familySize'] ?? 0;
-        if (familySize > 0) {
+        final List<dynamic> needsList = familyData?['assistanceNeeds'] ?? [];
+        final isFood = needsList.contains('Food');
+        final isMedicine = needsList.contains('Medicine');
+        final double medicineBudget =
+            (familyData?['customMedicineBudget'] ?? 0.0).toDouble();
+
+        if (isFood && familySize > 0) {
           try {
             final matchingPack = await AssistancePackService.findMatchingPack(
               familySize,
@@ -119,25 +124,20 @@ class FinalApprovalService {
               updateData['assignedPackName'] = matchingPack.name;
               updateData['assignedPackBudget'] = matchingPack.budgetAmount;
 
-              // Phase 4 & 6 Fix: Populate target amount and needs from pack
               updateData['targetAmount'] = matchingPack.budgetAmount;
               updateData['remainingAmount'] = matchingPack.budgetAmount;
 
-              // Convert List<PackItem> to Map<String, int> for family needs
-              final Map<String, int> packNeeds = {};
+              final Map<String, num> packNeeds = {};
               for (var item in matchingPack.items) {
-                // Parse quantity string to int (handle "2 kg" -> 2 if needed, or assume int string)
-                // For now assuming quantity is numeric string or simple count
-                final qty =
-                    int.tryParse(
-                      item.quantity.replaceAll(RegExp(r'[^0-9]'), ''),
-                    ) ??
-                    1;
+                // Extract leading decimal number: "3.5 kg" → 3.5, "5 kg" → 5
+                final qtyMatch = RegExp(r'[\d.]+').firstMatch(item.quantity);
+                final num qty = qtyMatch != null
+                    ? (double.tryParse(qtyMatch.group(0)!) ?? 1.0)
+                    : 1;
                 packNeeds[item.name] = qty;
               }
               updateData['needs'] = packNeeds;
 
-              // Log pack assignment
               await AuditService.logAction(
                 action: 'auto_assign_pack',
                 entityType: 'family',
@@ -155,8 +155,11 @@ class FinalApprovalService {
             }
           } catch (e) {
             print('Error auto-assigning pack: $e');
-            // Continue with approval even if pack assignment fails
           }
+        } else if (isMedicine && medicineBudget > 0) {
+          updateData['targetAmount'] = medicineBudget;
+          updateData['remainingAmount'] = medicineBudget;
+          updateData['needs'] = {'Medicine (Custom)': 1};
         }
       }
 

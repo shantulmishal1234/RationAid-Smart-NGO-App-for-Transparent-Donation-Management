@@ -104,7 +104,11 @@ class _HistoryViewState extends State<HistoryView> {
           (sum, r) => sum + r.totalSpent,
         );
         final activeCountAllTime = historyRequests
-            .where((r) => r.status == ProcurementStatus.verified || r.status == ProcurementStatus.stocked)
+            .where(
+              (r) =>
+                  r.status == ProcurementStatus.verified ||
+                  r.status == ProcurementStatus.stocked,
+            )
             .length;
         final deliveredCountAllTime = historyRequests
             .where((r) => r.status == ProcurementStatus.delivered)
@@ -113,12 +117,18 @@ class _HistoryViewState extends State<HistoryView> {
         // 3. Apply View Filters (Status)
         if (_filterStatus != 'All') {
           historyRequests = historyRequests.where((r) {
-            if (_filterStatus == 'Active')
-              return r.status == ProcurementStatus.verified || r.status == ProcurementStatus.stocked || r.status == ProcurementStatus.issue_reported;
-            if (_filterStatus == 'Delivered')
-              return r.status == ProcurementStatus.delivered || r.status == ProcurementStatus.written_off;
-            if (_filterStatus == 'Rejected')
+            if (_filterStatus == 'Active') {
+              return r.status == ProcurementStatus.verified ||
+                  r.status == ProcurementStatus.stocked ||
+                  r.status == ProcurementStatus.issue_reported;
+            }
+            if (_filterStatus == 'Delivered') {
+              return r.status == ProcurementStatus.delivered ||
+                  r.status == ProcurementStatus.written_off;
+            }
+            if (_filterStatus == 'Rejected') {
               return r.status == ProcurementStatus.rejected;
+            }
             return true;
           }).toList();
         }
@@ -384,16 +394,16 @@ class _HistoryViewState extends State<HistoryView> {
                       ),
                       tooltip: 'Filter Date',
                       onSelected: (value) {
-                        if (value == 'clear')
+                        if (value == 'clear') {
                           setState(() => _selectedDateRange = null);
-                        else if (value == 'custom')
+                        } else if (value == 'custom')
                           _showCustomRangePicker();
                         else {
                           final now = DateTime.now();
                           DateTime start = now;
-                          if (value == 'today')
+                          if (value == 'today') {
                             start = DateTime(now.year, now.month, now.day);
-                          else if (value == '7days')
+                          } else if (value == '7days')
                             start = now.subtract(const Duration(days: 6));
                           else if (value == '30days')
                             start = now.subtract(const Duration(days: 29));

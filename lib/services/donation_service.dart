@@ -1,14 +1,19 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ration_aid/models/donation_model.dart';
 import 'package:ration_aid/services/audit_service.dart';
-import 'package:ration_aid/services/funding_service.dart'; // Added
+import 'package:ration_aid/services/funding_service.dart';
 import 'package:ration_aid/services/notification_service.dart';
+import 'package:uuid/uuid.dart';
 
 /// Service for managing donations in Firestore
 class DonationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// Create a new donation
+  /// Create a new donation.
+  ///
+  /// Cash donations are routed through `FundingService.submitAtomicDonation()`
+  /// for atomic idempotency, cap enforcement, overflow routing, and ledger update.
+  /// In-kind donations use the direct Firestore path (no monetary cap needed).
   Future<String> createDonation(Donation donation) async {
     try {
       // Fetch donor information from users collection
@@ -25,16 +30,66 @@ class DonationService {
 
       final userData = userDoc.data();
       final donorName =
-          userData?['name'] as String? ?? userData?['display_name'] as String?;
-      final donorEmail = userData?['email'] as String?;
+          userData?['name'] as String? ??
+          userData?['display_name'] as String? ??
+          'Anonymous';
+      final donorEmail = userData?['email'] as String? ?? '';
 
-      // Debug: Print donor info (remove in production)
-      print('Creating donation with donor info:');
-      print('  donorId: ${donation.donorId}');
-      print('  donorName: $donorName');
-      print('  donorEmail: $donorEmail');
+      // ── Cash donations → atomic engine ────────────────────────────────
+      if (donation.donationType == DonationType.cash &&
+          donation.status != DonationStatus.draft) {
+        if (donation.familyId.isEmpty) {
+          throw Exception(
+            'Cash donation must have a target family (or general_relief_fund)',
+          );
+        }
 
-      // Create donation with donor information
+        // Generate idempotency key if not set
+        final idempotencyKey = donation.idempotencyKey.isNotEmpty
+            ? donation.idempotencyKey
+            : const Uuid().v4();
+
+        final result = await FundingService.submitAtomicDonation(
+          donorId: donation.donorId,
+          donorName: donorName,
+          donorEmail: donorEmail,
+          targetFamilyId: donation.familyId,
+          amount: donation.amount ?? 0,
+          allocationMode: donation.allocationMode.isNotEmpty
+              ? donation.allocationMode
+              : 'direct',
+          idempotencyKey: idempotencyKey,
+          anonymous: donation.anonymous,
+          donationNote: donation.donationNote,
+          paymentProofUrl: donation.paymentProofUrl,
+        );
+
+        // Log audit trail
+        await AuditService.logDonationAction(
+          action: 'create_donation',
+          donationId: result.donationId,
+          details:
+              'Mode: ${donation.allocationMode} | Amount: ${donation.amount} | Effective: ${result.effectiveAmount} | Overflow: ${result.overflowAmount}',
+        );
+
+        // Notify admins
+        if (donation.status == DonationStatus.underVerification) {
+          await NotificationService.sendToRole(
+            role: 'admin',
+            title: 'New Cash Donation Submitted',
+            body: '$donorName submitted a Cash donation for verification',
+            data: {
+              'type': 'donation_submitted',
+              'donationId': result.donationId,
+              'route': '/admin/donations',
+            },
+          );
+        }
+
+        return result.donationId;
+      }
+
+      // ── In-kind / draft donations → direct path ───────────────────────
       final donationWithDonorInfo = Donation(
         id: donation.id,
         donorId: donation.donorId,
@@ -52,21 +107,24 @@ class DonationService {
         donationNote: donation.donationNote,
         createdAt: donation.createdAt,
         updatedAt: donation.updatedAt,
+        pickupAddress: donation.pickupAddress,
+        contactNumber: donation.contactNumber,
         statusHistory: donation.statusHistory,
-        estimatedDelivery: donation.estimatedDelivery,
-        driverName: donation.driverName,
-        driverPhone: donation.driverPhone,
-        vehicleNumber: donation.vehicleNumber,
-        deliveryPhotos: donation.deliveryPhotos,
-        deliveredAt: donation.deliveredAt,
-        receivedBy: donation.receivedBy,
+        allocationMode: donation.allocationMode.isNotEmpty
+            ? donation.allocationMode
+            : 'direct',
+        effectiveAmount: donation.amount ?? 0,
+        overflowAmount: 0,
+        idempotencyKey: donation.idempotencyKey.isNotEmpty
+            ? donation.idempotencyKey
+            : const Uuid().v4(),
       );
 
       final docRef = await _firestore
           .collection('donations')
           .add(donationWithDonorInfo.toFirestore());
 
-      // FIX Bug#4: Only trigger recalc for non-draft donations (drafts don't count toward funding)
+      // Recalculate only for in-kind non-draft
       if (donation.familyId.isNotEmpty &&
           donation.status != DonationStatus.draft) {
         await FundingService.recalculateFamilyFunding(donation.familyId);
@@ -79,30 +137,30 @@ class DonationService {
         details: 'Status: ${donation.status.toFirestore()}',
       );
 
-      // Send notification to admins if submitted for verification
+      // Notify admins for in-kind verification
       if (donation.status == DonationStatus.underVerification) {
         await NotificationService.sendToRole(
           role: 'admin',
-          title: 'New Donation Submitted',
-          body:
-              '${donorName ?? "A donor"} submitted a ${donation.donationType == DonationType.cash ? "Cash" : "In-Kind"} donation for verification',
+          title: 'New In-Kind Donation Submitted',
+          body: '$donorName submitted an In-Kind donation for verification',
           data: {
             'type': 'donation_submitted',
             'donationId': docRef.id,
             'route': '/admin/donations',
           },
         );
-        print('Notification sent to admins for donation: ${docRef.id}');
       }
 
       return docRef.id;
     } catch (e) {
-      print('Error creating donation: $e');
       throw Exception('Failed to create donation: $e');
     }
   }
 
-  /// Update an existing donation
+  /// Update an existing donation.
+  ///
+  /// Fix #15: mutation of verified/in-process/delivered donations is blocked.
+  /// Fix #5: cash draft → under_verification goes through submitAtomicDonation.
   Future<void> updateDonation(String donationId, Donation donation) async {
     try {
       // Get current donation to log before status
@@ -113,12 +171,78 @@ class DonationService {
       final currentData = currentDoc.data();
       final beforeStatus = currentData?['status'] ?? '';
 
+      // Fix #15 — block mutation of immutable states
+      const immutableStatuses = [
+        'verified',
+        'in_process',
+        'out_for_delivery',
+        'delivered',
+        'closed',
+      ];
+      if (immutableStatuses.contains(beforeStatus)) {
+        throw Exception(
+          'Cannot modify a donation in "$beforeStatus" state. '
+          'Only draft or under_verification donations can be edited.',
+        );
+      }
+
+      final afterStatus = donation.status.toFirestore();
+
+      // Fix #5 — route cash draft→under_verification through the atomic engine
+      // so correct cap + idempotency logic runs, not recalculateFamilyFunding().
+      if (donation.donationType == DonationType.cash &&
+          beforeStatus == 'draft' &&
+          afterStatus == 'under_verification') {
+        final userDoc = await _firestore
+            .collection('users')
+            .doc(donation.donorId)
+            .get();
+        final userData = userDoc.data();
+        final donorName =
+            userData?['name'] as String? ??
+            userData?['display_name'] as String? ??
+            donation.donorName ??
+            'Anonymous';
+        final donorEmail =
+            userData?['email'] as String? ?? donation.donorEmail ?? '';
+
+        // Delete the draft document first (atomic engine writes a new one)
+        await _firestore.collection('donations').doc(donationId).delete();
+
+        final idempotencyKey = donation.idempotencyKey.isNotEmpty
+            ? donation.idempotencyKey
+            : const Uuid().v4();
+
+        final result = await FundingService.submitAtomicDonation(
+          donorId: donation.donorId,
+          donorName: donorName,
+          donorEmail: donorEmail,
+          targetFamilyId: donation.familyId,
+          amount: donation.amount ?? 0,
+          allocationMode: donation.allocationMode.isNotEmpty
+              ? donation.allocationMode
+              : 'direct',
+          idempotencyKey: idempotencyKey,
+          anonymous: donation.anonymous,
+          donationNote: donation.donationNote,
+          paymentProofUrl: donation.paymentProofUrl,
+        );
+
+        await AuditService.logDonationAction(
+          action: 'submit_draft_donation',
+          donationId: result.donationId,
+          details:
+              'Draft submitted atomically | Effective: ${result.effectiveAmount} | Overflow: ${result.overflowAmount}',
+        );
+        return;
+      }
+
+      // Standard update path (non-cash or re-upload of rejected)
       await _firestore
           .collection('donations')
           .doc(donationId)
           .update(donation.toFirestore());
 
-      // FIX Bug#4: Only trigger recalc when status is not draft (avoids wasteful recalcs on every save)
       if (donation.familyId.isNotEmpty &&
           donation.status != DonationStatus.draft) {
         await FundingService.recalculateFamilyFunding(donation.familyId);
@@ -132,7 +256,6 @@ class DonationService {
       );
 
       // Notify admins if status changed to underVerification
-      final afterStatus = donation.status.toFirestore();
       if (afterStatus == 'under_verification' &&
           (beforeStatus == 'draft' || beforeStatus == 'pending')) {
         final donorName = donation.donorName ?? 'A donor';
@@ -140,31 +263,40 @@ class DonationService {
           role: 'admin',
           title: 'Donation Submitted for Verification',
           body:
-              '$donorName submitted a ${donation.donationType == DonationType.cash ? "Cash" : "In-Kind"} donation for verification',
+              '$donorName submitted a ${donation.donationType == DonationType.cash ? 'Cash' : 'In-Kind'} donation for verification',
           data: {
             'type': 'donation_submitted',
             'donationId': donationId,
             'route': '/admin/donations',
           },
         );
-        print('Notification sent to admins for updated donation: $donationId');
       }
 
       // Notify Donor of status changes
       if (afterStatus != beforeStatus) {
         String? title;
         String? body;
+        // Fix #17 — actionable rejection notification with amount and reason
+        final rawAmount = currentData?['amount'];
+        final amountStr = rawAmount != null
+            ? 'PKR ${(rawAmount as num).toStringAsFixed(0)}'
+            : 'your';
+        final donType = currentData?['donationType'] == 'inKind'
+            ? 'in-kind'
+            : 'cash';
+        final rejectionReason = currentData?['rejectionReason'] as String?;
 
         switch (afterStatus) {
           case 'verified':
             title = 'Donation Verified! ✅';
             body =
-                'Your donation has been verified. Thank you for your support!';
+                'Your $amountStr $donType donation has been verified. Thank you!';
             break;
           case 'rejected':
             title = 'Action Required ⚠️';
-            body =
-                'Your donation was returned. Please check the app for details.';
+            body = rejectionReason != null
+                ? 'Your $amountStr $donType donation was rejected. Reason: $rejectionReason'
+                : 'Your $amountStr $donType donation was rejected. Please check the app for details.';
             break;
           case 'out_for_delivery':
             title = 'On the Way! 🚚';
@@ -173,11 +305,11 @@ class DonationService {
           case 'delivered':
             title = 'Impact Made! ❤️';
             body =
-                'Your donation has been delivered. Thank you form making a difference!';
+                'Your $amountStr donation has been delivered. Thank you for making a difference!';
             break;
           case 'cancelled':
             title = 'Donation Cancelled';
-            body = 'Your donation has been cancelled.';
+            body = 'Your $amountStr $donType donation has been cancelled.';
             break;
         }
 
@@ -193,9 +325,6 @@ class DonationService {
                 'donationId': donationId,
                 'status': afterStatus,
               },
-            );
-            print(
-              'Notification sent to donor $donorId for status: $afterStatus',
             );
           }
         }
@@ -273,6 +402,7 @@ class DonationService {
         .collection('donations')
         .where('donorId', isEqualTo: donorId)
         .orderBy('createdAt', descending: true)
+        .limit(200) // Cap to prevent unbounded reads at scale
         .snapshots()
         .map((snapshot) {
           return snapshot.docs
@@ -309,6 +439,7 @@ class DonationService {
         .where('donorId', isEqualTo: donorId)
         .where('status', isEqualTo: status.toFirestore())
         .orderBy('createdAt', descending: true)
+        .limit(100) // Cap to prevent unbounded reads at scale
         .snapshots()
         .map((snapshot) {
           return snapshot.docs
@@ -410,11 +541,8 @@ class DonationService {
         'updatedAt': Timestamp.now(),
       });
 
-      // Trigger funding recalculation
-      final familyId = data?['familyId'] as String?;
-      if (familyId != null && familyId.isNotEmpty) {
-        await FundingService.recalculateFamilyFunding(familyId);
-      }
+      // Note: No recalculateFamilyFunding() here — status change doesn't
+      // alter financial amounts. Funding is handled atomically at creation.
 
       // Log audit trail
       await AuditService.logDonationAction(
@@ -494,44 +622,70 @@ class DonationService {
     });
   }
 
-  /// Stream the latest active donation for a donor
-  /// Active means pending, under verification, verified, in process, or out for delivery
+  /// Stream the latest active donation for a donor.
+  ///
+  /// Fix #1: Uses server-side `whereIn` + `.limit(1)` to avoid full-collection
+  /// scan. Requires a composite Firestore index:
+  ///   donations → donorId ASC, status ASC, updatedAt DESC
   Stream<Donation?> streamActiveDonation(String donorId) {
+    const activeStatuses = [
+      'pending',
+      'under_verification',
+      'verified',
+      'in_process',
+      'out_for_delivery',
+    ];
     return _firestore
         .collection('donations')
         .where('donorId', isEqualTo: donorId)
+        .where('status', whereIn: activeStatuses)
+        .orderBy('updatedAt', descending: true)
+        .limit(1)
         .snapshots()
         .map((snapshot) {
           if (snapshot.docs.isEmpty) return null;
+          return Donation.fromFirestore(snapshot.docs.first);
+        });
+  }
 
-          final activeStatuses = const [
-            'pending',
-            'under_verification',
-            'verified',
-            'in_process',
-            'out_for_delivery',
-          ];
-
-          // Filter for active donations client-side
-          final activeDocs = snapshot.docs.where((doc) {
-            final data = doc.data();
-            final status = data['status'] as String?;
-            return status != null && activeStatuses.contains(status);
-          }).toList();
-
-          if (activeDocs.isEmpty) return null;
-
-          // client-side sort
-          activeDocs.sort((a, b) {
-            final t1 = a.data()['updatedAt'] as Timestamp?;
-            final t2 = b.data()['updatedAt'] as Timestamp?;
-            if (t1 == null && t2 == null) return 0;
-            if (t1 == null) return 1;
-            if (t2 == null) return -1;
-            return t2.compareTo(t1); // Descending
-          });
-
-          return Donation.fromFirestore(activeDocs.first);
+  /// Fix #10: Cap `streamDonorStats` to avoid unbounded doc reads.
+  /// Reads at most 500 docs — sufficient for any realistic donor history.
+  Stream<Map<String, int>> streamDonorStatsCapped(String donorId) {
+    return _firestore
+        .collection('donations')
+        .where('donorId', isEqualTo: donorId)
+        .orderBy('createdAt', descending: true)
+        .limit(500)
+        .snapshots()
+        .map((snapshot) {
+          final donations = snapshot.docs
+              .map((doc) => Donation.fromFirestore(doc))
+              .toList();
+          final familiesSupported = donations
+              .map((d) => d.familyId)
+              .toSet()
+              .length;
+          final activeDonations = donations
+              .where(
+                (d) =>
+                    d.status == DonationStatus.verified ||
+                    d.status == DonationStatus.inProcess ||
+                    d.status == DonationStatus.outForDelivery,
+              )
+              .length;
+          final completedDeliveries = donations
+              .where(
+                (d) =>
+                    d.status == DonationStatus.delivered ||
+                    d.status == DonationStatus.closed,
+              )
+              .length;
+          return {
+            'total': donations.length,
+            'families': familiesSupported,
+            'active': activeDonations,
+            'completed': completedDeliveries,
+          };
         });
   }
 }

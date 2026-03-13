@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/screens/Admin/models/admin_enums.dart';
 import 'package:ration_aid/screens/Admin/utils/admin_queries.dart';
-import 'package:ration_aid/screens/Admin/utils/admin_helpers.dart';
 import 'package:ration_aid/screens/Admin/utils/admin_cache.dart';
 import 'package:ration_aid/screens/Admin/components/member_tile.dart';
 import 'package:ration_aid/screens/Admin/HRM(members)/add_edit_member_screen.dart';
@@ -27,25 +26,24 @@ class HrmSection extends StatefulWidget {
 
 class _HrmSectionState extends State<HrmSection> {
   String _searchText = '';
-  late Future<Map<String, int>> _overviewFuture;
 
   // Performance: Debounce search to reduce rebuilds
   Timer? _debounce;
   final _searchController = TextEditingController();
 
+  /// Live stream of all users for real-time overview stats
+  final Stream<QuerySnapshot> _overviewStream = FirebaseFirestore.instance
+      .collection('users')
+      .snapshots();
+
   @override
   void initState() {
     super.initState();
-    _loadOverview();
   }
 
-  void _loadOverview({bool forceRefresh = false}) {
-    _overviewFuture = AdminHelpers.loadHrmOverview(forceRefresh: forceRefresh);
-  }
-
+  /// Refresh the member list (invalidate cache) — stats are already live
   void _invalidateCacheAndRefresh() {
     AdminCache.invalidate(CacheKeys.hrmOverview);
-    _loadOverview(forceRefresh: true);
     setState(() {});
   }
 
@@ -95,6 +93,7 @@ class _HrmSectionState extends State<HrmSection> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
 
+          // Real-time overview using StreamBuilder so stats update instantly
           child: FrostedPanel(
             padding: EdgeInsets.zero,
             child: ExpansionTile(
@@ -118,17 +117,28 @@ class _HrmSectionState extends State<HrmSection> {
               ),
               childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               children: [
-                FutureBuilder<Map<String, int>>(
-                  future: _overviewFuture,
+                StreamBuilder<QuerySnapshot>(
+                  stream: _overviewStream,
                   builder: (context, snapshot) {
-                    final d =
-                        snapshot.data ??
-                        {
-                          'total': 0,
-                          'purchaser': 0,
-                          'distributor': 0,
-                          'donor': 0,
-                        };
+                    int total = 0,
+                        admin = 0,
+                        purchaser = 0,
+                        distributor = 0,
+                        donor = 0;
+
+                    if (snapshot.hasData) {
+                      for (final doc in snapshot.data!.docs) {
+                        final roles = List<String>.from(
+                          (doc.data() as Map)['roles'] ?? [],
+                        );
+                        total++;
+                        if (roles.contains('admin')) admin++;
+                        if (roles.contains('purchaser')) purchaser++;
+                        if (roles.contains('distributor')) distributor++;
+                        if (roles.contains('donor')) donor++;
+                      }
+                    }
+
                     final loading =
                         snapshot.connectionState == ConnectionState.waiting;
 
@@ -153,31 +163,31 @@ class _HrmSectionState extends State<HrmSection> {
                         _overviewChip(
                           context,
                           label: 'Total',
-                          value: d['total'].toString(),
+                          value: total.toString(),
                           color: AdminColors.primaryBlue,
                         ),
                         _overviewChip(
                           context,
                           label: 'Admin',
-                          value: (d['admin'] ?? 0).toString(),
+                          value: admin.toString(),
                           color: Colors.red[600]!,
                         ),
                         _overviewChip(
                           context,
                           label: 'Purchaser',
-                          value: d['purchaser'].toString(),
+                          value: purchaser.toString(),
                           color: Colors.purple[600]!,
                         ),
                         _overviewChip(
                           context,
                           label: 'Distributor',
-                          value: d['distributor'].toString(),
+                          value: distributor.toString(),
                           color: Colors.teal[600]!,
                         ),
                         _overviewChip(
                           context,
                           label: 'Donor',
-                          value: d['donor'].toString(),
+                          value: donor.toString(),
                           color: Colors.orange[600]!,
                         ),
                       ],
@@ -391,6 +401,12 @@ class _HrmSectionState extends State<HrmSection> {
                   );
                 }
 
+                // Filter out deactivated members from the list
+                docs = docs.where((doc) {
+                  final data = doc.data();
+                  return data['isDeactivated'] != true;
+                }).toList();
+
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
                   itemCount: docs.length,
@@ -409,6 +425,9 @@ class _HrmSectionState extends State<HrmSection> {
                       assignedArea: data['assignedArea'] ?? '',
                       lastLoginAt: data['lastLoginAt'] as Timestamp?,
                       deliveryCount: (data['deliveryCount'] ?? 0) as int,
+                      procurementCount: (data['procurementCount'] ?? 0) as int,
+                      isSupervisor: data['isSupervisor'] == true,
+                      isFinalApprover: data['isFinalApprover'] == true,
                       onTap: () async {
                         final result = await Navigator.push<String>(
                           context,

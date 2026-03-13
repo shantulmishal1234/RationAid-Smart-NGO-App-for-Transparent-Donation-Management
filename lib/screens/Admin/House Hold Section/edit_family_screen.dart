@@ -3,8 +3,9 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:ration_aid/services/cloudinary_service.dart';
+import 'package:ration_aid/services/audit_service.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
 
@@ -34,8 +35,35 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
   final _emergencyContactController = TextEditingController();
   final _incomeController = TextEditingController();
   final _notesController = TextEditingController();
+  final _medicineBudgetController = TextEditingController();
 
   final Set<String> _assistanceNeeds = {};
+
+  // Phase 3 Extended Controllers & State
+  final _husbandNameController = TextEditingController();
+  bool _isWidow = false;
+
+  String _houseStatus = 'Rented';
+  final _rentAmountController = TextEditingController(text: '0');
+  String _houseCondition = 'Average';
+  final _houseSizeController = TextEditingController();
+
+  final List<Map<String, dynamic>> _childrenDetails = [];
+
+  bool _hasTransport = false;
+  final _transportDetailsController = TextEditingController();
+
+  final List<String> _availableElectronics = [
+    'TV',
+    'Fridge',
+    'Washing Machine',
+    'Water Pump (Motor)',
+    'Oven',
+    'Iron',
+  ];
+  final List<String> _selectedElectronics = [];
+
+  final _biographyController = TextEditingController();
 
   String? _uploadedDocUrl;
   String? _uploadedFileName;
@@ -56,12 +84,19 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
     _adultsController.dispose();
     _childrenController.dispose();
     _cityController.dispose();
-    _areaController.dispose();
     _addressController.dispose();
     _phoneController.dispose();
     _emergencyContactController.dispose();
     _incomeController.dispose();
     _notesController.dispose();
+    _medicineBudgetController.dispose();
+
+    _husbandNameController.dispose();
+    _rentAmountController.dispose();
+    _houseSizeController.dispose();
+    _transportDetailsController.dispose();
+    _biographyController.dispose();
+
     super.dispose();
   }
 
@@ -101,10 +136,42 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
       _addressController.text = data['address'] ?? '';
       _phoneController.text = data['phone'] ?? '';
       _emergencyContactController.text = data['emergencyContact'] ?? '';
-      _incomeController.text = data['monthlyIncome'] != null
-          ? '${data['monthlyIncome']}'
-          : '';
+      final income =
+          int.tryParse(data['monthlyIncome']?.toString() ?? '0') ?? 0;
+      _incomeController.text = income > 0 ? income.toString() : '';
       _notesController.text = data['remarks'] ?? '';
+
+      _husbandNameController.text = data['husbandName'] ?? '';
+      _isWidow = data['isWidow'] ?? false;
+      _houseStatus = data['houseStatus'] ?? 'Rented';
+      _rentAmountController.text = '${data['rentAmount'] ?? 0}';
+      _houseCondition = data['houseCondition'] ?? 'Average';
+      _houseSizeController.text = data['houseSize'] ?? '';
+      _childrenDetails.clear();
+      if (data['childrenDetails'] != null) {
+        _childrenDetails.addAll(
+          List<Map<String, dynamic>>.from(
+            (data['childrenDetails'] as List).map(
+              (i) => Map<String, dynamic>.from(i as Map),
+            ),
+          ),
+        );
+      }
+      _hasTransport = data['hasTransport'] ?? false;
+      _transportDetailsController.text = data['transportDetails'] ?? '';
+      _selectedElectronics.clear();
+      _selectedElectronics.addAll(
+        List<String>.from(data['electronicsOwned'] ?? []),
+      );
+      _biographyController.text = data['biography'] ?? '';
+
+      final customMedicineBudget = (data['customMedicineBudget'] ?? 0.0)
+          .toDouble();
+      if (customMedicineBudget > 0) {
+        _medicineBudgetController.text = customMedicineBudget
+            .toInt()
+            .toString();
+      }
 
       _assistanceNeeds
         ..clear()
@@ -133,16 +200,18 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
   }
 
   Future<void> _pickAndUploadDocument() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked == null) return;
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+    );
+    if (result == null || result.files.isEmpty) return;
 
     setState(() {
       _isUploadingDoc = true;
     });
 
     try {
-      final file = File(picked.path);
+      final file = File(result.files.single.path!);
       final url = await CloudinaryService.uploadImage(file);
 
       if (!mounted) return;
@@ -167,7 +236,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
       setState(() {
         _isUploadingDoc = false;
         _uploadedDocUrl = url;
-        _uploadedFileName = picked.name;
+        _uploadedFileName = result.files.single.name;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -208,37 +277,62 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
     setState(() => _isSaving = true);
 
     try {
-      final List<Map<String, dynamic>> documents = _uploadedDocUrl == null
-          ? []
-          : [
-              {
-                'type': 'verification_document',
-                'url': _uploadedDocUrl,
-                'fileName': _uploadedFileName,
-                'uploadedAt': DateTime.now(),
-              },
-            ];
+      final Map<String, dynamic> updateData = {
+        'name': _familyNameController.text.trim(),
+        'cnic': _cnicController.text.trim(),
+        'adults': int.tryParse(_adultsController.text) ?? 0,
+        'children': int.tryParse(_childrenController.text) ?? 0,
+        'familySize': _totalFamilySize,
+        'city': _cityController.text.trim(),
+        'area': _areaController.text.trim(),
+        'address': _addressController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'assistanceNeeds': _assistanceNeeds.toList(),
+        'emergencyContact': _emergencyContactController.text.trim(),
+        'monthlyIncome': int.tryParse(_incomeController.text) ?? 0,
+        'remarks': _notesController.text.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'husbandName': _husbandNameController.text.trim(),
+        'isWidow': _isWidow,
+        'houseStatus': _houseStatus,
+        'rentAmount': double.tryParse(_rentAmountController.text) ?? 0.0,
+        'houseCondition': _houseCondition,
+        'houseSize': _houseSizeController.text.trim(),
+        'biography': _biographyController.text.trim(),
+        'childrenDetails': _childrenDetails,
+        'hasTransport': _hasTransport,
+        'transportDetails': _transportDetailsController.text.trim(),
+        'electronicsOwned': _selectedElectronics,
+        if (_assistanceNeeds.contains('Medicine'))
+          'customMedicineBudget':
+              double.tryParse(_medicineBudgetController.text.trim()) ?? 0.0
+        else
+          'customMedicineBudget': 0.0,
+      };
+
+      if (_uploadedDocUrl != null) {
+        updateData['documents'] = FieldValue.arrayUnion([
+          {
+            'type': 'verification_document',
+            'url': _uploadedDocUrl,
+            'fileName': _uploadedFileName,
+            'uploadedAt': DateTime.now(),
+          },
+        ]);
+      }
 
       await FirebaseFirestore.instance
           .collection('families')
           .doc(widget.familyId)
-          .update({
-            'name': _familyNameController.text.trim(),
-            'cnic': _cnicController.text.trim(),
-            'adults': int.tryParse(_adultsController.text) ?? 0,
-            'children': int.tryParse(_childrenController.text) ?? 0,
-            'familySize': _totalFamilySize,
-            'city': _cityController.text.trim(),
-            'area': _areaController.text.trim(),
-            'address': _addressController.text.trim(),
-            'phone': _phoneController.text.trim(),
-            'assistanceNeeds': _assistanceNeeds.toList(),
-            'emergencyContact': _emergencyContactController.text.trim(),
-            'monthlyIncome': int.tryParse(_incomeController.text) ?? 0,
-            'remarks': _notesController.text.trim(),
-            'updatedAt': FieldValue.serverTimestamp(),
-            'documents': documents,
-          });
+          .update(updateData);
+
+      // Audit Log for Family Edit
+      await AuditService.logFamilyAction(
+        action: 'Family profile updated',
+        familyId: widget.familyId,
+        familyName: _familyNameController.text.trim(),
+        details: 'Admin modified family details/demographics',
+      );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -294,6 +388,11 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                                     controller: _familyNameController,
                                     label: 'Family Head Name',
                                     hint: 'Full Name',
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.allow(
+                                        RegExp(r'[a-zA-Z\s]'),
+                                      ),
+                                    ],
                                     validator: (value) {
                                       if (value == null ||
                                           value.trim().isEmpty) {
@@ -329,9 +428,36 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                               ],
                             ),
                           ),
+                          const SizedBox(height: 16),
+                          FrostedPanel(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildTextField(
+                                  controller: _husbandNameController,
+                                  label: 'Spouse/Husband Name (If applicable)',
+                                  hint: 'Full Name',
+                                ),
+                                const SizedBox(height: 12),
+                                const Divider(),
+                                SwitchListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text(
+                                    'Is Widow?',
+                                    style: TextStyle(fontSize: 14),
+                                  ),
+                                  value: _isWidow,
+                                  onChanged: (val) =>
+                                      setState(() => _isWidow = val),
+                                ),
+                              ],
+                            ),
+                          ),
                           const SizedBox(height: 32),
 
-                          _buildSectionHeader('Demographics & Income'),
+                          _buildSectionHeader(
+                            'Family Composition & Dependents',
+                          ),
                           const SizedBox(height: 16),
                           FrostedPanel(
                             child: Row(
@@ -339,7 +465,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                                 Expanded(
                                   child: _buildNumberField(
                                     controller: _adultsController,
-                                    label: 'Adults',
+                                    label: 'Total Adults',
                                   ),
                                 ),
                                 const SizedBox(width: 16),
@@ -363,6 +489,20 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                               ],
                             ),
                           ),
+                          const SizedBox(height: 16),
+                          FrostedPanel(child: _buildChildrenDetailsSection()),
+                          const SizedBox(height: 32),
+
+                          _buildSectionHeader('Financials & Housing'),
+                          const SizedBox(height: 16),
+                          _buildHousingSection(),
+                          const SizedBox(height: 32),
+
+                          _buildSectionHeader(
+                            'Assets (Transport & Electronics)',
+                          ),
+                          const SizedBox(height: 16),
+                          _buildAssetsSection(),
                           const SizedBox(height: 32),
 
                           _buildSectionHeader('Contact Details'),
@@ -404,6 +544,11 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                                         controller: _cityController,
                                         label: 'City',
                                         hint: 'City Name',
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter.allow(
+                                            RegExp(r'[a-zA-Z\s]'),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                     const SizedBox(width: 16),
@@ -428,9 +573,54 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                           ),
                           const SizedBox(height: 32),
 
+                          _buildSectionHeader('Biography & Story'),
+                          const SizedBox(height: 16),
+                          _buildBiographySection(),
+                          const SizedBox(height: 32),
+
                           _buildSectionHeader('Assistance Needs'),
                           const SizedBox(height: 12),
-                          FrostedPanel(child: _buildAssistanceChips()),
+                          FrostedPanel(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildAssistanceChips(),
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 300),
+                                  height: _assistanceNeeds.contains('Medicine')
+                                      ? null
+                                      : 0,
+                                  margin: EdgeInsets.only(
+                                    top: _assistanceNeeds.contains('Medicine')
+                                        ? 16
+                                        : 0,
+                                  ),
+                                  child: _assistanceNeeds.contains('Medicine')
+                                      ? _buildTextField(
+                                          controller: _medicineBudgetController,
+                                          label: 'Monthly Medicine Cost (PKR)',
+                                          hint: 'e.g., 2500',
+                                          keyboardType: TextInputType.number,
+                                          inputFormatters: [
+                                            FilteringTextInputFormatter
+                                                .digitsOnly,
+                                          ],
+                                          validator: (value) {
+                                            if (_assistanceNeeds.contains(
+                                                  'Medicine',
+                                                ) &&
+                                                (value == null ||
+                                                    value.trim().isEmpty)) {
+                                              return 'Medicine budget is required';
+                                            }
+                                            return null;
+                                          },
+                                        )
+                                      : const SizedBox.shrink(),
+                                ),
+                              ],
+                            ),
+                          ),
                           const SizedBox(height: 32),
 
                           _buildSectionHeader('Additional Notes'),
@@ -492,6 +682,408 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                 ),
               ],
             ),
+    );
+  }
+
+  // --- NEW PHASE 3 SECTIONS ---
+
+  Widget _buildHousingSection() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    return FrostedPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Housing Ownership',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: RadioListTile<String>(
+                  title: const Text('Rented', style: TextStyle(fontSize: 13)),
+                  value: 'Rented',
+                  groupValue: _houseStatus,
+                  onChanged: (val) => setState(() => _houseStatus = val!),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+              ),
+              Expanded(
+                child: RadioListTile<String>(
+                  title: const Text('Owned', style: TextStyle(fontSize: 13)),
+                  value: 'Owned',
+                  groupValue: _houseStatus,
+                  onChanged: (val) {
+                    setState(() {
+                      _houseStatus = val!;
+                      _rentAmountController.text = '0';
+                    });
+                  },
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+              ),
+            ],
+          ),
+          if (_houseStatus == 'Rented') ...[
+            const SizedBox(height: 16),
+            _buildTextField(
+              controller: _rentAmountController,
+              label: 'Monthly Rent Amount',
+              hint: 'e.g., 15000',
+              prefixText: 'Rs. ',
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+          ],
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'House Condition',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? theme.colorScheme.surface
+                            : theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: theme.dividerColor.withValues(alpha: 0.8),
+                        ),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _houseCondition,
+                          isExpanded: true,
+                          items: ['Good', 'Average', 'Poor', 'Kacha House'].map(
+                            (c) {
+                              return DropdownMenuItem(
+                                value: c,
+                                child: Text(
+                                  c,
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                              );
+                            },
+                          ).toList(),
+                          onChanged: (val) =>
+                              setState(() => _houseCondition = val!),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildTextField(
+                  controller: _houseSizeController,
+                  label: 'House Size',
+                  hint: 'e.g. 5 Marla',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBiographySection() {
+    return FrostedPanel(
+      child: _buildTextField(
+        controller: _biographyController,
+        label: 'Family Biography / Story',
+        hint:
+            'Describe the family situation, struggles, and why they need help...',
+        maxLines: 4,
+      ),
+    );
+  }
+
+  Widget _buildChildrenDetailsSection() {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_childrenDetails.isNotEmpty) ...[
+          // List children
+          ..._childrenDetails.map(
+            (child) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: theme.dividerColor.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.person,
+                    size: 20,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          child['name'] ?? 'Unknown',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          (child['isStudying'] == true
+                                  ? 'Studying at ${child['schoolName']} '
+                                  : '') +
+                              (child['isWorking'] == true
+                                  ? '· Working (${child['workType']}) Rs.${child['earningAmount']}'
+                                  : ''),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.7,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.red,
+                      size: 20,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _childrenDetails.remove(child);
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        OutlinedButton.icon(
+          onPressed: _showAddChildSheet,
+          icon: const Icon(Icons.add),
+          label: const Text('Add Child Details'),
+        ),
+      ],
+    );
+  }
+
+  void _showAddChildSheet() {
+    final nameCtrl = TextEditingController();
+    bool isStudying = false;
+    final schoolCtrl = TextEditingController();
+    bool isWorking = false;
+    final workCtrl = TextEditingController();
+    final earningsCtrl = TextEditingController(text: '0');
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final theme = Theme.of(context);
+            return Container(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 20,
+                right: 20,
+                top: 20,
+              ),
+              decoration: BoxDecoration(
+                color: theme.scaffoldBackgroundColor,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
+                ),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Add Child Details',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Child Name',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SwitchListTile(
+                      title: const Text('Is Studying?'),
+                      value: isStudying,
+                      onChanged: (val) => setModalState(() => isStudying = val),
+                    ),
+                    if (isStudying)
+                      TextField(
+                        controller: schoolCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'School/College Name',
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                    SwitchListTile(
+                      title: const Text('Is Working?'),
+                      value: isWorking,
+                      onChanged: (val) => setModalState(() => isWorking = val),
+                    ),
+                    if (isWorking) ...[
+                      TextField(
+                        controller: workCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Type of Work',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: earningsCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Monthly Earnings (Rs.)',
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        onPressed: () {
+                          if (nameCtrl.text.isEmpty) return;
+                          setState(() {
+                            _childrenDetails.add({
+                              'name': nameCtrl.text.trim(),
+                              'isStudying': isStudying,
+                              'schoolName': schoolCtrl.text.trim(),
+                              'isWorking': isWorking,
+                              'workType': workCtrl.text.trim(),
+                              'earningAmount':
+                                  int.tryParse(earningsCtrl.text) ?? 0,
+                            });
+                          });
+                          Navigator.pop(context);
+                        },
+                        child: const Text('Save Child'),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildAssetsSection() {
+    final theme = Theme.of(context);
+    return FrostedPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            title: const Text(
+              'Owns Transport?',
+              style: TextStyle(fontSize: 14),
+            ),
+            value: _hasTransport,
+            onChanged: (val) {
+              setState(() {
+                _hasTransport = val;
+                if (!val) _transportDetailsController.clear();
+              });
+            },
+            contentPadding: EdgeInsets.zero,
+          ),
+          if (_hasTransport) ...[
+            const SizedBox(height: 8),
+            _buildTextField(
+              controller: _transportDetailsController,
+              label: 'Transport Details',
+              hint: 'e.g., CD 70 Motorcycle, Rickshaw',
+            ),
+            const SizedBox(height: 16),
+          ],
+          Text(
+            'Electronics Owned',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _availableElectronics.map((item) {
+              final isSelected = _selectedElectronics.contains(item);
+              return FilterChip(
+                label: Text(item, style: const TextStyle(fontSize: 12)),
+                selected: isSelected,
+                onSelected: (selected) {
+                  setState(() {
+                    if (selected)
+                      _selectedElectronics.add(item);
+                    else
+                      _selectedElectronics.remove(item);
+                  });
+                },
+                selectedColor: theme.colorScheme.primary.withValues(alpha: 0.2),
+                checkmarkColor: theme.colorScheme.primary,
+              );
+            }).toList(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -662,7 +1254,6 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
     final needs = [
       ('Food', Icons.restaurant),
       ('Medicine', Icons.medical_services),
-      ('Education', Icons.school),
     ];
 
     return Wrap(
@@ -683,22 +1274,22 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
           onSelected: (bool selected) {
             setState(() {
               if (selected) {
+                // Enforce single selection
+                _assistanceNeeds.clear();
                 _assistanceNeeds.add(need.$1);
+
+                // Clear the medicine budget if switching away from Medicine
+                if (need.$1 != 'Medicine') {
+                  _medicineBudgetController.clear();
+                }
               } else {
                 _assistanceNeeds.remove(need.$1);
+                if (need.$1 == 'Medicine') {
+                  _medicineBudgetController.clear();
+                }
               }
             });
           },
-          backgroundColor: theme.scaffoldBackgroundColor,
-          selectedColor: theme.colorScheme.primary.withValues(alpha: 0.15),
-          checkmarkColor: theme.colorScheme.primary,
-          labelStyle: TextStyle(
-            color: isSelected
-                ? theme.colorScheme.primary
-                : theme.colorScheme.onSurface.withValues(alpha: 0.8),
-            fontSize: 13,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
             side: BorderSide(

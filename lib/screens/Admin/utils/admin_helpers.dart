@@ -31,7 +31,7 @@ class AdminHelpers {
     final results = await Future.wait([
       countFamilies(),
       countFamilies(status: 'accepted'),
-      countFamilies(status: 'pending'),
+      countFamilies(status: 'pending_review'),
       countFamilies(status: 'rejected'),
       countFamilies(status: 'discarded'),
     ]);
@@ -39,7 +39,7 @@ class AdminHelpers {
     final data = {
       'total': results[0],
       'accepted': results[1],
-      'pending': results[2],
+      'pending_review': results[2],
       'rejected': results[3],
       'discarded': results[4],
     };
@@ -100,7 +100,7 @@ class AdminHelpers {
     // Execute all count queries in parallel
     final results = await Future.wait([
       _familiesRef.count().get(),
-      _familiesRef.where('status', isEqualTo: 'pending').count().get(),
+      _familiesRef.where('status', isEqualTo: 'pending_review').count().get(),
       _familiesRef.where('status', isEqualTo: 'accepted').count().get(),
       _familiesRef.where('status', isEqualTo: 'rejected').count().get(),
       _familiesRef.where('status', isEqualTo: 'discarded').count().get(),
@@ -108,7 +108,7 @@ class AdminHelpers {
 
     final data = {
       'total': results[0].count ?? 0,
-      'pending': results[1].count ?? 0,
+      'pending_review': results[1].count ?? 0,
       'accepted': results[2].count ?? 0,
       'rejected': results[3].count ?? 0,
       'discarded': results[4].count ?? 0,
@@ -148,7 +148,7 @@ class AdminHelpers {
     final data = {
       'fam_total': familyData['total'] ?? 0,
       'fam_accepted': familyData['accepted'] ?? 0,
-      'fam_pending': familyData['pending'] ?? 0,
+      'fam_pending': familyData['pending_review'] ?? 0,
       'fam_rejected': familyData['rejected'] ?? 0,
       'fam_discarded': familyData['discarded'] ?? 0,
       'mem_total_staff': memberData['total_staff'] ?? 0,
@@ -199,7 +199,7 @@ class AdminHelpers {
 
     final data = {
       'total': results[0].count ?? 0,
-      'pending': results[1].count ?? 0,
+      'pending_review': results[1].count ?? 0,
       'under_verification': results[2].count ?? 0,
       'verified': results[3].count ?? 0,
       'rejected': results[4].count ?? 0,

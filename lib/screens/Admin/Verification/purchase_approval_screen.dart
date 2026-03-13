@@ -96,20 +96,18 @@ class _PurchaseApprovalScreenState extends State<PurchaseApprovalScreen> {
                   'Items:',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-                ...request.items
-                    .map(
-                      (item) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(item.name),
-                            Text(currencyFormat.format(item.actualCost)),
-                          ],
-                        ),
-                      ),
-                    )
-                    .toList(),
+                ...request.items.map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(item.name),
+                        Text(currencyFormat.format(item.actualCost)),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

@@ -145,7 +145,7 @@ class Donation {
   final String familyId;
   final DonationType donationType;
   final double? amount; // nullable for in-kind or when not specified
-  final Map<String, int>? items; // nullable for cash donations
+  final Map<String, num>? items; // nullable for cash donations
   final bool anonymous;
   final DonationStatus status;
   final String? rejectionReason; // nullable
@@ -166,6 +166,30 @@ class Donation {
   final List<String> deliveryPhotos;
   final DateTime? deliveredAt;
   final String? receivedBy;
+
+  // Hybrid Architecture fields (Phase 1)
+  /// How the donation was made: 'direct' | 'smart' | 'general'
+  final String allocationMode;
+
+  /// Actual amount credited to target family (may be < amount if family was near-full)
+  final double effectiveAmount;
+
+  /// Amount rerouted to General Relief Fund due to overfunding cap
+  final double overflowAmount;
+
+  /// Amount specifically consumed from this GRF donation by admin allocations (FIFO Ledger)
+  final double allocatedAmount;
+
+  /// Micro-Ledger: Records exactly which families received this GRF donation and when
+  /// Example: [{'familyId': '123', 'amount': 50, 'date': Timestamp}]
+  final List<Map<String, dynamic>>? grfAllocations;
+
+  /// Unique key generated on form open — prevents duplicate submissions on double-tap
+  final String idempotencyKey;
+
+  /// Enterprise Smart Give Architecture: List of families funded in a waterfall split
+  /// Example: [{'familyId': '123', 'amount': 500}, {'familyId': '456', 'amount': 1500}]
+  final List<Map<String, dynamic>>? smartSplits;
 
   Donation({
     required this.id,
@@ -194,6 +218,14 @@ class Donation {
     this.deliveryPhotos = const [],
     this.deliveredAt,
     this.receivedBy,
+    // Hybrid Architecture
+    this.allocationMode = 'direct',
+    this.effectiveAmount = 0,
+    this.overflowAmount = 0,
+    this.allocatedAmount = 0,
+    this.idempotencyKey = '',
+    this.smartSplits,
+    this.grfAllocations,
   });
 
   /// Factory constructor from Firestore document
@@ -223,7 +255,7 @@ class Donation {
       donationType: DonationType.fromFirestore(data['donationType'] ?? 'cash'),
       amount: data['amount']?.toDouble(),
       items: data['items'] != null
-          ? Map<String, int>.from(data['items'] as Map)
+          ? Map<String, num>.from(data['items'] as Map)
           : null,
       anonymous: data['anonymous'] ?? false,
       status: DonationStatus.fromFirestore(data['status'] ?? 'draft'),
@@ -243,6 +275,25 @@ class Donation {
       deliveryPhotos: photos,
       deliveredAt: (data['deliveredAt'] as Timestamp?)?.toDate(),
       receivedBy: data['receivedBy'],
+      // Hybrid Architecture (safe defaults for backward compat with old docs)
+      allocationMode: data['allocationMode'] ?? 'direct',
+      effectiveAmount:
+          (data['effectiveAmount'] as num?)?.toDouble() ??
+          (data['amount'] as num?)?.toDouble() ??
+          0,
+      overflowAmount: (data['overflowAmount'] as num?)?.toDouble() ?? 0,
+      allocatedAmount: (data['allocatedAmount'] as num?)?.toDouble() ?? 0,
+      idempotencyKey: data['idempotencyKey'] ?? doc.id,
+      smartSplits: data['smartSplits'] != null
+          ? List<Map<String, dynamic>>.from(
+              (data['smartSplits'] as List).map(
+                (e) => Map<String, dynamic>.from(e as Map),
+              ),
+            )
+          : null,
+      grfAllocations: data['grfAllocations'] != null
+          ? List<Map<String, dynamic>>.from(data['grfAllocations'])
+          : null,
     );
   }
 
@@ -278,6 +329,14 @@ class Donation {
           ? Timestamp.fromDate(deliveredAt!)
           : null,
       'receivedBy': receivedBy,
+      // Hybrid Architecture
+      'allocationMode': allocationMode,
+      'effectiveAmount': effectiveAmount,
+      'overflowAmount': overflowAmount,
+      'allocatedAmount': allocatedAmount,
+      'idempotencyKey': idempotencyKey,
+      if (smartSplits != null) 'smartSplits': smartSplits,
+      if (grfAllocations != null) 'grfAllocations': grfAllocations,
     };
   }
 
@@ -325,7 +384,7 @@ class Donation {
     String? familyId,
     DonationType? donationType,
     double? amount,
-    Map<String, int>? items,
+    Map<String, num>? items,
     bool? anonymous,
     DonationStatus? status,
     String? rejectionReason,
@@ -354,6 +413,7 @@ class Donation {
       updatedAt: updatedAt ?? this.updatedAt,
       pickupAddress: pickupAddress ?? this.pickupAddress,
       contactNumber: contactNumber ?? this.contactNumber,
+      grfAllocations: grfAllocations ?? this.grfAllocations,
     );
   }
 }

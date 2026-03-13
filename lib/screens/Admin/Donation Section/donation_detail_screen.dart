@@ -116,15 +116,19 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
       ),
     );
 
+    if (confirm != true) {
+      declaredValueController.dispose();
+      return;
+    }
+
+    // Read text BEFORE disposing the controller (Bug #1 fix)
+    final declaredValueText = declaredValueController.text.trim();
     declaredValueController.dispose();
-    if (confirm != true) return;
 
     setState(() => _isProcessing = true);
     try {
       // If admin entered a declared value for In-Kind, save it first
-      final declaredValue = double.tryParse(
-        declaredValueController.text.trim(),
-      );
+      final declaredValue = double.tryParse(declaredValueText);
       if (isInKind && declaredValue != null && declaredValue > 0) {
         await _firestore.collection('donations').doc(donation.id).update({
           'amount': declaredValue,
@@ -133,10 +137,10 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
         });
       }
 
-      // FIX Bug#3: Route through FundingService.verifyDonation so that:
+      // Route through FundingService.verifyDonation so that:
       // 1. Status is updated properly with history
       // 2. In-Kind donations call _processInKindDonation (decrement family needs)
-      // 3. recalculateFamilyFunding is triggered with correct In-Kind type check
+      // 3. Procurement is triggered if family becomes fully funded
       await FundingService.verifyDonation(donation.id);
 
       // Also add an audit log entry from admin context
@@ -148,17 +152,8 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // Notify donor
-      await NotificationService.sendToUser(
-        userId: donation.donorId,
-        title: 'Donation Verified! ✅',
-        body: 'Your donation has been verified. Thank you for your support!',
-        data: {
-          'type': 'donation_update',
-          'donationId': donation.id,
-          'status': 'verified',
-        },
-      );
+      // Note: Notification is sent by the service layer (donation_service.updateDonation)
+      // — no duplicate notification here (Bug #4 fix)
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -239,7 +234,13 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
 
     setState(() => _isProcessing = true);
     try {
-      // 1. Update Donation Status
+      // 1. Reverse pre-committed funds (Bug #2 fix)
+      // submitAtomicDonation pre-allocates on submission, so rejection must undo it
+      if (donation.donationType == DonationType.cash) {
+        await FundingService.reverseDonation(donation.id);
+      }
+
+      // 2. Update Donation Status
       await _updateStatus(
         donation: donation,
         newStatus: DonationStatus.rejected,
@@ -247,7 +248,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
         rejectionReason: remark,
       );
 
-      // 2. Notify Donor
+      // 3. Notify Donor
       await NotificationService.sendToUser(
         userId: donation.donorId,
         title: 'Donation Update',
@@ -313,6 +314,24 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     }
   }
 
+  // Valid state transitions — prevents jumping to arbitrary states
+  static const Map<DonationStatus, List<DonationStatus>> _validTransitions = {
+    DonationStatus.draft: [DonationStatus.underVerification],
+    DonationStatus.pending: [
+      DonationStatus.underVerification,
+      DonationStatus.rejected,
+    ],
+    DonationStatus.underVerification: [
+      DonationStatus.verified,
+      DonationStatus.rejected,
+    ],
+    DonationStatus.verified: [DonationStatus.inProcess],
+    DonationStatus.rejected: [DonationStatus.underVerification], // re-upload
+    DonationStatus.inProcess: [DonationStatus.outForDelivery],
+    DonationStatus.outForDelivery: [DonationStatus.delivered],
+    DonationStatus.delivered: [DonationStatus.closed],
+  };
+
   // Backend Update Logic
   Future<void> _updateStatus({
     required Donation donation,
@@ -320,6 +339,14 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     required String remarks,
     String? rejectionReason,
   }) async {
+    // Enforce valid state transitions
+    final allowed = _validTransitions[donation.status] ?? [];
+    if (!allowed.contains(newStatus)) {
+      throw Exception(
+        'Invalid transition: ${donation.status.displayName} → ${newStatus.displayName}',
+      );
+    }
+
     final user = _currentUser;
     final ref = FirebaseFirestore.instance
         .collection('donations')
@@ -430,6 +457,31 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                 const SizedBox(height: 12),
                 FrostedPanel(child: _buildBeneficiaryInfo(donation)),
                 const SizedBox(height: 32),
+
+                // Donor Note (If present)
+                if (donation.donationNote != null &&
+                    donation.donationNote!.isNotEmpty) ...[
+                  _sectionHeader('Donor Note'),
+                  const SizedBox(height: 12),
+                  FrostedPanel(
+                    padding: const EdgeInsets.all(16),
+                    child: Container(
+                      width: double.infinity,
+                      child: Text(
+                        '"${donation.donationNote}"',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.8,
+                          ),
+                          fontStyle: FontStyle.italic,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                ],
 
                 // In-Kind Items (if applicable)
                 if (donation.donationType == DonationType.inKind &&
@@ -670,7 +722,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
               Icon(Icons.info_outline, size: 14, color: statusColor),
               const SizedBox(width: 6),
               Text(
-                donation.status.displayName.toUpperCase(),
+                _getDisplayStatus(donation, donation.status).toUpperCase(),
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
@@ -688,6 +740,77 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
   Widget _buildBeneficiaryInfo(Donation donation) {
     if (donation.familyId == 'general_relief_fund') {
       return _infoRow('Donation For', 'General Relief Fund');
+    }
+
+    if (donation.allocationMode == 'smart' &&
+        donation.smartSplits != null &&
+        donation.smartSplits!.isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _infoRow('Allocation Mode', 'Smart Give (Waterfall)'),
+          const SizedBox(height: 12),
+          const Text(
+            'Funded Families:',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          ...donation.smartSplits!.map((split) {
+            final double amt = (split['amount'] as num).toDouble();
+            final String fId = split['familyId'].toString();
+            final String shortId = fId.length > 5 ? fId.substring(0, 5) : fId;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6.0, left: 8.0),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle,
+                    size: 14,
+                    color: AppColors.donorGreen,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Family $shortId...',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  const Spacer(),
+                  Text(
+                    'PKR ${amt.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: AppColors.donorGreen,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          if (donation.overflowAmount > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0, left: 8.0),
+              child: Row(
+                children: [
+                  Icon(Icons.waves, size: 14, color: Colors.blue[700]),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Overflow to GRF',
+                    style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic),
+                  ),
+                  const Spacer(),
+                  Text(
+                    'PKR ${donation.overflowAmount.toStringAsFixed(0)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: Colors.blue[700],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      );
     }
 
     return FutureBuilder<DocumentSnapshot>(
@@ -715,13 +838,20 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
               '${family.numberOfAdults} Adults, ${family.numberOfChildren} Children'
                   '${family.familySize > 0 ? " (Total: ${family.familySize})" : ""}',
             ),
+            const SizedBox(height: 8),
+            _infoRow(
+              'Assistance Type',
+              family.assistanceNeeds.isNotEmpty
+                  ? family.assistanceNeeds.join(', ')
+                  : 'General Relief',
+            ),
           ],
         );
       },
     );
   }
 
-  Widget _buildInKindItemsSection(Map<String, int> items) {
+  Widget _buildInKindItemsSection(Map<String, num> items) {
     final theme = Theme.of(context);
     return FrostedPanel(
       padding: const EdgeInsets.all(16),
@@ -835,7 +965,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    entry.status.displayName,
+                    _getDisplayStatus(donation, entry.status),
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   Text(
@@ -882,6 +1012,15 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
         ),
       ],
     );
+  }
+
+  String _getDisplayStatus(Donation d, DonationStatus status) {
+    if ((d.familyId == 'general_relief_fund' ||
+            d.allocationMode == 'general') &&
+        status == DonationStatus.verified) {
+      return 'Awaiting Allocation';
+    }
+    return status.displayName;
   }
 
   String _formatDate(DateTime dt) {

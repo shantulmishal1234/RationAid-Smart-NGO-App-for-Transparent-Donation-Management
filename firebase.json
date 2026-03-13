@@ -1,1 +1,26 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"ration-aid","appId":"1:626603893142:android:3c62cae9a995320a053db7","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"ration-aid","configurations":{"android":"1:626603893142:android:3c62cae9a995320a053db7","web":"1:626603893142:web:2540db17cbb32e49053db7"}}}}}}
+{
+    "firestore": {
+        "rules": "firestore.rules",
+        "indexes": "firestore.indexes.json"
+    },
+    "flutter": {
+        "platforms": {
+            "android": {
+                "default": {
+                    "projectId": "ration-aid",
+                    "appId": "1:626603893142:android:3c62cae9a995320a053db7",
+                    "fileOutput": "android/app/google-services.json"
+                }
+            },
+            "dart": {
+                "lib/firebase_options.dart": {
+                    "projectId": "ration-aid",
+                    "configurations": {
+                        "android": "1:626603893142:android:3c62cae9a995320a053db7",
+                        "web": "1:626603893142:web:2540db17cbb32e49053db7"
+                    }
+                }
+            }
+        }
+    }
+}

@@ -301,13 +301,17 @@ class _DonationsSectionState extends State<DonationsSection> {
                     decoration: InputDecoration(
                       hintText: 'Search donations...',
                       hintStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                         fontSize: 14,
                       ),
                       prefixIcon: Icon(
                         Icons.search,
                         size: 20,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                       filled: true,
                       fillColor: theme.cardColor,
@@ -422,8 +426,12 @@ class _DonationsSectionState extends State<DonationsSection> {
                       child: Text('General Relief Fund'),
                     ),
                     const PopupMenuItem(
-                      value: DonationTypeFilter.family,
-                      child: Text('Family Donations'),
+                      value: DonationTypeFilter.cash,
+                      child: Text('Cash Donation'),
+                    ),
+                    const PopupMenuItem(
+                      value: DonationTypeFilter.inKind,
+                      child: Text('In-Kind Donation'),
                     ),
                   ],
                 ),
@@ -470,11 +478,15 @@ class _DonationsSectionState extends State<DonationsSection> {
                   docs = docs.where((doc) {
                     final data = doc.data();
                     final familyId = data['familyId'];
+                    final donationType = data['donationType'] ?? 'cash';
 
                     if (_typeFilter == DonationTypeFilter.generalFund) {
                       return familyId == 'general_relief_fund';
-                    } else if (_typeFilter == DonationTypeFilter.family) {
-                      return familyId != 'general_relief_fund';
+                    } else if (_typeFilter == DonationTypeFilter.cash) {
+                      return donationType == 'cash' &&
+                          familyId != 'general_relief_fund';
+                    } else if (_typeFilter == DonationTypeFilter.inKind) {
+                      return donationType == 'inKind';
                     }
                     return true;
                   }).toList();
@@ -508,13 +520,17 @@ class _DonationsSectionState extends State<DonationsSection> {
                         Icon(
                           Icons.search_off,
                           size: 48,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.2,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         Text(
                           'No donations found.',
                           style: TextStyle(
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                         ),
                       ],
@@ -535,29 +551,63 @@ class _DonationsSectionState extends State<DonationsSection> {
                         ? 'In-Kind'
                         : 'Cash';
 
-                    return DonationCard(
-                      id: id,
-                      serialNumber: index + 1,
-                      donorName: data['donorName'] ?? 'Unknown donor',
-                      donorEmail: data['donorEmail'] ?? '',
-                      amount: (data['amount'] ?? 0).toDouble(),
-                      currency: data['currency'] ?? 'PKR',
-                      method: method,
-                      status: DonationStatus.fromFirestore(
-                        data['status'] ?? 'pending',
-                      ),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => DonationDetailScreen(
-                              donationId: id,
-                              initialData: data,
+                    final familyId = data['familyId'] ?? '';
+
+                    Widget buildCard(String? assistanceType) {
+                      return DonationCard(
+                        id: id,
+                        serialNumber: index + 1,
+                        donorName: data['donorName'] ?? 'Unknown donor',
+                        donorEmail: data['donorEmail'] ?? '',
+                        amount: (data['amount'] ?? 0).toDouble(),
+                        currency: data['currency'] ?? 'PKR',
+                        method: method,
+                        status: DonationStatus.fromFirestore(
+                          data['status'] ?? 'pending',
+                        ),
+                        assistanceType: assistanceType,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DonationDetailScreen(
+                                donationId: id,
+                                initialData: data,
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                    );
+                          );
+                        },
+                      );
+                    }
+
+                    if (familyId == 'general_relief_fund') {
+                      return buildCard('General Relief');
+                    } else if (data['allocationMode'] == 'smart') {
+                      return buildCard('Smart Give (Waterfall)');
+                    } else if (familyId.isNotEmpty) {
+                      return FutureBuilder<DocumentSnapshot>(
+                        future: FirebaseFirestore.instance
+                            .collection('families')
+                            .doc(familyId)
+                            .get(),
+                        builder: (context, snapshot) {
+                          String? aType;
+                          if (snapshot.hasData && snapshot.data!.exists) {
+                            final famData =
+                                snapshot.data!.data() as Map<String, dynamic>?;
+                            if (famData != null) {
+                              final needs = famData['assistanceNeeds'] as List?;
+                              if (needs != null && needs.isNotEmpty) {
+                                aType = needs.join(', ');
+                              }
+                            }
+                          }
+                          return buildCard(aType);
+                        },
+                      );
+                    } else {
+                      return buildCard(null);
+                    }
                   },
                 );
               },
@@ -587,7 +637,9 @@ class _DonationsSectionState extends State<DonationsSection> {
           '$label: ',
           style: TextStyle(
             fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.6),
           ),
         ),
         Text(
@@ -614,7 +666,9 @@ class _DonationsSectionState extends State<DonationsSection> {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.6),
           ),
         ),
         Text(

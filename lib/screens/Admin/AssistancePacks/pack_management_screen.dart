@@ -17,7 +17,6 @@ class PackManagementScreen extends StatefulWidget {
 
 class _PackManagementScreenState extends State<PackManagementScreen> {
   String _searchQuery = '';
-  String _filterType = 'all';
   final _searchController = TextEditingController();
 
   @override
@@ -178,49 +177,6 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
               ),
               const SizedBox(width: 12),
 
-              // Filter Menu
-              Container(
-                height: 48,
-                width: 48,
-                decoration: BoxDecoration(
-                  color: theme.cardColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: theme.dividerColor.withValues(alpha: 0.6),
-                  ),
-                ),
-                child: PopupMenuButton<String>(
-                  icon: Icon(
-                    Icons.filter_list,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                    size: 22,
-                  ),
-                  tooltip: 'Filter by Type',
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  onSelected: (v) => setState(() => _filterType = v),
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(value: 'all', child: Text('All Types')),
-                    const PopupMenuItem(value: 'food', child: Text('Food')),
-                    const PopupMenuItem(
-                      value: 'clothing',
-                      child: Text('Clothing'),
-                    ),
-                    const PopupMenuItem(value: 'mixed', child: Text('Mixed')),
-                    const PopupMenuItem(
-                      value: 'education',
-                      child: Text('Education'),
-                    ),
-                    const PopupMenuItem(
-                      value: 'medical',
-                      child: Text('Medical'),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-
               // Add Button
               SizedBox(
                 height: 48,
@@ -292,9 +248,7 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
                       final matchesSearch = pack.name.toLowerCase().contains(
                         _searchQuery,
                       );
-                      final matchesType =
-                          _filterType == 'all' || pack.packType == _filterType;
-                      return matchesSearch && matchesType;
+                      return matchesSearch;
                     })
                     .toList();
 
@@ -383,10 +337,15 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
     final theme = Theme.of(context);
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
+      shadowColor: Colors.black12,
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.4)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -402,16 +361,6 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatPackType(pack.packType),
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.6,
-                          ),
                         ),
                       ),
                     ],
@@ -488,9 +437,9 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
               ],
             ),
 
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             const Divider(height: 1),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
 
             // Actions
             Row(
@@ -525,10 +474,6 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
         ),
       ),
     );
-  }
-
-  String _formatPackType(String type) {
-    return type[0].toUpperCase() + type.substring(1);
   }
 
   void _showPackDialog(BuildContext context, {AssistancePack? pack}) {

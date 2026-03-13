@@ -247,8 +247,9 @@ class _InventoryIssuesScreenState extends State<InventoryIssuesScreen> {
           return bTime.compareTo(aTime); // Descending
         });
 
-        if (requests.isEmpty)
+        if (requests.isEmpty) {
           return _buildEmptyState(theme, 'No history found');
+        }
 
         return ListView.separated(
           padding: const EdgeInsets.all(12),

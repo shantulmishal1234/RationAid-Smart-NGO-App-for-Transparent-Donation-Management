@@ -277,30 +277,35 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
     int strength = 0;
     List<String> feedback = [];
 
-    if (password.length >= 8)
+    if (password.length >= 8) {
       strength++;
-    else
+    } else {
       feedback.add('At least 8 characters');
+    }
 
-    if (password.contains(RegExp(r'[A-Z]')))
+    if (password.contains(RegExp(r'[A-Z]'))) {
       strength++;
-    else
+    } else {
       feedback.add('One uppercase letter');
+    }
 
-    if (password.contains(RegExp(r'[a-z]')))
+    if (password.contains(RegExp(r'[a-z]'))) {
       strength++;
-    else
+    } else {
       feedback.add('One lowercase letter');
+    }
 
-    if (password.contains(RegExp(r'[0-9]')))
+    if (password.contains(RegExp(r'[0-9]'))) {
       strength++;
-    else
+    } else {
       feedback.add('One number');
+    }
 
-    if (password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]')))
+    if (password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) {
       strength++;
-    else
+    } else {
       feedback.add('One special character (!@#\$%^&*)');
+    }
 
     String label;
     Color color;
@@ -450,10 +455,12 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
                         ),
                       ),
                       validator: (val) {
-                        if (val == null || val.isEmpty)
+                        if (val == null || val.isEmpty) {
                           return 'Enter new password';
-                        if (val.length < 8)
+                        }
+                        if (val.length < 8) {
                           return 'Must be at least 8 characters';
+                        }
                         return null;
                       },
                     ),
@@ -495,8 +502,9 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
                         ),
                       ),
                       validator: (val) {
-                        if (val != newPasswordController.text)
+                        if (val != newPasswordController.text) {
                           return 'Passwords do not match';
+                        }
                         return null;
                       },
                     ),
@@ -756,8 +764,9 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
                 ),
                 validator: (val) {
                   if (val == null || val.isEmpty) return 'Enter phone number';
-                  if (!RegExp(r'^(\+92|0)?3[0-9]{9}$').hasMatch(val))
+                  if (!RegExp(r'^(\+92|0)?3[0-9]{9}$').hasMatch(val)) {
                     return 'Invalid Pakistan phone';
+                  }
                   return null;
                 },
               ),
@@ -883,14 +892,17 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.of(
-                  context,
-                ).pushNamedAndRemoveUntil('/login', (route) => false);
-              }
+            onPressed: () {
+              Navigator.pop(context); // Pop dialog
+              // Clear current route paths and head towards unauthenticated route
+              Navigator.of(
+                context,
+              ).pushNamedAndRemoveUntil('/login', (route) => false);
+
+              // Allow routes to settle before cutting off streams
+              Future.delayed(const Duration(milliseconds: 400), () async {
+                await FirebaseAuth.instance.signOut();
+              });
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
@@ -927,8 +939,9 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
                       children: [
                         CircleAvatar(
                           radius: 50,
-                          backgroundColor: AppColors.purchaserOrange
-                              .withValues(alpha: 0.2),
+                          backgroundColor: AppColors.purchaserOrange.withValues(
+                            alpha: 0.2,
+                          ),
                           backgroundImage: _profilePhotoUrl != null
                               ? NetworkImage(_profilePhotoUrl!)
                               : null,
@@ -1104,7 +1117,7 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
                     ),
                     trailing: Switch(
                       value: theme.brightness == Brightness.dark,
-                      activeColor: AppColors.purchaserOrange,
+                      activeThumbColor: AppColors.purchaserOrange,
                       onChanged: (val) => themeProvider.toggleTheme(),
                     ),
                   ),

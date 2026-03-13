@@ -76,16 +76,18 @@ class _PurchaserBottomNavState extends State<PurchaserBottomNav>
           return 0;
         case PurchaserSection.procurement:
           return 1;
-        case PurchaserSection.inventory:
+        case PurchaserSection.inboundPickups:
           return 2;
-        case PurchaserSection.history:
+        case PurchaserSection.inventory:
           return 3;
-        case PurchaserSection.reports:
+        case PurchaserSection.history:
           return 4;
-        case PurchaserSection.notifications:
+        case PurchaserSection.reports:
           return 5;
-        case PurchaserSection.profile:
+        case PurchaserSection.notifications:
           return 6;
+        case PurchaserSection.profile:
+          return 7;
       }
     } else {
       switch (section) {
@@ -93,14 +95,16 @@ class _PurchaserBottomNavState extends State<PurchaserBottomNav>
           return 0;
         case PurchaserSection.procurement:
           return 1;
-        case PurchaserSection.inventory:
+        case PurchaserSection.inboundPickups:
           return 2;
-        case PurchaserSection.history:
+        case PurchaserSection.inventory:
           return 3;
-        case PurchaserSection.notifications:
+        case PurchaserSection.history:
           return 4;
-        case PurchaserSection.profile:
+        case PurchaserSection.notifications:
           return 5;
+        case PurchaserSection.profile:
+          return 6;
         case PurchaserSection.reports:
           return -1;
       }
@@ -122,7 +126,7 @@ class _PurchaserBottomNavState extends State<PurchaserBottomNav>
     final currentIndex = _getSectionIndex(widget.currentSection);
     final screenWidth = MediaQuery.of(context).size.width;
     final barWidth = screenWidth - 32;
-    final int totalItems = widget.isSupervisor ? 7 : 6;
+    final int totalItems = widget.isSupervisor ? 8 : 7;
     final itemWidth = barWidth / totalItems;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -208,36 +212,42 @@ class _PurchaserBottomNavState extends State<PurchaserBottomNav>
                         index: 1,
                       ),
                       _buildNavItem(
-                        icon: Icons.inventory_2_outlined,
-                        label: 'Stock',
-                        section: PurchaserSection.inventory,
+                        icon: Icons.move_to_inbox_outlined,
+                        label: 'Pickups',
+                        section: PurchaserSection.inboundPickups,
                         index: 2,
                       ),
                       _buildNavItem(
-                        icon: Icons.history_edu_outlined, // History icon
+                        icon: Icons.inventory_2_outlined,
+                        label: 'Stock',
+                        section: PurchaserSection.inventory,
+                        index: 3,
+                      ),
+                      _buildNavItem(
+                        icon: Icons.history_edu_outlined,
                         label: 'History',
                         section: PurchaserSection.history,
-                        index: 3,
+                        index: 4,
                       ),
                       if (widget.isSupervisor)
                         _buildNavItem(
                           icon: Icons.analytics_outlined,
                           label: 'Reports',
                           section: PurchaserSection.reports,
-                          index: 4,
+                          index: 5,
                         ),
                       _buildNavItem(
                         icon: Icons.notifications_outlined,
                         label: 'Alerts',
                         section: PurchaserSection.notifications,
-                        index: widget.isSupervisor ? 5 : 4,
+                        index: widget.isSupervisor ? 6 : 5,
                         badgeCount: widget.unreadNotificationCount,
                       ),
                       _buildNavItem(
                         icon: Icons.person_outline,
                         label: 'Profile',
                         section: PurchaserSection.profile,
-                        index: widget.isSupervisor ? 6 : 5,
+                        index: widget.isSupervisor ? 7 : 6,
                       ),
                     ],
                   ),

@@ -3,9 +3,13 @@ import 'package:ration_aid/models/family_model.dart';
 import 'package:ration_aid/services/family_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 
-/// Family Selection Screen - Modal screen for selecting a family to donate to
+/// Family Selection Screen - Modal screen for selecting a family to donate to.
+///
+/// [inKindOnly] — when true, only Food/combined families are shown.
+/// Pass this flag when navigating from the In-Kind donation tab (Fix #12).
 class FamilySelectionScreen extends StatefulWidget {
-  const FamilySelectionScreen({super.key});
+  final bool inKindOnly;
+  const FamilySelectionScreen({super.key, this.inKindOnly = false});
 
   @override
   State<FamilySelectionScreen> createState() => _FamilySelectionScreenState();
@@ -60,44 +64,6 @@ class _FamilySelectionScreenState extends State<FamilySelectionScreen> {
             ),
           ),
 
-          // General Relief Fund Card (Pinned)
-          Padding(
-            padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
-            child: _GeneralReliefCard(
-              onSelect: () {
-                // Return dummy family for General Fund
-                final generalReliefFamily = Family(
-                  id: 'general_relief_fund',
-                  city: 'All',
-                  area: 'General Relief Fund',
-                  address: 'Head Office',
-                  familySize: 0,
-                  numberOfAdults: 0,
-                  numberOfChildren: 0,
-                  needs: {
-                    'Flour (kg)': 9999,
-                    'Rice (kg)': 9999,
-                    'Oil (L)': 9999,
-                    'Sugar (kg)': 9999,
-                    'Pulses (kg)': 9999,
-                    'Milk (L)': 9999,
-                    'Tea (kg)': 9999,
-                  },
-                  assistanceNeeds: [],
-                  status: 'accepted',
-                  targetAmount: 0, // No specific target
-                  raisedAmount: 0,
-                );
-                Navigator.pop(context, generalReliefFamily);
-              },
-            ),
-          ),
-
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Divider(height: 1),
-          ),
-
           // Family list
           Expanded(
             child: StreamBuilder<List<Family>>(
@@ -113,6 +79,11 @@ class _FamilySelectionScreenState extends State<FamilySelectionScreen> {
 
                 var families = snapshot.data ?? [];
 
+                // Fix #12 — filter to food-only families for in-kind donations
+                if (widget.inKindOnly) {
+                  families = families.where((f) => f.acceptsInKind).toList();
+                }
+
                 // Filter by search query
                 if (_searchQuery.isNotEmpty) {
                   families = families.where((family) {
@@ -124,8 +95,9 @@ class _FamilySelectionScreenState extends State<FamilySelectionScreen> {
 
                 // Sort families: Non-funded first, then partially funded, fully funded last
                 families.sort((a, b) {
-                  final aFunded = a.totalFunded >= a.targetAmount;
-                  final bFunded = b.totalFunded >= b.targetAmount;
+                  // Fix #9 — use server-confirmed fundingStatus, not client-computed totalFunded
+                  final aFunded = a.fundingStatus == 'fully_funded';
+                  final bFunded = b.fundingStatus == 'fully_funded';
                   if (aFunded && !bFunded) return 1;
                   if (!aFunded && bFunded) return -1;
                   return 0;
@@ -187,95 +159,180 @@ class _FamilySelectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       elevation: 2,
       child: InkWell(
-        onTap: (family.totalFunded >= family.targetAmount)
-            ? null // Disable if fully funded
-            : onSelect,
+        // Fix #9 — disable based on server-confirmed fundingStatus
+        onTap: (family.fundingStatus == 'fully_funded') ? null : onSelect,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Icon
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.donorGreen.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.family_restroom,
-                  color: AppColors.donorGreen,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 16),
+              // Top Section: Info Row
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Icon
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.donorGreen.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.family_restroom,
+                      color: AppColors.donorGreen,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
 
-              // Family info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      family.area,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Family of ${family.familySize} • ${family.needs.length} items needed',
-                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
+                  // Main Content
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(
-                              value: (family.totalFunded / family.targetAmount)
-                                  .clamp(0.0, 1.0),
-                              backgroundColor: Colors.grey[200],
-                              color: (family.totalFunded >= family.targetAmount)
-                                  ? Colors
-                                        .grey // Greyed out if full
-                                  : AppColors.donorGreen,
-                              minHeight: 4,
+                        // Area + City + emergency badge
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${family.area}, ${family.city}',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                  color: theme.colorScheme.onSurface,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
+                            if (family.isEmergency)
+                              Container(
+                                margin: const EdgeInsets.only(left: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.red,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'URGENT',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          (family.totalFunded >= family.targetAmount)
-                              ? 'Full'
-                              : '${((family.totalFunded / family.targetAmount) * 100).toInt()}%',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: (family.totalFunded >= family.targetAmount)
-                                ? Colors.grey
-                                : AppColors.donorGreen,
-                          ),
+                        const SizedBox(height: 4),
+                        // Family size
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.people,
+                              size: 14,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.5,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                '${family.numberOfAdults + family.numberOfChildren} members • ${family.numberOfChildren} children',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.6,
+                                  ),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                    // ], // Removed extra bracket
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 12),
+
+                  // Category Badge
+                  _CategoryBadge(family: family),
+                  const SizedBox(width: 8),
+
+                  // Arrow
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: AppColors.donorGreen.withValues(alpha: 0.4),
+                    ),
+                  ),
+                ],
               ),
 
-              // Select arrow
-              const Icon(
-                Icons.arrow_forward_ios,
-                size: 18,
-                color: AppColors.donorGreen,
-              ),
+              // Bottom Section: Full-width Progress Bar
+              if (family.targetAmount > 0) ...[
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Builder(
+                      builder: (context) {
+                        final verifiedPct =
+                            (family.combinedFundingPercent * 100)
+                                .clamp(0.0, 100.0)
+                                .toInt();
+                        final isFull = family.fundingStatus == 'fully_funded';
+                        return Text(
+                          isFull ? '✓ Fully Funded' : '$verifiedPct% Completed',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: isFull ? Colors.grey : AppColors.donorGreen,
+                          ),
+                        );
+                      },
+                    ),
+                    Builder(
+                      builder: (context) {
+                        final raisedStr = family.raisedAmount.toStringAsFixed(
+                          0,
+                        );
+                        final targetStr = family.targetAmount.toStringAsFixed(
+                          0,
+                        );
+                        return Text(
+                          'PKR $raisedStr / $targetStr',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.7,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _TwoTierProgressBar(family: family, theme: theme),
+              ],
             ],
           ),
         ),
@@ -284,62 +341,98 @@ class _FamilySelectionCard extends StatelessWidget {
   }
 }
 
-/// General Relief Fund Card
-class _GeneralReliefCard extends StatelessWidget {
-  final VoidCallback onSelect;
+/// Two-tier progress bar showing verified (green) + pending (orange).
+class _TwoTierProgressBar extends StatelessWidget {
+  final Family family;
+  final ThemeData theme;
 
-  const _GeneralReliefCard({required this.onSelect});
+  const _TwoTierProgressBar({required this.family, required this.theme});
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 4,
-      shadowColor: AppColors.donorGreen.withValues(alpha: 0.3),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onTap: onSelect,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.volunteer_activism,
-                  color: Colors.orange,
-                  size: 30,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'General Relief Fund',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Your donation will be used for emergency cases.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-            ],
+    final target = family.targetAmount;
+    if (target <= 0) return const SizedBox.shrink();
+
+    final verified = family.combinedFundingPercent.clamp(0.0, 1.0);
+    final pending = ((family.combinedProgress + family.pendingAmount) / target)
+        .clamp(0.0, 1.0);
+    final bgColor = theme.brightness == Brightness.dark
+        ? Colors.grey[800]!
+        : Colors.grey[200]!;
+
+    final isFull = family.fundingStatus == 'fully_funded';
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: Stack(
+        children: [
+          // Background
+          Container(height: 6, color: bgColor),
+          // Pending tier (orange, behind)
+          FractionallySizedBox(
+            widthFactor: pending,
+            child: Container(height: 6, color: Colors.orange.shade300),
           ),
-        ),
+          // Verified tier (green, on top)
+          FractionallySizedBox(
+            widthFactor: verified,
+            child: Container(
+              height: 6,
+              color: isFull ? Colors.grey : AppColors.donorGreen,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Category badge: Medicine vs Food.
+class _CategoryBadge extends StatelessWidget {
+  final Family family;
+
+  const _CategoryBadge({required this.family});
+
+  @override
+  Widget build(BuildContext context) {
+    final isMedicine = family.category == FamilyCategory.medicine;
+    final bgColor = isMedicine
+        ? Colors.blue.withValues(alpha: 0.1)
+        : Colors.orange.withValues(alpha: 0.1);
+    final borderColor = isMedicine
+        ? Colors.blue.withValues(alpha: 0.3)
+        : Colors.orange.withValues(alpha: 0.3);
+    final textColor = isMedicine
+        ? Colors.blue.shade700
+        : Colors.orange.shade800;
+
+    final label = isMedicine ? 'Medicine' : 'Food';
+    final iconData = isMedicine
+        ? Icons.medical_services_outlined
+        : Icons.local_dining;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor, width: 1.0),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(iconData, size: 12, color: textColor),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: textColor,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
       ),
     );
   }

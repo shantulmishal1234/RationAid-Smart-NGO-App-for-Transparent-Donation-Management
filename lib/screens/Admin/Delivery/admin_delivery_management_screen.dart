@@ -913,7 +913,7 @@ class _AdminDeliveryManagementScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 DropdownButtonFormField<String>(
-                  value: selectedId,
+                  initialValue: selectedId,
                   hint: const Text('Select Distributor'),
                   items: distributors
                       .map(
@@ -1138,7 +1138,7 @@ class _AdminDeliveryManagementScreenState
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: selectedId,
+                  initialValue: selectedId,
                   decoration: const InputDecoration(
                     labelText: 'Select Distributor',
                     border: OutlineInputBorder(),
@@ -1308,7 +1308,7 @@ class _AdminDeliveryManagementScreenState
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                value: selectedId,
+                initialValue: selectedId,
                 decoration: const InputDecoration(
                   labelText: 'Select New Distributor',
                   border: OutlineInputBorder(),

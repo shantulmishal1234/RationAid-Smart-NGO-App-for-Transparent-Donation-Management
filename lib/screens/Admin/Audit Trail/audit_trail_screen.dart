@@ -70,13 +70,17 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
                     decoration: InputDecoration(
                       hintText: 'Search logs...',
                       hintStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                         fontSize: 14,
                       ),
                       prefixIcon: Icon(
                         Icons.search,
                         size: 20,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                       filled: true,
                       fillColor: theme.cardColor,
@@ -208,7 +212,9 @@ class _AuditTrailScreenState extends State<AuditTrailScreen> {
                     child: Text(
                       'No audit logs found.',
                       style: TextStyle(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                     ),
                   );
@@ -275,8 +281,17 @@ class _AuditLogCard extends StatelessWidget {
     final action = data['action'] ?? 'Unknown action';
     final entityType = data['entityType'] ?? 'unknown';
     final details = data['details'] ?? '';
-    final performedBy =
-        data['performedByName'] ?? data['performedByEmail'] ?? 'Unknown user';
+    final name = data['performedByName'];
+    final email = data['performedByEmail'];
+    String performedBy = 'Unknown user';
+    if (name != null && email != null && name != email) {
+      performedBy = '$name ($email)';
+    } else if (name != null) {
+      performedBy = name;
+    } else if (email != null) {
+      performedBy = email;
+    }
+
     final timestamp = data['timestamp'] as Timestamp?;
     final timeStr = timestamp != null
         ? DateFormat('MMM dd, yyyy hh:mm a').format(timestamp.toDate())
@@ -336,7 +351,9 @@ class _AuditLogCard extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: color.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: color.withValues(alpha: 0.2)),
+                          border: Border.all(
+                            color: color.withValues(alpha: 0.2),
+                          ),
                         ),
                         child: Text(
                           entityType,

@@ -1088,15 +1088,16 @@ class _AdminProfileSectionState extends State<AdminProfileSection> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () async {
+            onPressed: () {
               Navigator.pop(context);
-              await _authService.signOut();
-              if (context.mounted) {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const AuthScreen()),
-                  (route) => false,
-                );
-              }
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const AuthScreen()),
+                (route) => false,
+              );
+
+              Future.delayed(const Duration(milliseconds: 400), () async {
+                await _authService.signOut();
+              });
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,

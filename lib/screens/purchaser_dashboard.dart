@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ration_aid/screens/Purchaser/widgets/purchaser_scaffold.dart';
 import 'package:ration_aid/screens/Purchaser/views/home_view.dart';
 import 'package:ration_aid/screens/Purchaser/views/procurement_view.dart';
+import 'package:ration_aid/screens/Purchaser/views/inbound_pickups_view.dart';
 import 'package:ration_aid/screens/Purchaser/views/inventory_view.dart';
 import 'package:ration_aid/screens/Purchaser/views/history_view.dart';
 import 'package:ration_aid/screens/Purchaser/views/notifications_view.dart';
@@ -26,6 +27,7 @@ class _PurchaserDashboardState extends State<PurchaserDashboard> {
   final Map<PurchaserSection, String> _titles = {
     PurchaserSection.dashboard: 'Purchaser Dashboard',
     PurchaserSection.procurement: 'Procurement',
+    PurchaserSection.inboundPickups: 'Inbound Pickups',
     PurchaserSection.inventory: 'Inventory & Stock',
     PurchaserSection.history: 'Purchase History',
     PurchaserSection.notifications: 'Notifications',
@@ -98,6 +100,8 @@ class _PurchaserDashboardState extends State<PurchaserDashboard> {
         );
       case PurchaserSection.procurement:
         return ProcurementView(isSupervisor: isSupervisor);
+      case PurchaserSection.inboundPickups:
+        return const InboundPickupsView();
       case PurchaserSection.inventory:
         return const InventoryView();
       case PurchaserSection.history:

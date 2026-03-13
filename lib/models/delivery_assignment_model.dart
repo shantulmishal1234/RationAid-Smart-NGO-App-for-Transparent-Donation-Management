@@ -141,7 +141,7 @@ class DeliveryAssignment {
   // Pack/items info
   final String? assignedPackId;
   final String? assignedPackName;
-  final Map<String, int> items; // item name → quantity
+  final Map<String, num> items; // item name → quantity
 
   // Distributor assignment
   final String? assignedDistributorId;
@@ -239,7 +239,7 @@ class DeliveryAssignment {
       familyLocationVerified: d['familyLocationVerified'] ?? false,
       assignedPackId: d['assignedPackId'],
       assignedPackName: d['assignedPackName'],
-      items: d['items'] != null ? Map<String, int>.from(d['items']) : {},
+      items: d['items'] != null ? Map<String, num>.from(d['items']) : {},
       assignedDistributorId: d['assignedDistributorId'],
       assignedDistributorName: d['assignedDistributorName'],
       status: DeliveryStatus.fromFirestore(d['status'] ?? 'not_started'),

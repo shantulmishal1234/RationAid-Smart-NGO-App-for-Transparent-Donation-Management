@@ -28,7 +28,7 @@ class DeliveryService {
     bool familyLocationVerified = false,
     String? assignedPackId,
     String? assignedPackName,
-    Map<String, int> items = const {},
+    Map<String, num> items = const {},
     String? distributorId,
     String? distributorName,
     String? procurementRequestId,
@@ -75,7 +75,7 @@ class DeliveryService {
         userId: distributorId,
         title: 'New Delivery Assigned 🚚',
         body:
-            'You have a new delivery to ${familyArea}, ${familyCity}. Tap to view details.',
+            'You have a new delivery to $familyArea, $familyCity. Tap to view details.',
         data: {'type': 'delivery_assigned', 'assignmentId': ref.id},
       );
     }
@@ -500,7 +500,21 @@ class DeliveryService {
       batch.update(procRef, {'status': 'issue_reported'});
     }
 
-    // Commit atomic failure logging
+    // 4. Revert linked donation statuses from 'delivered' → 'verified'
+    //    so they don't show as completed when delivery actually failed
+    final data = assignmentDoc.data() ?? {};
+    final donationIds = data['donationIds'] != null
+        ? List<String>.from(data['donationIds'] as List)
+        : <String>[];
+
+    for (final donationId in donationIds) {
+      batch.update(_db.collection('donations').doc(donationId), {
+        'status': 'verified', // Revert to last valid state
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Commit atomic failure + revert
     await batch.commit();
 
     // Notify admin
@@ -519,13 +533,14 @@ class DeliveryService {
       action: 'Delivery failed',
       familyId: familyId,
       familyName: 'Assignment $assignmentId',
-      details: 'Reason: ${reason.displayName}. Notes: $notes',
+      details:
+          'Reason: ${reason.displayName}. Notes: $notes. ${donationIds.length} donations reverted to verified.',
     );
   }
 
   // ─── Admin Actions ─────────────────────────────────────────────────────────
 
-  /// Admin verifies proof of delivery
+  /// Admin verifies proof of delivery — ATOMIC via WriteBatch
   static Future<void> adminVerifyDelivery(String assignmentId) async {
     final user = FirebaseAuth.instance.currentUser;
 
@@ -535,7 +550,10 @@ class DeliveryService {
     final familyId = data['familyId'] as String;
 
     final now = DateTime.now();
-    await _db.collection(_collection).doc(assignmentId).update({
+    final batch = _db.batch();
+
+    // 1. Update assignment status
+    batch.update(_db.collection(_collection).doc(assignmentId), {
       'status': DeliveryStatus.adminVerified.toFirestore(),
       'adminVerified': true,
       'adminVerifiedAt': Timestamp.fromDate(now),
@@ -545,29 +563,33 @@ class DeliveryService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // Update family
-    await _db.collection('families').doc(familyId).update({
+    // 2. Update family fulfillment status
+    batch.update(_db.collection('families').doc(familyId), {
       'fulfillmentStatus': 'admin_verified',
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // Update linked donations to delivered
+    // 3. Update linked donations to delivered — all in same batch
     final donationIds = data['donationIds'] != null
         ? List<String>.from(data['donationIds'] as List)
         : <String>[];
 
     for (final donationId in donationIds) {
-      await _db.collection('donations').doc(donationId).update({
+      batch.update(_db.collection('donations').doc(donationId), {
         'status': 'delivered',
         'updatedAt': FieldValue.serverTimestamp(),
       });
     }
 
+    // Commit atomically — all updates succeed or none do
+    await batch.commit();
+
     await AuditService.logFamilyAction(
       action: 'Delivery admin verified',
       familyId: familyId,
       familyName: 'Family',
-      details: 'Verified by ${user?.email ?? "Admin"}',
+      details:
+          'Verified by ${user?.email ?? "Admin"}. ${donationIds.length} donations marked delivered.',
     );
   }
 

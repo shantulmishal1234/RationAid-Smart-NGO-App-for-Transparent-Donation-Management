@@ -29,55 +29,39 @@ class _FamilyStatisticsReportScreenState
     );
   }
 
-  Future<Map<String, dynamic>> _loadFamilyStatistics() async {
-    final familiesRef = FirebaseFirestore.instance.collection('families');
-
-    // Status counts
-    final totalAgg = await familiesRef.count().get();
-    final acceptedAgg = await familiesRef
-        .where('status', isEqualTo: 'accepted')
-        .count()
-        .get();
-    final pendingAgg = await familiesRef
-        .where('status', isEqualTo: 'pending')
-        .count()
-        .get();
-    final rejectedAgg = await familiesRef
-        .where('status', isEqualTo: 'rejected')
-        .count()
-        .get();
-    final discardedAgg = await familiesRef
-        .where('status', isEqualTo: 'discarded')
-        .count()
-        .get();
-
-    final totalFamilies = totalAgg.count ?? 0;
-    final accepted = acceptedAgg.count ?? 0;
-    final pending = pendingAgg.count ?? 0;
-    final rejected = rejectedAgg.count ?? 0;
-    final discarded = discardedAgg.count ?? 0;
-
-    // Area distribution + other stats
-    final allFamilies = await familiesRef.get();
+  Map<String, dynamic> _computeStatistics(QuerySnapshot allFamilies) {
+    int totalFamilies = allFamilies.docs.length;
+    int accepted = 0;
+    int pending = 0;
+    int rejected = 0;
+    int discarded = 0;
 
     final Map<String, int> areaDistribution = {};
     int totalMembers = 0;
-    int withVolunteer = 0;
     int recentApplications = 0;
 
     final now = DateTime.now();
     final cutoff7 = now.subtract(const Duration(days: 7));
 
     for (final doc in allFamilies.docs) {
-      final data = doc.data();
+      final data = doc.data() as Map<String, dynamic>;
+
+      final status = data['status'] as String?;
+      if (status == 'accepted')
+        accepted++;
+      else if (status == 'pending')
+        pending++;
+      else if (status == 'rejected')
+        rejected++;
+      else if (status == 'discarded')
+        discarded++;
+
       final area = (data['area'] ?? 'Unknown').toString();
-      final members = (data['familyMembers'] ?? 0) as int;
-      final hasVolunteer = data['assignedVolunteerUid'] != null;
+      final members = (data['familySize'] ?? 0) as int;
       final createdAt = data['createdAt'] as Timestamp?;
 
       areaDistribution[area] = (areaDistribution[area] ?? 0) + 1;
       totalMembers += members;
-      if (hasVolunteer) withVolunteer++;
       if (createdAt != null && createdAt.toDate().isAfter(cutoff7)) {
         recentApplications++;
       }
@@ -95,7 +79,6 @@ class _FamilyStatisticsReportScreenState
       'rejected': rejected,
       'discarded': discarded,
       'totalMembers': totalMembers,
-      'withVolunteer': withVolunteer,
       'recentApplications': recentApplications,
       'areaDistribution': topAreas,
     };
@@ -108,7 +91,12 @@ class _FamilyStatisticsReportScreenState
         context,
       ).showSnackBar(const SnackBar(content: Text('Generating report...')));
 
-      final data = await _loadFamilyStatistics();
+      // Fetch all families for both summary stats and details
+      final familiesSnapshot = await FirebaseFirestore.instance
+          .collection('families')
+          .get();
+
+      final data = _computeStatistics(familiesSnapshot);
 
       final csvContent = StringBuffer();
 
@@ -120,7 +108,6 @@ class _FamilyStatisticsReportScreenState
       csvContent.writeln('Metric,Value');
       csvContent.writeln('Total Families,${data['totalFamilies']}');
       csvContent.writeln('Total Members,${data['totalMembers']}');
-      csvContent.writeln('With Assigned Volunteer,${data['withVolunteer']}');
       csvContent.writeln(
         'Recent Applications (7d),${data['recentApplications']}',
       );
@@ -146,13 +133,8 @@ class _FamilyStatisticsReportScreenState
       // Detailed Family Data Section
       csvContent.writeln('DETAILED FAMILY DATA');
       csvContent.writeln(
-        'CNIC,Head Name,Status,Area,Family Members,Monthly Income,Contact,Email,Volunteer Assigned,Application Date,Assistance Needs',
+        'CNIC,Head Name,Status,Area,Family Size,Monthly Income,Contact,Email,Application Date,Assistance Needs',
       );
-
-      // Fetch all families
-      final familiesSnapshot = await FirebaseFirestore.instance
-          .collection('families')
-          .get();
 
       for (final doc in familiesSnapshot.docs) {
         final familyData = doc.data();
@@ -160,13 +142,10 @@ class _FamilyStatisticsReportScreenState
         final headName = familyData['headName'] ?? 'N/A';
         final status = familyData['status'] ?? 'N/A';
         final area = familyData['area'] ?? 'N/A';
-        final familyMembers = familyData['familyMembers'] ?? 0;
+        final familySize = familyData['familySize'] ?? 0;
         final monthlyIncome = familyData['monthlyIncome'] ?? 0;
         final contact = familyData['contact'] ?? 'N/A';
         final email = familyData['email'] ?? 'N/A';
-
-        final hasVolunteer = familyData['assignedVolunteerUid'] != null;
-        final volunteerStatus = hasVolunteer ? 'Yes' : 'No';
 
         final createdAt = familyData['createdAt'] as Timestamp?;
         final createdAtStr = createdAt != null
@@ -177,7 +156,7 @@ class _FamilyStatisticsReportScreenState
 
         // Escape commas in fields for CSV
         csvContent.writeln(
-          '"$cnic","$headName",$status,"$area",$familyMembers,$monthlyIncome,"$contact","$email",$volunteerStatus,$createdAtStr,"$assistanceNeeds"',
+          '"$cnic","$headName",$status,"$area",$familySize,$monthlyIncome,"$contact","$email","$createdAtStr","$assistanceNeeds"',
         );
       }
 
@@ -217,7 +196,6 @@ class _FamilyStatisticsReportScreenState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     return AdminScaffold(
       title: 'Family Statistics',
       actions: [
@@ -227,13 +205,13 @@ class _FamilyStatisticsReportScreenState
           onPressed: _exportReport,
         ),
       ],
-      body: FutureBuilder<Map<String, dynamic>>(
-        future: _loadFamilyStatistics(),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('families').snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (!snapshot.hasData) {
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return Center(
               child: Text(
                 'No family data available.',
@@ -244,14 +222,13 @@ class _FamilyStatisticsReportScreenState
             );
           }
 
-          final data = snapshot.data!;
+          final data = _computeStatistics(snapshot.data!);
           final totalFamilies = data['totalFamilies'] as int;
           final accepted = data['accepted'] as int;
           final pending = data['pending'] as int;
           final rejected = data['rejected'] as int;
           final discarded = data['discarded'] as int;
           final totalMembers = data['totalMembers'] as int;
-          final withVolunteer = data['withVolunteer'] as int;
           final recentApplications = data['recentApplications'] as int;
           final areaDistribution =
               data['areaDistribution'] as List<MapEntry<String, int>>;
@@ -292,16 +269,6 @@ class _FamilyStatisticsReportScreenState
                   children: [
                     Expanded(
                       child: _summaryCard(
-                        icon: Icons.assignment_ind,
-                        title: 'With volunteer',
-                        value: withVolunteer.toString(),
-                        subtitle: 'Volunteer assigned',
-                        color: Colors.purple,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _summaryCard(
                         icon: Icons.schedule,
                         title: 'New (7d)',
                         value: recentApplications.toString(),
@@ -309,6 +276,10 @@ class _FamilyStatisticsReportScreenState
                         color: Colors.orange,
                       ),
                     ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: SizedBox(),
+                    ), // Placeholder for alignment
                   ],
                 ),
 
@@ -366,7 +337,9 @@ class _FamilyStatisticsReportScreenState
                       child: Text(
                         'No family data available yet.',
                         style: TextStyle(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
                         ),
                       ),
                     ),
