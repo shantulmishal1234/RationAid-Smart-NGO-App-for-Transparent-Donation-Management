@@ -17,7 +17,7 @@ import 'package:ration_aid/screens/Admin/AssistancePacks/pack_management_screen.
 import 'package:ration_aid/screens/Admin/Verification/purchase_approval_screen.dart';
 import 'package:ration_aid/screens/Admin/Delivery/admin_delivery_management_screen.dart';
 import 'package:ration_aid/screens/Admin/Verification/inventory_issues_screen.dart';
-import 'package:ration_aid/screens/Admin/sections/funding_control_section.dart';
+
 import 'package:ration_aid/services/notification_service.dart';
 
 import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
@@ -37,10 +37,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
   DonationStatusFilter _donationFilter = DonationStatusFilter.all;
   String _hrmSelectedRole = 'all';
 
+  // Optimized streams
+  late final Stream<int> _unreadCountStream;
+
   @override
   void initState() {
     super.initState();
     _verifyAdminRole();
+    _unreadCountStream = NotificationService.getUnreadCountStream();
   }
 
   /// Verify the current user has admin role — prevents unauthorized access
@@ -89,16 +93,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return AdminScaffold(
       title: 'Admin Dashboard',
       showBackButton: false,
       actions: [
         StreamBuilder<int>(
-          stream: NotificationService.getUnreadCountStream(),
+          stream: _unreadCountStream,
           builder: (context, snapshot) {
             final unreadCount = snapshot.data ?? 0;
             return Stack(
@@ -183,7 +183,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         return DashboardSection(onSectionChanged: _handleSectionChange);
 
       case AdminSection.households:
-        return const HouseholdsSection();
+        return HouseholdsSection(onSectionChanged: _handleSectionChange);
 
       case AdminSection.donations:
         return DonationsSection(
@@ -237,10 +237,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
       case AdminSection.inventoryIssues:
         return const InventoryIssuesScreen();
-
-      case AdminSection.fundingControl:
-        return const FundingControlSection();
-
       case AdminSection.more:
         return AdminMoreSection(onSectionChanged: _handleSectionChange);
     }

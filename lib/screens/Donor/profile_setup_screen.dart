@@ -59,14 +59,17 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     setState(() => _isUploading = true);
 
     try {
-      final url = await CloudinaryService.uploadImage(_selectedImage!);
-      if (url != null) {
-        setState(() => _uploadedUrl = url);
+      final response = await CloudinaryService.uploadImage(_selectedImage!);
+      if (response.isSuccess) {
+        setState(() => _uploadedUrl = response.url);
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to upload image. Please try again.'),
+            SnackBar(
+              content: Text(
+                response.errorMessage ??
+                    'Failed to upload image. Please try again.',
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -239,7 +242,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       'Help others recognize you',
                       style: TextStyle(
                         fontSize: 14,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.6,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 30),
@@ -254,9 +259,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                             height: 150,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: AppColors.donorGreen.withValues(alpha: 0.1),
+                              color: AppColors.donorGreen.withValues(
+                                alpha: 0.1,
+                              ),
                               border: Border.all(
-                                color: AppColors.donorGreen.withValues(alpha: 0.3),
+                                color: AppColors.donorGreen.withValues(
+                                  alpha: 0.3,
+                                ),
                                 width: 3,
                               ),
                               image: _selectedImage != null
@@ -273,8 +282,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                       Icon(
                                         Icons.add_a_photo,
                                         size: 40,
-                                        color: AppColors.donorGreen.withValues(alpha: 
-                                          0.6,
+                                        color: AppColors.donorGreen.withValues(
+                                          alpha: 0.6,
                                         ),
                                       ),
                                       const SizedBox(height: 8),
@@ -338,7 +347,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                     color: theme.cardColor,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.2),
+                                        color: Colors.black.withValues(
+                                          alpha: 0.2,
+                                        ),
                                         blurRadius: 4,
                                       ),
                                     ],
@@ -411,7 +422,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           'Skip for now',
                           style: TextStyle(
                             fontSize: 14,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
                       ),
@@ -441,7 +454,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       'You can always change your photo later from your profile settings.',
                       style: TextStyle(
                         fontSize: 13,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
+                        ),
                       ),
                     ),
                   ),

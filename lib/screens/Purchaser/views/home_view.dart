@@ -9,7 +9,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
-class PurchaserHomeView extends StatelessWidget {
+class PurchaserHomeView extends StatefulWidget {
   final bool isSupervisor;
   final ValueChanged<PurchaserSection> onSectionChange;
 
@@ -20,12 +20,45 @@ class PurchaserHomeView extends StatelessWidget {
   });
 
   @override
+  State<PurchaserHomeView> createState() => _PurchaserHomeViewState();
+}
+
+class _PurchaserHomeViewState extends State<PurchaserHomeView> {
+  Stream<List<ProcurementRequest>>? _statsStream;
+  Stream<QuerySnapshot>? _notificationsStream;
+  String? _cachedUid;
+
+  @override
+  void initState() {
+    super.initState();
+    _initStreams();
+  }
+
+  void _initStreams() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && user.uid != _cachedUid) {
+      _cachedUid = user.uid;
+      _statsStream = ProcurementService.getSmartHomeStatsStream(
+        user.uid,
+        widget.isSupervisor,
+      );
+      _notificationsStream = NotificationService.streamPurchaserNotifications(
+        user.uid,
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
       return const Center(child: Text('Please log in'));
+    }
+
+    if (user.uid != _cachedUid) {
+      _initStreams();
     }
 
     return SingleChildScrollView(
@@ -56,7 +89,7 @@ class PurchaserHomeView extends StatelessWidget {
                           color: theme.colorScheme.onSurface,
                         ),
                       ),
-                      if (isSupervisor) ...[
+                      if (widget.isSupervisor) ...[
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.all(4),
@@ -92,10 +125,7 @@ class PurchaserHomeView extends StatelessWidget {
 
           // 1. Main Stats & Financial Overview
           StreamBuilder<List<ProcurementRequest>>(
-            stream: ProcurementService.getSmartHomeStatsStream(
-              user.uid,
-              isSupervisor,
-            ),
+            stream: _statsStream,
             builder: (context, snapshot) {
               if (snapshot.hasError) {
                 return Center(
@@ -135,7 +165,7 @@ class PurchaserHomeView extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           StreamBuilder<QuerySnapshot>(
-            stream: NotificationService.streamPurchaserNotifications(user.uid),
+            stream: _notificationsStream,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(
@@ -449,7 +479,7 @@ class PurchaserHomeView extends StatelessWidget {
             : 'Pending > 3 Days',
       ),
       trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-      onTap: () => onSectionChange(PurchaserSection.procurement),
+      onTap: () => widget.onSectionChange(PurchaserSection.procurement),
     );
   }
 

@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/models/procurement_model.dart';
 import 'package:ration_aid/services/procurement_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/widgets/frosted_panel.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 
 enum InventoryFilter { all, lowStock, highValue }
 
@@ -23,7 +25,8 @@ class InventoryView extends StatefulWidget {
   State<InventoryView> createState() => _InventoryViewState();
 }
 
-class _InventoryViewState extends State<InventoryView> {
+class _InventoryViewState extends State<InventoryView>
+    with SingleTickerProviderStateMixin {
   String _searchQuery = '';
   Timer? _debounce;
   InventoryFilter _selectedFilter = InventoryFilter.all;
@@ -32,16 +35,115 @@ class _InventoryViewState extends State<InventoryView> {
   String? _expandedPack;
   late Stream<List<ProcurementRequest>> _inventoryStream;
 
+  // In-Kind Warehouse stream
+  late Stream<QuerySnapshot> _inkindStockStream;
+
+  // Tab controller
+  late TabController _tabController;
+
+  // Toggle for In-Kind Warehouse View
+  bool _showGrfPool = false;
+
+  // Processed Data Cache
+  Map<String, Map<String, dynamic>> _packStats = {};
+  double _totalValue = 0;
+  int _freshCount = 0;
+  int _reviewCount = 0;
+  int _urgentCount = 0;
+  int _lowStockCount = 0;
+  List<String> _sortedPackNames = [];
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _inventoryStream = ProcurementService.getInventoryStream();
+    // G2 Fix — Stream warehouse_stock with status 'received' to show In-Kind items
+    // Split View Fix — Include 'grf_pool' to track items donated to General Relief Fund
+    _inkindStockStream = FirebaseFirestore.instance
+        .collection('warehouse_stock')
+        .where('status', whereIn: ['received', 'pending_pickup', 'grf_pool'])
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
+  void _processData(List<ProcurementRequest> stockRequests) {
+    // Group by Pack Name
+    final Map<String, List<ProcurementRequest>> packGroups = {};
+    for (var req in stockRequests) {
+      packGroups.putIfAbsent(req.packName, () => []).add(req);
+    }
+
+    _totalValue = 0;
+    _freshCount = 0;
+    _reviewCount = 0;
+    _urgentCount = 0;
+    _lowStockCount = 0;
+
+    final Map<String, Map<String, dynamic>> stats = {};
+
+    packGroups.forEach((name, requests) {
+      final count = requests.length;
+      final packTotalValue = requests.fold<double>(
+        0,
+        (sum, req) => sum + req.totalSpent,
+      );
+      final oldestDate = requests
+          .map((r) => r.verifiedAt ?? r.createdAt)
+          .reduce((a, b) => a.isBefore(b) ? a : b);
+
+      final daysInStock = DateTime.now().difference(oldestDate).inDays;
+
+      if (count < 3) _lowStockCount++;
+      if (daysInStock > 7)
+        _urgentCount++;
+      else if (daysInStock >= 4)
+        _reviewCount++;
+      else
+        _freshCount++;
+
+      _totalValue += packTotalValue;
+
+      stats[name] = {
+        'count': count,
+        'totalValue': packTotalValue,
+        'avgValue': count > 0 ? packTotalValue / count : 0,
+        'oldestDate': oldestDate,
+        'requests': requests,
+      };
+    });
+
+    _packStats = stats;
+    _applyFiltersAndSort();
+  }
+
+  void _applyFiltersAndSort() {
+    var filtered = Map<String, Map<String, dynamic>>.from(_packStats);
+
+    // Apply filters
+    if (_selectedFilter == InventoryFilter.lowStock) {
+      filtered.removeWhere((key, value) => value['count'] >= 3);
+    } else if (_selectedFilter == InventoryFilter.highValue) {
+      filtered.removeWhere((key, value) => value['totalValue'] < 5000);
+    }
+
+    // Apply search
+    if (_searchQuery.isNotEmpty) {
+      filtered.removeWhere(
+        (key, value) => !key.toLowerCase().contains(_searchQuery),
+      );
+    }
+
+    // Sort
+    _sortedPackNames = filtered.keys.toList();
+    _sortPacks(_sortedPackNames, filtered);
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _searchController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -58,108 +160,91 @@ class _InventoryViewState extends State<InventoryView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Header + TabBar
+        Padding(
+          padding: const EdgeInsets.only(top: 12, bottom: 0),
+          child: Center(
+            child: Text(
+              'Inventory & Stock',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: theme.colorScheme.onSurface,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+        ),
+
+        // Tab Bar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Container(
+            decoration: BoxDecoration(
+              color: theme.cardColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: theme.dividerColor.withValues(alpha: 0.5),
+              ),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              labelColor: AppColors.purchaserOrange,
+              unselectedLabelColor: theme.colorScheme.onSurface.withValues(
+                alpha: 0.6,
+              ),
+              indicatorColor: AppColors.purchaserOrange,
+              indicatorWeight: 2.5,
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+              tabs: const [
+                Tab(text: 'Procurement Stock'),
+                Tab(text: 'In-Kind Warehouse'),
+              ],
+            ),
+          ),
+        ),
+
+        // Tab Views
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              // Tab 1 — Existing Procurement Inventory
+              _buildProcurementTab(theme),
+              // Tab 2 — In-Kind Warehouse (received warehouse_stock docs)
+              _buildInKindWarehouseTab(theme),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─── TAB 1: Procurement Stock ───────────────────────────────────────────────
+  Widget _buildProcurementTab(ThemeData theme) {
     return StreamBuilder<List<ProcurementRequest>>(
       stream: _inventoryStream,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            _packStats.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final stockRequests = snapshot.data ?? [];
-
-        // Group by Pack Name with details
-        final Map<String, List<ProcurementRequest>> packGroups = {};
-        for (var req in stockRequests) {
-          if (!packGroups.containsKey(req.packName)) {
-            packGroups[req.packName] = [];
-          }
-          packGroups[req.packName]!.add(req);
+        if (snapshot.hasData) {
+          _processData(snapshot.data!);
         }
 
-        // Calculate pack statistics and aggregation
-        int freshCount = 0;
-        int reviewCount = 0;
-        int urgentCount = 0;
-        int lowStockCount = 0;
-
-        final packStats = packGroups.map((name, requests) {
-          final count = requests.length;
-          final totalValue = requests.fold<double>(
-            0,
-            (sum, req) => sum + req.totalSpent,
-          );
-          final avgValue = count > 0 ? totalValue / count : 0;
-
-          // Check for aging (oldest verified date)
-          final oldestDate = requests
-              .map(
-                (r) => r.verifiedAt ?? r.createdAt,
-              ) // use createdAt fallback, not DateTime.now()
-              .reduce((a, b) => a.isBefore(b) ? a : b);
-
-          final daysInStock = DateTime.now().difference(oldestDate).inDays;
-
-          if (count < 3) lowStockCount++;
-
-          if (daysInStock > 7) {
-            urgentCount++;
-          } else if (daysInStock >= 4)
-            reviewCount++;
-          else
-            freshCount++;
-
-          return MapEntry(name, {
-            'count': count,
-            'totalValue': totalValue,
-            'avgValue': avgValue,
-            'oldestDate': oldestDate,
-            'requests': requests,
-          });
-        });
-
-        final totalValue = stockRequests.fold<double>(
-          0,
-          (sum, req) => sum + req.totalSpent,
-        );
-
-        // Apply filters
-        var filteredPacks = Map<String, dynamic>.from(packStats);
-
-        if (_selectedFilter == InventoryFilter.lowStock) {
-          filteredPacks.removeWhere((key, value) => value['count'] >= 3);
-        } else if (_selectedFilter == InventoryFilter.highValue) {
-          filteredPacks.removeWhere((key, value) => value['totalValue'] < 5000);
-        }
-
-        // Apply search
-        if (_searchQuery.isNotEmpty) {
-          filteredPacks.removeWhere(
-            (key, value) => !key.toLowerCase().contains(_searchQuery),
-          );
-        }
-
-        // Sort packs
-        final sortedPackNames = filteredPacks.keys.toList();
-        _sortPacks(sortedPackNames, filteredPacks);
+        final filteredPacks = Map<String, dynamic>.from(_packStats)
+          ..removeWhere((k, v) => !_sortedPackNames.contains(k));
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Center(
-                child: Text(
-                  'Inventory & Stock',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: theme.colorScheme.onSurface,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-            ),
-
             // Quick Stats Dashboard (Procurement Style)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -193,7 +278,7 @@ class _InventoryViewState extends State<InventoryView> {
                       child: Column(
                         children: [
                           Text(
-                            'Rs ${(totalValue / 1000).toStringAsFixed(1)}K',
+                            'Rs ${(_totalValue / 1000).toStringAsFixed(1)}K',
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -228,11 +313,11 @@ class _InventoryViewState extends State<InventoryView> {
                         child: Column(
                           children: [
                             Text(
-                              lowStockCount.toString(),
+                              _lowStockCount.toString(),
                               style: TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
-                                color: lowStockCount > 0
+                                color: _lowStockCount > 0
                                     ? Colors.red
                                     : theme.colorScheme.onSurface,
                               ),
@@ -262,11 +347,11 @@ class _InventoryViewState extends State<InventoryView> {
                       child: Column(
                         children: [
                           Text(
-                            urgentCount.toString(),
+                            _urgentCount.toString(),
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: urgentCount > 0
+                              color: _urgentCount > 0
                                   ? Colors.red
                                   : theme.colorScheme.onSurface,
                             ),
@@ -324,27 +409,27 @@ class _InventoryViewState extends State<InventoryView> {
                       children: [
                         _statItem(
                           'Total Packs',
-                          packStats.length.toString(),
+                          _packStats.length.toString(),
                           AppColors.purchaserOrange,
                         ),
                         _statItem(
                           'Fresh (<4d)',
-                          freshCount.toString(),
+                          _freshCount.toString(),
                           Colors.green[600]!,
                         ),
                         _statItem(
                           'Review (4-7d)',
-                          reviewCount.toString(),
+                          _reviewCount.toString(),
                           Colors.amber[700]!,
                         ),
                         _statItem(
                           'Urgent (>7d)',
-                          urgentCount.toString(),
+                          _urgentCount.toString(),
                           Colors.red[400]!,
                         ),
                         _statItem(
                           'Value',
-                          'Rs ${(totalValue / 1000).toStringAsFixed(1)}K', // Fixed rounding
+                          'Rs ${(_totalValue / 1000).toStringAsFixed(1)}K', // Fixed rounding
                           Colors.blue[600]!,
                         ),
                       ],
@@ -529,7 +614,7 @@ class _InventoryViewState extends State<InventoryView> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
-                  'Showing ${filteredPacks.length} of ${packStats.length} pack types',
+                  'Showing ${filteredPacks.length} of ${_packStats.length} pack types',
                   style: TextStyle(
                     fontSize: 12,
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
@@ -553,11 +638,11 @@ class _InventoryViewState extends State<InventoryView> {
                         },
                         child: ListView.separated(
                           padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
-                          itemCount: sortedPackNames.length,
+                          itemCount: _sortedPackNames.length,
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 8),
                           itemBuilder: (context, index) {
-                            final packName = sortedPackNames[index];
+                            final packName = _sortedPackNames[index];
                             final packData = filteredPacks[packName];
                             final count = packData['count'] as int;
                             final totalValue = packData['totalValue'] as double;
@@ -583,6 +668,500 @@ class _InventoryViewState extends State<InventoryView> {
           ],
         );
       },
+    );
+  }
+
+  // ─── TAB 2: In-Kind Warehouse ───────────────────────────────────────────────
+  Widget _buildInKindWarehouseTab(ThemeData theme) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _inkindStockStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+
+        // Segregate docs into Family vs GRF
+        final familyDocs = <DocumentSnapshot>[];
+        final grfDocs = <DocumentSnapshot>[];
+
+        for (var doc in docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          final status = data['status'] as String? ?? 'received';
+          if (status == 'grf_pool') {
+            grfDocs.add(doc);
+          } else {
+            familyDocs.add(doc);
+          }
+        }
+
+        final displayDocs = _showGrfPool ? grfDocs : familyDocs;
+
+        // Compute Stats for active view
+        double totalValue = 0;
+        final aggregatedItems = <String, Map<String, dynamic>>{};
+
+        for (var doc in displayDocs) {
+          final data = doc.data() as Map<String, dynamic>;
+
+          // Value
+          totalValue +=
+              (data['lockedInKindValue'] ??
+                      data['totalLockedValue'] ??
+                      data['totalValue'] ??
+                      0)
+                  .toDouble();
+
+          // Items
+          final items = data['items'] as Map<String, dynamic>? ?? {};
+          final units = data['itemUnits'] as Map<String, dynamic>? ?? {};
+
+          for (var entry in items.entries) {
+            final name = entry.key;
+            final qtyStr = entry.value.toString();
+            // Extract numeric part (e.g. "0.5 kg" -> 0.5 or "1" -> 1)
+            final numericPart = qtyStr.split(' ')[0];
+            final qty = num.tryParse(numericPart) ?? 0;
+            final unit = units[name] as String? ?? '';
+
+            if (!aggregatedItems.containsKey(name)) {
+              aggregatedItems[name] = {'qty': 0.0, 'unit': unit};
+            }
+            aggregatedItems[name]!['qty'] += qty;
+
+            if (unit.isNotEmpty && aggregatedItems[name]!['unit'] == '') {
+              aggregatedItems[name]!['unit'] = unit;
+            }
+          }
+        }
+
+        return Column(
+          children: [
+            // Top Toggle & Stats Banner
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  // Toggle Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _showGrfPool = false),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: !_showGrfPool
+                                  ? Colors.teal
+                                  : theme.cardColor,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: !_showGrfPool
+                                    ? Colors.teal
+                                    : theme.dividerColor,
+                              ),
+                              boxShadow: !_showGrfPool
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.teal.withValues(
+                                          alpha: 0.3,
+                                        ),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.family_restroom,
+                                      size: 16,
+                                      color: !_showGrfPool
+                                          ? Colors.white
+                                          : theme.iconTheme.color,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Family Reserved',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: !_showGrfPool
+                                            ? Colors.white
+                                            : theme.textTheme.bodyMedium?.color,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _showGrfPool = true),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: _showGrfPool
+                                  ? AppColors.purchaserOrange
+                                  : theme.cardColor,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _showGrfPool
+                                    ? AppColors.purchaserOrange
+                                    : theme.dividerColor,
+                              ),
+                              boxShadow: _showGrfPool
+                                  ? [
+                                      BoxShadow(
+                                        color: AppColors.purchaserOrange
+                                            .withValues(alpha: 0.3),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.pool,
+                                      size: 16,
+                                      color: _showGrfPool
+                                          ? Colors.white
+                                          : theme.iconTheme.color,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'GRF Pool',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: _showGrfPool
+                                            ? Colors.white
+                                            : theme.textTheme.bodyMedium?.color,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Real-time Stats Row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _statBlock(
+                        'Batches',
+                        displayDocs.length.toString(),
+                        Icons.inventory_2,
+                      ),
+                      Container(
+                        height: 30,
+                        width: 1,
+                        color: theme.dividerColor,
+                      ),
+                      _statBlock(
+                        'Total Value',
+                        'Rs ${(totalValue / 1000).toStringAsFixed(1)}K',
+                        Icons.account_balance_wallet,
+                      ),
+                      Container(
+                        height: 30,
+                        width: 1,
+                        color: theme.dividerColor,
+                      ),
+                      _statBlock(
+                        'Item Types',
+                        aggregatedItems.length.toString(),
+                        Icons.category,
+                      ),
+                    ],
+                  ),
+                  if (aggregatedItems.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: theme.scaffoldBackgroundColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: theme.dividerColor),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Available Stock Summary',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: aggregatedItems.entries.map((e) {
+                              final name = e.key;
+                              final qty = e.value['qty'] as num;
+                              final unit = e.value['unit'] as String;
+
+                              // Clean up display (e.g., 5.0 -> 5)
+                              final qtyDisplay = qty == qty.toInt()
+                                  ? qty.toInt().toString()
+                                  : qty.toStringAsFixed(1);
+
+                              return Chip(
+                                avatar: Icon(
+                                  Icons.scale,
+                                  size: 14,
+                                  color: _showGrfPool
+                                      ? AppColors.purchaserOrange
+                                      : Colors.teal,
+                                ),
+                                label: Text(
+                                  '$name: $qtyDisplay $unit',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                backgroundColor: theme.cardColor,
+                                side: BorderSide(color: theme.dividerColor),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // List View
+            Expanded(
+              child: displayDocs.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.warehouse_outlined,
+                            size: 64,
+                            color: Colors.grey.shade400,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _showGrfPool
+                                ? 'No GRF Pool Items in Warehouse'
+                                : 'No Family Items in Warehouse',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: displayDocs.length,
+                      itemBuilder: (context, index) {
+                        final data =
+                            displayDocs[index].data() as Map<String, dynamic>;
+                        final itemsMap =
+                            data['items'] as Map<String, dynamic>? ?? {};
+                        final itemUnitsMap =
+                            data['itemUnits'] as Map<String, dynamic>? ?? {};
+                        final status = data['status'] as String? ?? 'received';
+                        final receivedByName =
+                            data['receivedByName'] as String? ?? 'Purchaser';
+                        final donorName =
+                            data['donorName'] as String? ?? 'Unknown Donor';
+                        final createdAt =
+                            (data['createdAt'] as Timestamp?)?.toDate() ??
+                            DateTime.now();
+
+                        final isPending = status == 'pending_pickup';
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          elevation: 4,
+                          shadowColor: Colors.black.withValues(alpha: 0.1),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: BorderSide(
+                              color: _showGrfPool
+                                  ? AppColors.purchaserOrange.withValues(
+                                      alpha: 0.3,
+                                    )
+                                  : (isPending
+                                        ? Colors.orange.withValues(alpha: 0.3)
+                                        : Colors.teal.withValues(alpha: 0.3)),
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _showGrfPool
+                                            ? AppColors.purchaserOrange
+                                                  .withValues(alpha: 0.1)
+                                            : (isPending
+                                                  ? Colors.orange.shade50
+                                                  : Colors.teal.shade50),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: _showGrfPool
+                                              ? AppColors.purchaserOrange
+                                                    .withValues(alpha: 0.5)
+                                              : (isPending
+                                                    ? Colors.orange.shade200
+                                                    : Colors.teal.shade200),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        _showGrfPool
+                                            ? 'GRF Pool Stock'
+                                            : (isPending
+                                                  ? 'Pending Pickup'
+                                                  : 'Reserved for Family'),
+                                        style: TextStyle(
+                                          color: _showGrfPool
+                                              ? Colors.orange.shade900
+                                              : (isPending
+                                                    ? Colors.orange.shade800
+                                                    : Colors.teal.shade700),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      DateFormat('MMM d, y').format(createdAt),
+                                      style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'From: $donorName',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (!isPending)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      'Collected by: $receivedByName',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ),
+                                const Divider(height: 24),
+                                const Text(
+                                  'Items in Batch:',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                ...itemsMap.entries.map((entry) {
+                                  final name = entry.key;
+                                  final qty = entry.value;
+                                  final unit = itemUnitsMap[name] ?? '';
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.circle,
+                                          size: 6,
+                                          color: _showGrfPool
+                                              ? AppColors.purchaserOrange
+                                              : Colors.teal,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          '$name: ',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        Text('$qty $unit'),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Mini Stat Block Helper
+  Widget _statBlock(String label, String value, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, size: 16, color: Colors.grey.shade600),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+        ),
+      ],
     );
   }
 

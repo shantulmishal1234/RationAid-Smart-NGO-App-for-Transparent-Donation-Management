@@ -6,6 +6,8 @@ enum DonationStatus {
   pending,
   underVerification,
   verified,
+  pendingAssignment,
+  stocked, // In-Kind: item picked up by purchaser, now in warehouse
   inProcess,
   outForDelivery,
   delivered,
@@ -22,6 +24,10 @@ enum DonationStatus {
         return 'Under Verification';
       case DonationStatus.verified:
         return 'Verified';
+      case DonationStatus.pendingAssignment:
+        return 'Pending Assignment';
+      case DonationStatus.stocked:
+        return 'In Warehouse';
       case DonationStatus.inProcess:
         return 'In Process';
       case DonationStatus.outForDelivery:
@@ -45,6 +51,10 @@ enum DonationStatus {
         return 'under_verification';
       case DonationStatus.verified:
         return 'verified';
+      case DonationStatus.pendingAssignment:
+        return 'pending_assignment';
+      case DonationStatus.stocked:
+        return 'stocked';
       case DonationStatus.inProcess:
         return 'in_process';
       case DonationStatus.outForDelivery:
@@ -68,6 +78,10 @@ enum DonationStatus {
         return DonationStatus.underVerification;
       case 'verified':
         return DonationStatus.verified;
+      case 'pending_assignment':
+        return DonationStatus.pendingAssignment;
+      case 'stocked':
+        return DonationStatus.stocked;
       case 'in_process':
         return DonationStatus.inProcess;
       case 'out_for_delivery':
@@ -75,6 +89,7 @@ enum DonationStatus {
       case 'delivered':
         return DonationStatus.delivered;
       case 'closed':
+      case 'pool_assigned': // Map pool assignment to closed flow in UI
         return DonationStatus.closed;
       case 'rejected':
         return DonationStatus.rejected;
@@ -146,6 +161,10 @@ class Donation {
   final DonationType donationType;
   final double? amount; // nullable for in-kind or when not specified
   final Map<String, num>? items; // nullable for cash donations
+  final Map<String, String>?
+  itemUnits; // New: stores units (e.g. "kg") at submission
+  final Map<String, double>?
+  itemValueSnapshot; // New: stores value (PKR) per item
   final bool anonymous;
   final DonationStatus status;
   final String? rejectionReason; // nullable
@@ -226,6 +245,8 @@ class Donation {
     this.idempotencyKey = '',
     this.smartSplits,
     this.grfAllocations,
+    this.itemUnits,
+    this.itemValueSnapshot,
   });
 
   /// Factory constructor from Firestore document
@@ -256,6 +277,16 @@ class Donation {
       amount: data['amount']?.toDouble(),
       items: data['items'] != null
           ? Map<String, num>.from(data['items'] as Map)
+          : null,
+      itemUnits: data['itemUnits'] != null
+          ? Map<String, String>.from(data['itemUnits'] as Map)
+          : null,
+      itemValueSnapshot: data['itemValueSnapshot'] != null
+          ? Map<String, double>.from(
+              (data['itemValueSnapshot'] as Map).map(
+                (k, v) => MapEntry(k.toString(), (v as num).toDouble()),
+              ),
+            )
           : null,
       anonymous: data['anonymous'] ?? false,
       status: DonationStatus.fromFirestore(data['status'] ?? 'draft'),
@@ -307,6 +338,8 @@ class Donation {
       'donationType': donationType.toFirestore(),
       'amount': amount,
       'items': items,
+      'itemUnits': itemUnits,
+      'itemValueSnapshot': itemValueSnapshot,
       'anonymous': anonymous,
       'status': status.toFirestore(),
       'rejectionReason': rejectionReason,
@@ -365,8 +398,11 @@ class Donation {
       case DonationStatus.underVerification:
         return 'orange';
       case DonationStatus.verified:
+      case DonationStatus.pendingAssignment:
       case DonationStatus.inProcess:
         return 'blue';
+      case DonationStatus.stocked:
+        return 'teal';
       case DonationStatus.outForDelivery:
       case DonationStatus.delivered:
         return 'purple';
@@ -395,6 +431,8 @@ class Donation {
     DateTime? updatedAt,
     String? pickupAddress,
     String? contactNumber,
+    Map<String, String>? itemUnits,
+    Map<String, double>? itemValueSnapshot,
   }) {
     return Donation(
       id: id ?? this.id,
@@ -403,6 +441,8 @@ class Donation {
       donationType: donationType ?? this.donationType,
       amount: amount ?? this.amount,
       items: items ?? this.items,
+      itemUnits: itemUnits ?? this.itemUnits,
+      itemValueSnapshot: itemValueSnapshot ?? this.itemValueSnapshot,
       anonymous: anonymous ?? this.anonymous,
       status: status ?? this.status,
       rejectionReason: rejectionReason ?? this.rejectionReason,
@@ -413,7 +453,7 @@ class Donation {
       updatedAt: updatedAt ?? this.updatedAt,
       pickupAddress: pickupAddress ?? this.pickupAddress,
       contactNumber: contactNumber ?? this.contactNumber,
-      grfAllocations: grfAllocations ?? this.grfAllocations,
+      grfAllocations: grfAllocations ?? grfAllocations,
     );
   }
 }

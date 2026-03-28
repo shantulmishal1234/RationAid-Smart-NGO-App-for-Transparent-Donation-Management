@@ -99,6 +99,10 @@ class DonationService {
         donationType: donation.donationType,
         amount: donation.amount,
         items: donation.items,
+        // BUG FIX — itemUnits and smartSplits were previously dropped here,
+        // causing in-kind split docs to never be created during pickup collection.
+        itemUnits: donation.itemUnits,
+        smartSplits: donation.smartSplits,
         anonymous: donation.anonymous,
         status: donation.status,
         rejectionReason: donation.rejectionReason,
@@ -279,7 +283,7 @@ class DonationService {
         // Fix #17 — actionable rejection notification with amount and reason
         final rawAmount = currentData?['amount'];
         final amountStr = rawAmount != null
-            ? 'PKR ${(rawAmount as num).toStringAsFixed(0)}'
+            ? 'PKR ${(num.tryParse(rawAmount.toString()) ?? 0).toStringAsFixed(0)}'
             : 'your';
         final donType = currentData?['donationType'] == 'inKind'
             ? 'in-kind'

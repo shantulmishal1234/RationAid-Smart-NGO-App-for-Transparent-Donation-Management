@@ -18,8 +18,6 @@ enum AdminSection {
   purchaseApproval,
   deliveryVerification,
   inventoryIssues,
-  // Hybrid Architecture
-  fundingControl,
 }
 
 /// Enum for household view modes (cards or table)

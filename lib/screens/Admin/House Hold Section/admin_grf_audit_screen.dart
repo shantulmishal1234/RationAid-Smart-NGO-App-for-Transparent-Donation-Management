@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:ration_aid/theme/app_colors.dart';
+import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 import 'package:ration_aid/utils/file_download_helper.dart';
 
 class AdminGRFAuditScreen extends StatefulWidget {
@@ -128,9 +130,19 @@ class _AdminGRFAuditScreenState extends State<AdminGRFAuditScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: isDark
+          ? const Color(0xFF0F172A)
+          : const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('GRF Financial Audit'),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        title: const Text(
+          'GRF Financial Audit',
+          style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: -0.5),
+        ),
         actions: [
           _isExporting
               ? const Padding(
@@ -149,22 +161,47 @@ class _AdminGRFAuditScreenState extends State<AdminGRFAuditScreen>
                   onPressed: _exportToCSV,
                 ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.blue.shade700,
-          unselectedLabelColor: Colors.grey,
-          indicatorColor: Colors.blue.shade700,
-          tabs: const [
-            Tab(text: 'Incoming (Donors)'),
-            Tab(text: 'Outgoing (Admins)'),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.black.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              indicator: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: AppColors.primaryBlue,
+              ),
+              labelColor: Colors.white,
+              unselectedLabelColor: isDark ? Colors.white60 : Colors.black54,
+              indicatorSize: TabBarIndicatorSize.tab,
+              dividerColor: Colors.transparent,
+              tabs: const [
+                Tab(
+                  child: Text(
+                    'Incoming',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Tab(
+                  child: Text(
+                    'Outgoing',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
       body: Column(
         children: [
-          // Top Dashboard Stats
-          _buildTopStatsBoard(),
-          // Interactive Ledger Tabs
+          _buildPremiumHeader(),
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -176,68 +213,130 @@ class _AdminGRFAuditScreenState extends State<AdminGRFAuditScreen>
     );
   }
 
-  Widget _buildTopStatsBoard() {
+  Widget _buildPremiumHeader() {
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).primaryColorDark.withValues(alpha: 0.02),
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).dividerColor.withValues(alpha: 0.1),
-          ),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+      child: FrostedPanel(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'AVAILABLE BALANCE',
+                      style: TextStyle(
+                        color: AppColors.primaryBlue.withValues(alpha: 0.8),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'PKR ${widget.currentBalance.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -1,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryBlue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(
+                    Icons.account_balance_wallet_rounded,
+                    color: AppColors.primaryBlue,
+                    size: 30,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                _buildMiniStat(
+                  'Donations',
+                  Icons.arrow_downward_rounded,
+                  AppColors.donorGreen,
+                  'Total In',
+                ),
+                const SizedBox(width: 12),
+                _buildMiniStat(
+                  'Allocations',
+                  Icons.arrow_upward_rounded,
+                  Colors.orange,
+                  'Total Out',
+                ),
+              ],
+            ),
+          ],
         ),
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.account_balance,
-              color: Colors.blue.shade700,
-              size: 28,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Available GRF Balance',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey,
+    );
+  }
+
+  Widget _buildMiniStat(String label, IconData icon, Color color, String sub) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: color.withValues(alpha: 0.1), width: 1.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: color, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              sub,
+              style: TextStyle(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.5),
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
               ),
-              const SizedBox(height: 4),
-              Text(
-                'PKR ${widget.currentBalance.toStringAsFixed(0)}',
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildIncomingLedger() {
     return StreamBuilder<QuerySnapshot>(
-      // Querying verified donations destined for the general relief pool
-      // IMPORTANT: This requires a composite index in Firebase Console.
       stream: FirebaseFirestore.instance
           .collection('donations')
           .where('familyId', isEqualTo: 'general_relief_fund')
           .where('status', isEqualTo: 'verified')
           .orderBy('updatedAt', descending: true)
-          .limit(100) // Performance: Limit to 100 on initial load
+          .limit(100)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -259,10 +358,9 @@ class _AdminGRFAuditScreenState extends State<AdminGRFAuditScreen>
           );
         }
 
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           itemCount: displayDocs.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             final data = displayDocs[index].data() as Map<String, dynamic>;
             final amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
@@ -291,13 +389,11 @@ class _AdminGRFAuditScreenState extends State<AdminGRFAuditScreen>
 
   Widget _buildOutgoingLedger() {
     return StreamBuilder<QuerySnapshot>(
-      // Querying explicit admin pseudo-donations mapping to out-bound GRF allocations
-      // IMPORTANT: This requires a composite index in Firebase Console.
       stream: FirebaseFirestore.instance
           .collection('donations')
           .where('isGrfAllocation', isEqualTo: true)
           .orderBy('createdAt', descending: true)
-          .limit(100) // Performance: Limit to 100 on initial load
+          .limit(100)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -319,10 +415,9 @@ class _AdminGRFAuditScreenState extends State<AdminGRFAuditScreen>
           );
         }
 
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           itemCount: displayDocs.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             final data = displayDocs[index].data() as Map<String, dynamic>;
             final amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
@@ -357,11 +452,15 @@ class _AdminGRFAuditScreenState extends State<AdminGRFAuditScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 48, color: Colors.grey.withValues(alpha: 0.3)),
-          const SizedBox(height: 16),
+          Icon(icon, size: 64, color: Colors.grey.withValues(alpha: 0.2)),
+          const SizedBox(height: 24),
           Text(
             message,
-            style: const TextStyle(fontSize: 16, color: Colors.grey),
+            style: const TextStyle(
+              fontSize: 16,
+              color: Colors.grey,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -433,123 +532,132 @@ class _ExpandableTransactionCardState
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final color = widget.isIncoming ? Colors.green : Colors.red;
+    final color = widget.isIncoming ? AppColors.donorGreen : Colors.redAccent;
     final icon = widget.isIncoming
-        ? Icons.south_west_rounded
-        : Icons.north_east_rounded;
+        ? Icons.add_circle_outline_rounded
+        : Icons.remove_circle_outline_rounded;
     final prefix = widget.isIncoming ? '+' : '-';
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      decoration: BoxDecoration(
-        color: isDark ? Colors.grey[850] : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _isExpanded
-              ? color.withValues(alpha: 0.5)
-              : theme.dividerColor.withValues(alpha: 0.1),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return FrostedPanel(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.zero,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(22),
           onTap: () => setState(() => _isExpanded = !_isExpanded),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header Area
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: color.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      child: Icon(icon, color: color, size: 20),
+                      child: Icon(icon, color: color, size: 22),
                     ),
-                    const SizedBox(width: 14),
+                    const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             widget.title,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              letterSpacing: -0.3,
+                              color: theme.colorScheme.onSurface,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 4),
                           Text(
                             widget.date,
                             style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade500,
+                              fontSize: 11,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.5,
+                              ),
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    Text(
-                      '$prefix PKR ${widget.amount.toStringAsFixed(0)}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: color,
-                        fontSize: 15,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '$prefix PKR ${widget.amount.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: color,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Icon(
+                          _isExpanded
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: Colors.grey.withValues(alpha: 0.5),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                // Expandable Detail Area
                 if (_isExpanded) ...[
                   const SizedBox(height: 16),
-                  Divider(
-                    color: theme.dividerColor.withValues(alpha: 0.1),
-                    height: 1,
-                  ),
-                  const SizedBox(height: 12),
-                  ...widget.details.map(
-                    (detail) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            width: 100,
-                            child: Text(
-                              detail.label,
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: 13,
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.03)
+                          : Colors.black.withValues(alpha: 0.03),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      children: widget.details
+                          .map(
+                            (detail) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: 90,
+                                    child: Text(
+                                      detail.label,
+                                      style: TextStyle(
+                                        color: Colors.grey.shade500,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      detail.value,
+                                      style: TextStyle(
+                                        color: theme.colorScheme.onSurface,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              detail.value,
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurface,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                          )
+                          .toList(),
                     ),
                   ),
                 ],

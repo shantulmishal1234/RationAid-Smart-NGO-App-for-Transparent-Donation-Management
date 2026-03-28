@@ -96,8 +96,11 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
       setState(() => _isReuploading = true);
 
       final imageFile = File(image.path);
-      final imageUrl = await CloudinaryService.uploadImage(imageFile);
-      if (imageUrl == null) throw Exception('Upload failed');
+      final response = await CloudinaryService.uploadImage(imageFile);
+      if (!response.isSuccess) {
+        throw Exception(response.errorMessage ?? 'Upload failed');
+      }
+      final imageUrl = response.url!;
       await _donationService.reuploadPaymentProof(widget.donationId, imageUrl);
 
       setState(() => _isReuploading = false);
@@ -152,8 +155,19 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                 _DonationInfoCard(donation: donation),
                 const SizedBox(height: 16),
 
-                // Family Information
-                _FamilyInfoCard(familyId: donation.familyId),
+                // Family / Impact Information
+                if (donation.allocationMode == 'smart' &&
+                    donation.smartSplits != null &&
+                    donation.smartSplits!.isNotEmpty)
+                  _ImpactBreakdownCard(donation: donation)
+                else if (donation.familyId.isNotEmpty &&
+                    donation.familyId != 'general_relief_fund' &&
+                    donation.familyId != 'smart_allocation')
+                  _FamilyInfoCard(familyId: donation.familyId)
+                else if (donation.familyId == 'general_relief_fund' ||
+                    donation.allocationMode == 'pool')
+                  _GrfPoolInfoCard(),
+
                 const SizedBox(height: 16),
 
                 // Payment Proof (if cash)
@@ -325,43 +339,114 @@ class _StatusTimelineCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            _buildTimelineItem(
-              context,
-              'Draft',
-              donation.status.index >= DonationStatus.draft.index,
-              isActive: donation.status == DonationStatus.draft,
-            ),
-            _buildTimelineItem(
-              context,
-              'Under Verification',
-              donation.status.index >= DonationStatus.underVerification.index,
-              isActive: donation.status == DonationStatus.underVerification,
-            ),
-            _buildTimelineItem(
-              context,
-              'Verified',
-              donation.status.index >= DonationStatus.verified.index,
-              isActive: donation.status == DonationStatus.verified,
-            ),
-            _buildTimelineItem(
-              context,
-              'In Process',
-              donation.status.index >= DonationStatus.inProcess.index,
-              isActive: donation.status == DonationStatus.inProcess,
-            ),
-            _buildTimelineItem(
-              context,
-              'Out for Delivery',
-              donation.status.index >= DonationStatus.outForDelivery.index,
-              isActive: donation.status == DonationStatus.outForDelivery,
-            ),
-            _buildTimelineItem(
-              context,
-              'Delivered',
-              donation.status.index >= DonationStatus.delivered.index,
-              isActive: donation.status == DonationStatus.delivered,
-              isLast: true,
-            ),
+            if (donation.allocationMode == 'smart') ...[
+              _buildTimelineItem(
+                context,
+                'Draft',
+                donation.status.index >= DonationStatus.draft.index,
+                isActive: donation.status == DonationStatus.draft,
+              ),
+              _buildTimelineItem(
+                context,
+                'Under Verification',
+                donation.status.index >= DonationStatus.underVerification.index,
+                isActive: donation.status == DonationStatus.underVerification,
+              ),
+              _buildTimelineItem(
+                context,
+                'Verified & Processing',
+                donation.status.index >= DonationStatus.verified.index,
+                isActive:
+                    donation.status == DonationStatus.verified ||
+                    donation.status == DonationStatus.pendingAssignment,
+              ),
+              _buildTimelineItem(
+                context,
+                'Distributed & Funded',
+                donation.status.index >= DonationStatus.stocked.index ||
+                    donation.status == DonationStatus.closed,
+                isActive:
+                    donation.status == DonationStatus.stocked ||
+                    donation.status == DonationStatus.closed,
+                isLast: true,
+              ),
+            ] else if (donation.donationType == DonationType.inKind &&
+                donation.allocationMode == 'pool') ...[
+              _buildTimelineItem(
+                context,
+                'Draft',
+                donation.status.index >= DonationStatus.draft.index,
+                isActive: donation.status == DonationStatus.draft,
+              ),
+              _buildTimelineItem(
+                context,
+                'Under Verification',
+                donation.status.index >= DonationStatus.underVerification.index,
+                isActive: donation.status == DonationStatus.underVerification,
+              ),
+              _buildTimelineItem(
+                context,
+                'Verified & Picked Up',
+                donation.status.index >= DonationStatus.verified.index,
+                isActive:
+                    donation.status == DonationStatus.verified ||
+                    donation.status == DonationStatus.pendingAssignment,
+              ),
+              _buildTimelineItem(
+                context,
+                'In GRF Warehouse',
+                donation.status.index >= DonationStatus.stocked.index,
+                isActive: donation.status == DonationStatus.stocked,
+              ),
+              _buildTimelineItem(
+                context,
+                'Assigned to Families',
+                donation.status == DonationStatus.closed,
+                isActive: donation.status == DonationStatus.closed,
+                isLast: true,
+              ),
+            ] else ...[
+              _buildTimelineItem(
+                context,
+                'Draft',
+                donation.status.index >= DonationStatus.draft.index,
+                isActive: donation.status == DonationStatus.draft,
+              ),
+              _buildTimelineItem(
+                context,
+                'Under Verification',
+                donation.status.index >= DonationStatus.underVerification.index,
+                isActive: donation.status == DonationStatus.underVerification,
+              ),
+              _buildTimelineItem(
+                context,
+                'Verified',
+                donation.status.index >= DonationStatus.verified.index,
+                isActive: donation.status == DonationStatus.verified,
+              ),
+              _buildTimelineItem(
+                context,
+                'In Process',
+                donation.status.index >= DonationStatus.inProcess.index,
+                isActive: donation.status == DonationStatus.inProcess,
+              ),
+              _buildTimelineItem(
+                context,
+                'Out for Delivery',
+                donation.status.index >= DonationStatus.outForDelivery.index,
+                isActive: donation.status == DonationStatus.outForDelivery,
+              ),
+              _buildTimelineItem(
+                context,
+                'Delivered',
+                donation.status.index >= DonationStatus.delivered.index ||
+                    donation.status == DonationStatus.closed,
+                isActive:
+                    donation.status == DonationStatus.delivered ||
+                    donation.status == DonationStatus.closed,
+                isLast: true,
+              ),
+            ],
             // Show rejection branch if rejected
             if (donation.status == DonationStatus.rejected)
               _buildTimelineItem(
@@ -697,6 +782,160 @@ class _InfoRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Grf Pool Information Card
+class _GrfPoolInfoCard extends StatelessWidget {
+  const _GrfPoolInfoCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Impact Destination',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.primaryBlue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.inventory_2, color: AppColors.primaryBlue),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'This donation was placed in the General Relief Fund (GRF) Pool. It will be assigned to families in need shortly.',
+                      style: TextStyle(fontSize: 13, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Smart Give Impact Breakdown Card
+class _ImpactBreakdownCard extends StatelessWidget {
+  final Donation donation;
+
+  const _ImpactBreakdownCard({required this.donation});
+
+  @override
+  Widget build(BuildContext context) {
+    if (donation.smartSplits == null || donation.smartSplits!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Impact Breakdown',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...donation.smartSplits!.map((split) {
+              final String fId = split['familyId']?.toString() ?? '';
+              final String shortId = fId.length > 5 ? fId.substring(0, 5) : fId;
+              final bool isGrf = fId == 'general_relief_fund' || fId.isEmpty;
+
+              String displayValue;
+              if (donation.donationType == DonationType.cash) {
+                final double amt = (split['amount'] as num?)?.toDouble() ?? 0.0;
+                displayValue = 'PKR ${amt.toStringAsFixed(0)}';
+              } else {
+                final Map<String, dynamic> items =
+                    split['items'] as Map<String, dynamic>? ?? {};
+                final String itemsSummary = items.entries
+                    .map((e) => '${e.key}: ${e.value}')
+                    .join(', ');
+                displayValue = itemsSummary.isEmpty ? 'Reserved' : itemsSummary;
+              }
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 2),
+                      decoration: BoxDecoration(
+                        color: isGrf
+                            ? AppColors.primaryBlue.withValues(alpha: 0.1)
+                            : AppColors.donorGreen.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        isGrf ? Icons.inventory_2 : Icons.family_restroom,
+                        size: 14,
+                        color: isGrf
+                            ? AppColors.primaryBlue
+                            : AppColors.donorGreen,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isGrf
+                                ? 'GRF Pool (Pending Assignment)'
+                                : 'Family $shortId...',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            displayValue,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ),
       ),
     );
   }

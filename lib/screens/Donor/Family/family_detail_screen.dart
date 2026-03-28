@@ -3,25 +3,39 @@ import 'package:flutter/material.dart';
 import 'package:ration_aid/models/family_model.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/screens/Donor/widgets/donor_scaffold.dart';
+import 'package:ration_aid/services/funding_service.dart';
 
 /// Family Detail Screen - View masked family information
 /// Uses StreamBuilder for real-time updates of needs and funding
-class FamilyDetailScreen extends StatelessWidget {
+class FamilyDetailScreen extends StatefulWidget {
   final Family family; // Initial family object passed from navigation
 
   const FamilyDetailScreen({super.key, required this.family});
+
+  @override
+  State<FamilyDetailScreen> createState() => _FamilyDetailScreenState();
+}
+
+class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // SELF-HEALING: Recalculate family funding on load to ensure stale
+    // pendingNeeds/raisedAmount are resolved if data was wiped externally.
+    FundingService.recalculateFamilyFunding(widget.family.id);
+  }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
           .collection('families')
-          .doc(family.id)
+          .doc(widget.family.id)
           .snapshots(),
       builder: (context, snapshot) {
         // Use the cached family object passed via routing to eliminate loading flicker.
         // Once the stream emits real-time data, update the object silently.
-        Family updatedFamily = family;
+        Family updatedFamily = widget.family;
         if (snapshot.hasData && snapshot.data!.exists) {
           updatedFamily = Family.fromFirestore(snapshot.data!);
         }
@@ -252,7 +266,8 @@ class FamilyDetailScreen extends StatelessWidget {
     final verifiedPct = (family.combinedFundingPercent * 100)
         .clamp(0.0, 100.0)
         .toInt();
-    final isFull = family.fundingStatus == 'fully_funded';
+    final isFull =
+        family.fundingStatus == 'fully_funded' && family.targetAmount > 0;
 
     return Container(
       decoration: BoxDecoration(
@@ -296,7 +311,7 @@ class FamilyDetailScreen extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'PKR ${family.raisedAmount.toStringAsFixed(0)} / ${family.targetAmount.toStringAsFixed(0)}',
+                  'PKR ${family.combinedProgress.toStringAsFixed(0)} / ${family.targetAmount.toStringAsFixed(0)}',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
@@ -427,7 +442,8 @@ class FamilyDetailScreen extends StatelessWidget {
                 ),
               )
             // Fully Supplied State (Food)
-            else if (updatedFamily.needs.isEmpty)
+            else if (updatedFamily.needs.isEmpty &&
+                updatedFamily.targetAmount > 0)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
@@ -438,11 +454,15 @@ class FamilyDetailScreen extends StatelessWidget {
                     color: Colors.green.withValues(alpha: 0.2),
                   ),
                 ),
-                child: const Column(
+                child: Column(
                   children: [
-                    Icon(Icons.check_circle, color: Colors.green, size: 40),
-                    SizedBox(height: 12),
-                    Text(
+                    const Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 40,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
                       'All items have been supplied!',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
@@ -453,228 +473,198 @@ class FamilyDetailScreen extends StatelessWidget {
                   ],
                 ),
               )
-            // Needs List (Food) - Dynamic Real-Time Sync
-            else if (updatedFamily.assignedPackId != null &&
-                updatedFamily.assignedPackId!.isNotEmpty)
-              StreamBuilder<DocumentSnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('assistance_packs')
-                    .doc(updatedFamily.assignedPackId)
-                    .snapshots(),
-                builder: (context, packSnapshot) {
-                  if (packSnapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+            // Empty / Pending State
+            else if (updatedFamily.needs.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.inventory_2_outlined,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                      size: 40,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Pending items assessment',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Awaiting assistance pack assignment by admin',
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.4,
+                        ),
+                        fontSize: 12,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              )
+            // Needs List (Food) - Stable Static Listing
+            else
+              Column(
+                children:
+                    (updatedFamily.originalNeeds.isNotEmpty
+                            ? updatedFamily.originalNeeds
+                            : updatedFamily.needs)
+                        .entries
+                        .map((entry) {
+                          final itemName = entry.key;
+                          final originalQty = entry.value;
 
-                  if (!packSnapshot.hasData || !packSnapshot.data!.exists) {
-                    return const Text('Assigned pack data unavailable.');
-                  }
+                          // Get current needed quantity (0 means fully donated)
+                          final currentQty = updatedFamily.needs[itemName] ?? 0;
+                          final isDonated = currentQty <= 0;
 
-                  // Extract live items list from the pack document
-                  final packData =
-                      packSnapshot.data!.data() as Map<String, dynamic>;
-                  final List<dynamic> itemsData = packData['items'] ?? [];
+                          // Get localized unit
+                          final unit = updatedFamily.itemUnits[itemName] ?? '';
+                          final itemQtyDisplay = '$originalQty $unit'.trim();
 
-                  if (itemsData.isEmpty) {
-                    return const Text('No items found in this pack.');
-                  }
+                          // Dynamic Icon Logic
+                          final nameLower = itemName.toLowerCase();
+                          IconData itemIcon = Icons.inventory_2_outlined;
+                          Color itemColor = AppColors.donorGreen;
 
-                  return Column(
-                    children: itemsData.map((item) {
-                      final itemName = item['name'] as String? ?? '';
-                      final itemQty =
-                          item['quantity'] as String? ?? ''; // E.g., '5 kg'
+                          if (nameLower.contains('flour') ||
+                              nameLower.contains('wheat') ||
+                              nameLower.contains('aata')) {
+                            itemIcon = Icons.grass;
+                            itemColor = Colors.orange.shade700;
+                          } else if (nameLower.contains('oil') ||
+                              nameLower.contains('ghee')) {
+                            itemIcon = Icons.water_drop_outlined;
+                            itemColor = Colors.amber.shade700;
+                          } else if (nameLower.contains('sugar') ||
+                              nameLower.contains('salt')) {
+                            itemIcon = Icons.grain;
+                            itemColor = Colors.grey.shade600;
+                          } else if (nameLower.contains('soap') ||
+                              nameLower.contains('wash')) {
+                            itemIcon = Icons.clean_hands_outlined;
+                            itemColor = Colors.blue;
+                          } else if (nameLower.contains('rice') ||
+                              nameLower.contains('daal') ||
+                              nameLower.contains('lentil')) {
+                            itemIcon = Icons.rice_bowl_outlined;
+                            itemColor = Colors.brown.shade400;
+                          }
 
-                      // Check if any pending needs exist that loosely match this item name
-                      num pendingQty = 0;
-                      updatedFamily.pendingNeeds.forEach((key, val) {
-                        if (key == itemName || key.contains(itemName)) {
-                          pendingQty = val;
-                        }
-                      });
+                          // Check if any pending needs exist for this item
+                          num pendingQty =
+                              updatedFamily.pendingNeeds[itemName] ?? 0;
 
-                      // Dynamic Icon Logic
-                      final nameLower = itemName.toLowerCase();
-                      IconData itemIcon = Icons.inventory_2_outlined;
-                      Color itemColor = AppColors.donorGreen;
-
-                      if (nameLower.contains('flour') ||
-                          nameLower.contains('wheat') ||
-                          nameLower.contains('aata')) {
-                        itemIcon = Icons.grass;
-                        itemColor = Colors.orange.shade700;
-                      } else if (nameLower.contains('oil') ||
-                          nameLower.contains('ghee')) {
-                        itemIcon = Icons.water_drop_outlined;
-                        itemColor = Colors.amber.shade700;
-                      } else if (nameLower.contains('sugar') ||
-                          nameLower.contains('salt')) {
-                        itemIcon = Icons.grain;
-                        itemColor = Colors.grey.shade600;
-                      } else if (nameLower.contains('soap') ||
-                          nameLower.contains('wash')) {
-                        itemIcon = Icons.clean_hands_outlined;
-                        itemColor = Colors.blue;
-                      } else if (nameLower.contains('rice') ||
-                          nameLower.contains('daal') ||
-                          nameLower.contains('lentil')) {
-                        itemIcon = Icons.rice_bowl_outlined;
-                        itemColor = Colors.brown.shade400;
-                      }
-
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: itemColor.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Icon(itemIcon, color: itemColor, size: 20),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Text(
-                                itemName,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: theme.colorScheme.onSurface,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? Colors.grey[800]
-                                    : Colors.grey[100],
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                itemQty,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                  color: theme.colorScheme.onSurface,
-                                ),
-                              ),
-                            ),
-                            if (pendingQty > 0)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: Text(
-                                  '($pendingQty pending)',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.orange,
-                                    fontWeight: FontWeight.bold,
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: itemColor.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    itemIcon,
+                                    color: itemColor,
+                                    size: 20,
                                   ),
                                 ),
-                              ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  );
-                },
-              )
-            // Fallback for extremely old legacy families without AssignedPackId
-            else
-              ...updatedFamily.needs.entries.map((entry) {
-                final pendingQty = updatedFamily.pendingNeeds[entry.key] ?? 0;
-
-                // Dynamic Icon Logic
-                final itemName = entry.key.toLowerCase();
-                IconData itemIcon = Icons.inventory_2_outlined;
-                Color itemColor = AppColors.donorGreen;
-
-                if (itemName.contains('flour') ||
-                    itemName.contains('wheat') ||
-                    itemName.contains('aata')) {
-                  itemIcon = Icons.grass;
-                  itemColor = Colors.orange.shade700;
-                } else if (itemName.contains('oil') ||
-                    itemName.contains('ghee')) {
-                  itemIcon = Icons.water_drop_outlined;
-                  itemColor = Colors.amber.shade700;
-                } else if (itemName.contains('sugar') ||
-                    itemName.contains('salt')) {
-                  itemIcon = Icons.grain;
-                  itemColor = Colors.grey.shade600;
-                } else if (itemName.contains('soap') ||
-                    itemName.contains('wash')) {
-                  itemIcon = Icons.clean_hands_outlined;
-                  itemColor = Colors.blue;
-                } else if (itemName.contains('rice') ||
-                    itemName.contains('daal') ||
-                    itemName.contains('lentil')) {
-                  itemIcon = Icons.rice_bowl_outlined;
-                  itemColor = Colors.brown.shade400;
-                }
-
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: itemColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(itemIcon, color: itemColor, size: 20),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          entry.key,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.grey[800] : Colors.grey[100],
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          'Qty: ${entry.value}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                      ),
-                      if (pendingQty > 0)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: Text(
-                            '($pendingQty pending)',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.orange,
-                              fontWeight: FontWeight.bold,
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        itemName,
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                          color: theme.colorScheme.onSurface,
+                                        ),
+                                      ),
+                                      if (pendingQty > 0)
+                                        Text(
+                                          '$pendingQty $unit pending verification',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.orange,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDonated
+                                        ? AppColors.donorGreen.withValues(
+                                            alpha: 0.1,
+                                          )
+                                        : (isDark
+                                              ? Colors.grey[800]
+                                              : Colors.grey[100]),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: isDonated
+                                      ? Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.check_circle,
+                                              size: 14,
+                                              color: AppColors.donorGreen,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            const Text(
+                                              'Donated',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                                color: AppColors.donorGreen,
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                      : Text(
+                                          itemQtyDisplay,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                            color: isDark
+                                                ? Colors.white70
+                                                : theme.colorScheme.onSurface
+                                                      .withValues(alpha: 0.7),
+                                          ),
+                                        ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              }),
+                          );
+                        })
+                        .toList(),
+              ),
           ],
         ),
       ),
@@ -687,6 +677,7 @@ class FamilyDetailScreen extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     final bool isFullyFunded =
+        updatedFamily.targetAmount > 0 &&
         (updatedFamily.totalFunded >= updatedFamily.targetAmount);
     final bool isNeedsEmpty = updatedFamily.needs.isEmpty;
     final bool isCompleted = isFullyFunded && isNeedsEmpty;
@@ -777,7 +768,8 @@ class _TwoTierProgressBar extends StatelessWidget {
     final pending = ((family.combinedProgress + family.pendingAmount) / target)
         .clamp(0.0, 1.0);
 
-    final isFull = family.fundingStatus == 'fully_funded';
+    final isFull =
+        family.fundingStatus == 'fully_funded' && family.targetAmount > 0;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),

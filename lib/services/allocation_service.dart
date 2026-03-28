@@ -47,9 +47,15 @@ class AllocationService {
       if (fundingStatus == 'fully_funded') continue; // Skip complete families
 
       final double target =
-          ((data['assignedPackBudget'] ?? data['targetAmount'] ?? 0) as num)
+          (num.tryParse(
+                    (data['assignedPackBudget'] ?? data['targetAmount'] ?? 0)
+                        .toString(),
+                  ) ??
+                  0)
               .toDouble();
-      final double raised = (data['raisedAmount'] as num? ?? 0).toDouble();
+      final double raised =
+          (num.tryParse(data['raisedAmount']?.toString() ?? '0') ?? 0)
+              .toDouble();
 
       if (target <= 0) continue;
 
@@ -62,7 +68,8 @@ class AllocationService {
           : now.subtract(const Duration(days: 1));
       final int daysListed = now.difference(createdAt).inDays;
 
-      final int familySize = (data['familySize'] as num? ?? 1).toInt();
+      final int familySize =
+          (num.tryParse(data['familySize']?.toString() ?? '1') ?? 1).toInt();
       final bool isEmergency = data['isEmergency'] ?? false;
 
       // Issue #13 Fix: Normalized scoring formula.
@@ -198,11 +205,17 @@ class AllocationService {
       if (!hasMatch) continue;
 
       final double target =
-          ((data['assignedPackBudget'] ?? data['targetAmount'] ?? 0) as num)
+          (num.tryParse(
+                    (data['assignedPackBudget'] ?? data['targetAmount'] ?? 0)
+                        .toString(),
+                  ) ??
+                  0)
               .toDouble();
       if (target <= 0) continue;
 
-      final double raised = (data['raisedAmount'] as num? ?? 0).toDouble();
+      final double raised =
+          (num.tryParse(data['raisedAmount']?.toString() ?? '0') ?? 0)
+              .toDouble();
       final double deficitRatio = (target - raised) / target;
       if (deficitRatio <= 0) continue;
 
@@ -210,7 +223,8 @@ class AllocationService {
           ? (data['createdAt'] as Timestamp).toDate()
           : now.subtract(const Duration(days: 1));
       final int daysListed = now.difference(createdAt).inDays;
-      final int familySize = (data['familySize'] as num? ?? 1).toInt();
+      final int familySize =
+          (num.tryParse(data['familySize']?.toString() ?? '1') ?? 1).toInt();
       final bool isEmergency = data['isEmergency'] ?? false;
 
       final double normalizedDays = (daysListed / 180.0).clamp(0.0, 1.0);
@@ -299,10 +313,23 @@ class AllocationService {
         final needed = needsRaw[matchKey] ?? 0;
         if (needed <= 0) continue;
 
-        final give = offeredQty < needed ? offeredQty : needed;
-        thisShare[offeredItem] = give;
-        remaining[offeredItem] = offeredQty - give;
-        if (remaining[offeredItem]! <= 0) remaining.remove(offeredItem);
+        // ATOMIC BEST FIT: Only fulfill if donor can cover 100% of the need.
+        // No partial fulfillments allowed for clean logistics.
+        if (offeredQty >= needed) {
+          final give = needed;
+          thisShare[offeredItem] = give;
+          remaining[offeredItem] = offeredQty - give;
+
+          // Remove from remaining if we've perfectly exhausted this item
+          if (remaining[offeredItem]! <= 0) {
+            remaining.remove(offeredItem);
+          }
+        } else {
+          // Skip. Donor has leftover (offeredQty), but it's not enough to
+          // fully satisfy this family's need. Keep it in 'remaining' for the
+          // next family or the NGO pool.
+          continue;
+        }
       }
 
       if (thisShare.isNotEmpty) {
@@ -389,8 +416,10 @@ class AllocationService {
         return AllocationSummary(allocated: 0, familiesHelped: 0, entries: []);
       }
 
-      double grfBalance = (grfSnap.data()?['raisedAmount'] as num? ?? 0)
-          .toDouble();
+      double grfBalance =
+          (num.tryParse(grfSnap.data()?['raisedAmount']?.toString() ?? '0') ??
+                  0)
+              .toDouble();
       if (grfBalance <= 0) {
         return AllocationSummary(allocated: 0, familiesHelped: 0, entries: []);
       }
@@ -501,4 +530,13 @@ class InKindSplit {
   });
 
   bool get isPool => familyId.isEmpty;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'familyId': familyId,
+      if (family != null) 'family': family!.toMap(),
+      'items': items,
+      'reason': reason,
+    };
+  }
 }

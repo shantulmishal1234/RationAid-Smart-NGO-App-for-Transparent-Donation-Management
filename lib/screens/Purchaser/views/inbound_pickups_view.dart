@@ -312,7 +312,12 @@ class InboundPickupsView extends StatelessWidget {
                   ),
                   child: Text(
                     pickup.items.entries
-                        .map((e) => '${e.key}: ${e.value}')
+                        .map((e) {
+                          final unit = (pickup.itemUnits != null)
+                              ? (pickup.itemUnits![e.key] ?? '')
+                              : '';
+                          return '${e.key}: ${e.value} $unit'.trim();
+                        })
                         .join('  ·  '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

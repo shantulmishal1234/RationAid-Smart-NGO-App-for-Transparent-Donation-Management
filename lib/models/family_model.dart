@@ -17,6 +17,10 @@ class Family {
   final int numberOfAdults;
   final int numberOfChildren;
   final Map<String, num> needs; // map of item name to quantity needed
+  final Map<String, num>
+  originalNeeds; // Component 10: Original un-donated quantities
+  final Map<String, String>
+  itemUnits; // New: map of item name to its unit (kg, L, etc.)
   final List<String> assistanceNeeds; // Types of assistance needed
   final String status; // should always be 'accepted' for donor view
   final String? remarks; // Additional notes
@@ -114,6 +118,8 @@ class Family {
     required this.numberOfAdults,
     required this.numberOfChildren,
     required this.needs,
+    this.originalNeeds = const {},
+    this.itemUnits = const {},
     required this.assistanceNeeds,
     required this.status,
     this.remarks,
@@ -206,23 +212,47 @@ class Family {
       numberOfAdults: numberOfAdults,
       numberOfChildren: numberOfChildren,
       needs: data['needs'] != null
-          ? Map<String, num>.from(data['needs'] as Map)
+          ? (data['needs'] as Map).map(
+              (k, v) => MapEntry(k.toString(), num.tryParse(v.toString()) ?? 0),
+            )
           : {},
+      originalNeeds: data['originalNeeds'] != null
+          ? (data['originalNeeds'] as Map).map(
+              (k, v) => MapEntry(k.toString(), num.tryParse(v.toString()) ?? 0),
+            )
+          : (data['needs'] != null
+                ? (data['needs'] as Map).map(
+                    (k, v) =>
+                        MapEntry(k.toString(), num.tryParse(v.toString()) ?? 0),
+                  )
+                : {}),
+      itemUnits: data['itemUnits'] != null
+          ? (data['itemUnits'] as Map).map(
+              (k, v) => MapEntry(k.toString(), v?.toString() ?? ''),
+            )
+          : (data['needs'] != null
+                ? (data['needs'] as Map).map(
+                    (k, v) => MapEntry(k.toString(), ''),
+                  )
+                : {}),
       assistanceNeeds: data['assistanceNeeds'] != null
-          ? List<String>.from(data['assistanceNeeds'] as List)
+          ? List<String>.from(
+              (data['assistanceNeeds'] as List).map((i) => i.toString()),
+            )
           : [],
-      status: data['status'] ?? '',
-      remarks: data['remarks'],
+      status: data['status']?.toString() ?? '',
+      remarks: data['remarks']?.toString(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
       // Extended Demographics & Housing
-      husbandName: data['husbandName'],
+      husbandName: data['husbandName']?.toString(),
       isWidow: data['isWidow'] ?? false,
-      houseStatus: data['houseStatus'],
-      rentAmount: (data['rentAmount'] ?? 0).toDouble(),
-      houseCondition: data['houseCondition'],
-      houseSize: data['houseSize'],
-      biography: data['biography'],
+      houseStatus: data['houseStatus']?.toString(),
+      rentAmount: (num.tryParse(data['rentAmount']?.toString() ?? '0') ?? 0)
+          .toDouble(),
+      houseCondition: data['houseCondition']?.toString(),
+      houseSize: data['houseSize']?.toString(),
+      biography: data['biography']?.toString(),
       hasHusbandWife: data['hasHusbandWife'] ?? false,
       childrenDetails: data['childrenDetails'] != null
           ? List<Map<String, dynamic>>.from(
@@ -232,9 +262,11 @@ class Family {
             )
           : [],
       hasTransport: data['hasTransport'] ?? false,
-      transportDetails: data['transportDetails'],
+      transportDetails: data['transportDetails']?.toString(),
       electronicsOwned: data['electronicsOwned'] != null
-          ? List<String>.from(data['electronicsOwned'] as List)
+          ? List<String>.from(
+              (data['electronicsOwned'] as List).map((i) => i.toString()),
+            )
           : [],
       // Location fields
       unverifiedLocation: data['unverifiedLocation'],
@@ -250,51 +282,71 @@ class Family {
       locationAddress: data['locationAddress'],
       // Review fields
       reviewerIds: data['reviewerIds'] != null
-          ? List<String>.from(data['reviewerIds'] as List)
+          ? List<String>.from(
+              (data['reviewerIds'] as List).map((i) => i.toString()),
+            )
           : [],
-      approveCount: data['approveCount'] ?? 0,
-      rejectCount: data['rejectCount'] ?? 0,
-      quorumThreshold: data['quorumThreshold'] ?? 3,
+      approveCount: (data['approveCount'] ?? 0) as int,
+      rejectCount: (data['rejectCount'] ?? 0) as int,
+      quorumThreshold: (data['quorumThreshold'] ?? 3) as int,
       quorumReached: data['quorumReached'] ?? false,
-      customMedicineBudget: (data['customMedicineBudget'] ?? 0.0).toDouble(),
+      customMedicineBudget:
+          (num.tryParse(data['customMedicineBudget']?.toString() ?? '0') ?? 0)
+              .toDouble(),
       // Pack assignment
-      assignedPackId: data['assignedPackId'],
-      assignedPackName: data['assignedPackName'],
+      assignedPackId: data['assignedPackId']?.toString(),
+      assignedPackName: data['assignedPackName']?.toString(),
       // Final Approver decision
-      finalApproverUid: data['finalApproverUid'],
-      finalApproverName: data['finalApproverName'],
-      finalDecision: data['finalDecision'],
-      finalDecisionComment: data['finalDecisionComment'],
+      finalApproverUid: data['finalApproverUid']?.toString(),
+      finalApproverName: data['finalApproverName']?.toString(),
+      finalDecision: data['finalDecision']?.toString(),
+      finalDecisionComment: data['finalDecisionComment']?.toString(),
       finalDecisionAt: data['finalDecisionAt'] != null
           ? (data['finalDecisionAt'] as Timestamp).toDate()
           : null,
       // Funding pool
-      targetAmount: (data['targetAmount'] ?? 0).toDouble(),
-      raisedAmount: (data['raisedAmount'] ?? 0).toDouble(),
-      pendingAmount: (data['pendingAmount'] ?? 0).toDouble(),
-      remainingAmount: (data['remainingAmount'] ?? 0).toDouble(),
-      surplusAmount: (data['surplusAmount'] ?? 0).toDouble(),
-      spentAmount: (data['spentAmount'] ?? 0).toDouble(),
+      targetAmount: (num.tryParse(data['targetAmount']?.toString() ?? '0') ?? 0)
+          .toDouble(),
+      raisedAmount: (num.tryParse(data['raisedAmount']?.toString() ?? '0') ?? 0)
+          .toDouble(),
+      pendingAmount:
+          (num.tryParse(data['pendingAmount']?.toString() ?? '0') ?? 0)
+              .toDouble(),
+      remainingAmount:
+          (num.tryParse(data['remainingAmount']?.toString() ?? '0') ?? 0)
+              .toDouble(),
+      surplusAmount:
+          (num.tryParse(data['surplusAmount']?.toString() ?? '0') ?? 0)
+              .toDouble(),
+      spentAmount: (num.tryParse(data['spentAmount']?.toString() ?? '0') ?? 0)
+          .toDouble(),
       pendingNeeds: data['pendingNeeds'] != null
-          ? Map<String, num>.from(data['pendingNeeds'] as Map)
+          ? (data['pendingNeeds'] as Map).map(
+              (k, v) => MapEntry(k.toString(), num.tryParse(v.toString()) ?? 0),
+            )
           : {},
       // Fulfillment
-      fulfillmentStatus: data['fulfillmentStatus'] ?? 'pending',
-      purchaseApprovedBy: data['purchaseApprovedBy'],
+      fulfillmentStatus: data['fulfillmentStatus']?.toString() ?? 'pending',
+      purchaseApprovedBy: data['purchaseApprovedBy']?.toString(),
       purchaseApprovedAt: (data['purchaseApprovedAt'] as Timestamp?)?.toDate(),
-      deliveryProof: data['deliveryProof'],
-      deliveredBy: data['deliveredBy'],
+      deliveryProof: data['deliveryProof']?.toString(),
+      deliveredBy: data['deliveredBy']?.toString(),
       deliveredAt: (data['deliveredAt'] as Timestamp?)?.toDate(),
       // Smart Allocation (safe defaults for existing docs)
-      priorityScore: (data['priorityScore'] ?? 0.0).toDouble(),
+      priorityScore:
+          (num.tryParse(data['priorityScore']?.toString() ?? '0') ?? 0)
+              .toDouble(),
       isEmergency: data['isEmergency'] ?? false,
-      emergencyNote: data['emergencyNote'],
-      fundingStatus: data['fundingStatus'] ?? 'pending',
+      emergencyNote: data['emergencyNote']?.toString(),
+      fundingStatus: data['fundingStatus']?.toString() ?? 'pending',
       // In-Kind Tracking (safe defaults — 0 for legacy docs without these fields)
-      inKindValue: (data['inKindValue'] ?? 0.0).toDouble(),
+      inKindValue: (num.tryParse(data['inKindValue']?.toString() ?? '0') ?? 0)
+          .toDouble(),
       combinedProgress:
-          (data['combinedProgress'] as num?)?.toDouble() ??
-          (data['raisedAmount'] as num? ?? 0).toDouble(),
+          (num.tryParse(data['combinedProgress']?.toString() ?? '0') ??
+                  num.tryParse(data['raisedAmount']?.toString() ?? '0') ??
+                  0)
+              .toDouble(),
     );
   }
 
@@ -308,6 +360,7 @@ class Family {
       'numberOfAdults': numberOfAdults,
       'numberOfChildren': numberOfChildren,
       'needs': needs,
+      'itemUnits': itemUnits,
       'assistanceNeeds': assistanceNeeds,
       'status': status,
       'customMedicineBudget': customMedicineBudget,
@@ -356,18 +409,21 @@ class Family {
     return needs.keys.toList();
   }
 
-  /// Helper: Get total funded amount (raised + pending).
-  /// Shown in donor UI as an optimistic total; verified portion is [raisedAmount].
-  double get totalFunded => raisedAmount + pendingAmount;
+  /// Helper: Get total funded amount (raised + pending + inKindValue).
+  /// Shown in donor UI as an optimistic total; includes In-Kind items valued at
+  /// their locked price at the time of admin verification.
+  double get totalFunded => raisedAmount + pendingAmount + inKindValue;
 
   /// Fix #7 — computed remainingAmount (never stale).
   /// Always derived so that stale Firestore field can no longer cause UI drift.
+  /// Includes In-Kind contributions via combinedProgress.
   double get computedRemainingAmount =>
-      (targetAmount - raisedAmount).clamp(0.0, double.infinity);
+      (targetAmount - combinedProgress).clamp(0.0, double.infinity);
 
   /// Always derived so that stale Firestore field can no longer cause UI drift.
+  /// Includes In-Kind contributions via combinedProgress.
   double get computedSurplusAmount =>
-      (raisedAmount - targetAmount).clamp(0.0, double.infinity);
+      (combinedProgress - targetAmount).clamp(0.0, double.infinity);
 
   /// In-Kind overhaul: combined progress percent (0.0 → 1.0).
   /// Uses combinedProgress (cash + in-kind value) against total target.

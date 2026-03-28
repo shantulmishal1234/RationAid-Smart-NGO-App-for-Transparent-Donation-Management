@@ -2152,10 +2152,10 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
 
     final theme = Theme.of(context);
     final target = _family!.targetAmount;
-    final raised = _family!.raisedAmount;
-    final surplus = _family!.surplusAmount;
-    final percent = ((raised + surplus) / target).clamp(0.0, 1.0);
-    final fullyFunded = (raised + surplus) >= target;
+    final raised = _family!.combinedProgress;
+    final surplus = _family!.computedSurplusAmount;
+    final percent = target > 0 ? (raised / target).clamp(0.0, 1.0) : 0.0;
+    final fullyFunded = raised >= target;
     final isOverFunded = surplus > 0;
 
     return Column(
@@ -2315,7 +2315,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
               )
             else
               Text(
-                'Gap: ${(target - raised).toStringAsFixed(0)} PKR',
+                'Gap: ${_family!.computedRemainingAmount.toStringAsFixed(0)} PKR',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,

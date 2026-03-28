@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ration_aid/models/donation_model.dart';
 import 'package:ration_aid/models/master_ledger_model.dart';
 import 'package:ration_aid/services/allocation_service.dart';
-import 'package:ration_aid/services/notification_service.dart';
+
 import 'package:ration_aid/services/procurement_service.dart';
 
 class FundingService {
@@ -607,19 +607,43 @@ class FundingService {
         donationPreData['pickupAddress'] as String? ?? '';
     final String preContactNumber =
         donationPreData['contactNumber'] as String? ?? '';
+    final Map<String, String>? preItemUnits;
+    Map<String, String> packUnitsMap = {}; // will be populated from pack lookup
+    if (donationPreData['itemUnits'] != null) {
+      preItemUnits = Map<String, String>.from(
+        donationPreData['itemUnits'] as Map,
+      );
+    } else {
+      preItemUnits = null; // will be derived from pack below
+    }
 
     // Snapshot item prices from pack (outside transaction — safe from deadlock)
     double inKindLockedValue = 0.0;
     final Map<String, double> itemValueSnapshot = {};
 
-    if (preType == 'inKind' && preItems != null && preFamilyId.isNotEmpty) {
-      // Fetch the family's assigned pack to snapshot current item prices
-      final familyPreSnap = await _db
-          .collection('families')
-          .doc(preFamilyId)
-          .get();
-      final familyPreData = familyPreSnap.data() ?? {};
-      final String? assignedPackId = familyPreData['assignedPackId'] as String?;
+    if (preType == 'inKind' && preItems != null) {
+      // Find a pack to get prices from. If preFamilyId is provided, use its pack.
+      // Else, find ANY pack to provide a reasonable valuation for Pool mode.
+      String? assignedPackId;
+      if (preFamilyId.isNotEmpty && preFamilyId != 'general_relief_fund') {
+        final familyPreSnap = await _db
+            .collection('families')
+            .doc(preFamilyId)
+            .get();
+        final familyPreData = familyPreSnap.data() ?? {};
+        assignedPackId = familyPreData['assignedPackId'] as String?;
+      }
+
+      // Fallback: If no pack assigned (Pool mode), take the first available pack for pricing
+      if (assignedPackId == null || assignedPackId.isEmpty) {
+        final anyPackSnap = await _db
+            .collection('assistance_packs')
+            .limit(1)
+            .get();
+        if (anyPackSnap.docs.isNotEmpty) {
+          assignedPackId = anyPackSnap.docs.first.id;
+        }
+      }
 
       if (assignedPackId != null && assignedPackId.isNotEmpty) {
         final packSnap = await _db
@@ -633,23 +657,66 @@ class FundingService {
           final Map<String, double> priceMap = {};
           for (final pi in packItems) {
             final name = pi['name'] as String? ?? '';
-            final cost = (pi['estimatedCost'] as num?)?.toDouble() ?? 0;
-            final qty = (pi['quantity'] as num?)?.toDouble() ?? 1;
-            if (name.isNotEmpty && qty > 0) {
-              priceMap[name] = cost / qty; // price per unit
+            final cost =
+                (num.tryParse(pi['estimatedCost']?.toString() ?? '0') ?? 0)
+                    .toDouble();
+            // P12 Fix — Use quantityNum for accurate price-per-unit calculation.
+            // Legacy 'quantity' string (e.g. "15 kg") fails num.tryParse and defaults to 1,
+            // causing 15x or 0.5x valuation errors.
+            final qtyNum =
+                (num.tryParse(pi['quantityNum']?.toString() ?? '') ??
+                        num.tryParse(pi['quantity']?.toString() ?? '1') ??
+                        1)
+                    .toDouble();
+            final unit = pi['unit'] as String? ?? '';
+            if (name.isNotEmpty && qtyNum > 0) {
+              priceMap[name] = cost / qtyNum; // price per unit (e.g. per kg)
+              if (unit.isNotEmpty) packUnitsMap[name] = unit;
             }
           }
           preItems.forEach((item, qty) {
             final unitPrice = priceMap[item] ?? 0.0;
-            final donatedQty = (qty as num).toDouble();
+            final donatedQty = num.tryParse(qty.toString())?.toDouble() ?? 0.0;
             final lineValue = unitPrice * donatedQty;
             itemValueSnapshot[item] = lineValue;
             inKindLockedValue += lineValue;
           });
         }
       }
+      // Merge packUnitsMap as fallback into preItemUnits if not already set
+      if (preItemUnits != null && packUnitsMap.isNotEmpty) {
+        // Backfill any missing units from pack
+        for (final entry in packUnitsMap.entries) {
+          preItemUnits.putIfAbsent(entry.key, () => entry.value);
+        }
+      }
     }
-    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // ── Phase Overlap: Pre-fetch Potential Overlapped Cash Donors ──
+    // Fetch verified cash donors so we can seamlessly shift their surplus to GRF
+    // if this in-kind donation pushes the family over 100% funding.
+    List<DocumentSnapshot> overlapCandidates = [];
+    if (preType == 'inKind' &&
+        preFamilyId.isNotEmpty &&
+        preFamilyId != 'general_relief_fund') {
+      final overrideQuery = await _db
+          .collection('donations')
+          .where('familyId', isEqualTo: preFamilyId)
+          .where('donationType', isEqualTo: 'cash')
+          .where('status', isEqualTo: 'verified')
+          .get();
+
+      overlapCandidates = overrideQuery.docs;
+      // Sort LIFO (Newest first)
+      overlapCandidates.sort((a, b) {
+        final aMap = a.data() as Map<String, dynamic>? ?? {};
+        final bMap = b.data() as Map<String, dynamic>? ?? {};
+        final aTime = aMap['createdAt'] as Timestamp? ?? Timestamp.now();
+        final bTime = bMap['createdAt'] as Timestamp? ?? Timestamp.now();
+        return bTime.compareTo(aTime); // Descending
+      });
+    }
 
     await _db.runTransaction<void>((tx) async {
       // C3 — Read donation INSIDE tx for precondition check
@@ -673,10 +740,13 @@ class FundingService {
       final Map<String, dynamic>? items =
           donationData['items'] as Map<String, dynamic>?;
       final double effectiveAmount =
-          (donationData['effectiveAmount'] as num?)?.toDouble() ?? 0;
+          (num.tryParse(donationData['effectiveAmount']?.toString() ?? '0') ??
+                  0)
+              .toDouble();
 
       final double overflowAmount =
-          (donationData['overflowAmount'] as num?)?.toDouble() ?? 0;
+          (num.tryParse(donationData['overflowAmount']?.toString() ?? '0') ?? 0)
+              .toDouble();
       final List<dynamic>? smartSplits =
           donationData['smartSplits'] as List<dynamic>?;
 
@@ -691,14 +761,23 @@ class FundingService {
       Map<String, DocumentSnapshot> smartFamilySnaps = {};
       if (smartSplits != null) {
         for (final split in smartSplits) {
-          final String sId = split['familyId'] as String;
+          final String sId = split['familyId'] as String? ?? '';
+          // Skip pool entries (empty ID) and GRF — they have no family doc to read
+          if (sId.isEmpty || sId == 'general_relief_fund') continue;
           smartFamilySnaps[sId] = await tx.get(_familyRef(sId));
         }
       }
 
+      // Read overlap candidates inside tx to ensure data integrity
+      List<DocumentSnapshot> freshOverlapCandidates = [];
+      for (final doc in overlapCandidates) {
+        final snap = await tx.get(doc.reference);
+        if (snap.exists) freshOverlapCandidates.add(snap);
+      }
+
       // ── WRITES ───────────────────────────────────────────────────────
       // 1. Update donation status to verified (inside tx)
-      tx.update(donationRef, {
+      final donationUpdate = <String, dynamic>{
         'status': DonationStatus.verified.toFirestore(),
         'updatedAt': FieldValue.serverTimestamp(),
         'statusHistory': FieldValue.arrayUnion([
@@ -708,7 +787,26 @@ class FundingService {
             note: 'Verified by admin',
           ).toMap(),
         ]),
-      });
+      };
+
+      if (donationType == 'inKind' && inKindLockedValue > 0) {
+        donationUpdate['amount'] = inKindLockedValue;
+        donationUpdate['effectiveAmount'] = inKindLockedValue;
+        donationUpdate['declaredValue'] = inKindLockedValue;
+        donationUpdate['itemValueSnapshot'] = itemValueSnapshot;
+        donationUpdate['lockedInKindValue'] = inKindLockedValue;
+        // P12 Fix — Ensure itemUnits are captured even if missing from submission.
+        // Prefer actual units from the pack catalogue; fall back to empty strings.
+        if (donationData['itemUnits'] == null) {
+          final fallbackUnits = packUnitsMap.isNotEmpty ? packUnitsMap : {};
+          donationUpdate['itemUnits'] =
+              (donationData['items'] as Map<String, dynamic>? ?? {}).map(
+                (k, v) => MapEntry(k, (fallbackUnits[k] as String?) ?? ''),
+              );
+        }
+      }
+
+      tx.update(donationRef, donationUpdate);
 
       // 1b. If there is an overflow, route it to the General Relief Fund (GRF).
       // Or if the entire donation was originally destined for GRF.
@@ -730,47 +828,93 @@ class FundingService {
         }, SetOptions(merge: true));
       }
 
-      if (smartSplits != null && donationType == 'cash') {
+      if (smartSplits != null) {
         for (final split in smartSplits) {
           final String sId = split['familyId'] as String;
-          final double splitAmt = (split['amount'] as num).toDouble();
+          if (sId.isEmpty || sId == 'general_relief_fund') {
+            continue; // Handled by separate GRF logic or warehouse stock
+          }
 
-          final sSnap = smartFamilySnaps[sId];
-          if (sSnap != null && sSnap.exists) {
-            final sd = sSnap.data() as Map<String, dynamic>;
-            final double target =
-                ((sd['assignedPackBudget'] ?? sd['targetAmount'] ?? 0) as num)
+          if (donationType == 'cash') {
+            final double splitAmt =
+                (num.tryParse(split['amount']?.toString() ?? '0') ?? 0)
                     .toDouble();
-            final double currentRaised = (sd['raisedAmount'] as num? ?? 0)
-                .toDouble();
+            final sSnap = smartFamilySnaps[sId];
+            if (sSnap != null && sSnap.exists && splitAmt > 0) {
+              final sd = sSnap.data() as Map<String, dynamic>;
+              final double target =
+                  (num.tryParse(
+                            (sd['assignedPackBudget'] ??
+                                    sd['targetAmount'] ??
+                                    0)
+                                .toString(),
+                          ) ??
+                          0)
+                      .toDouble();
+              final double currentRaised =
+                  (num.tryParse(sd['raisedAmount']?.toString() ?? '0') ?? 0)
+                      .toDouble();
 
-            final double newRaised = currentRaised + splitAmt;
-            final bool isFull = target > 0 && newRaised >= target;
-            final String newFundingStatus = isFull
-                ? 'fully_funded'
-                : 'partially_funded';
+              final double newRaised = currentRaised + splitAmt;
+              final bool isFull = target > 0 && newRaised >= target;
+              final String newFundingStatus = isFull
+                  ? 'fully_funded'
+                  : 'partially_funded';
 
-            tx.update(_familyRef(sId), {
-              'raisedAmount': FieldValue.increment(splitAmt),
-              'pendingRaisedAmount': FieldValue.increment(-splitAmt),
-              'fundingStatus': newFundingStatus,
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
+              tx.update(_familyRef(sId), {
+                'raisedAmount': FieldValue.increment(splitAmt),
+                'pendingRaisedAmount': FieldValue.increment(-splitAmt),
+                'fundingStatus': newFundingStatus,
+                'updatedAt': FieldValue.serverTimestamp(),
+              });
 
-            if (isFull &&
-                (sd['fulfillmentStatus'] as String? ?? 'pending') ==
-                    'pending') {
-              procurementFamilyIds.add(sId);
+              if (isFull &&
+                  (sd['fulfillmentStatus'] as String? ?? 'pending') ==
+                      'pending') {
+                procurementFamilyIds.add(sId);
+              }
+            }
+          } else if (donationType == 'inKind') {
+            // ── Smart In-Kind: Process Waterfall Needs Reservation ──
+            final splitItems = split['items'] as Map<String, dynamic>? ?? {};
+            if (splitItems.isNotEmpty) {
+              final sSnap = smartFamilySnaps[sId];
+              if (sSnap != null && sSnap.exists) {
+                final sd = sSnap.data() as Map<String, dynamic>;
+                final Map<String, dynamic> needsUpdates = {};
+
+                splitItems.forEach((item, qty) {
+                  final num currentNeed =
+                      num.tryParse(sd['needs']?[item]?.toString() ?? '0') ?? 0;
+                  final num donated = num.tryParse(qty.toString()) ?? 0;
+                  final num newNeed = (currentNeed - donated).clamp(
+                    0.0,
+                    99999.0,
+                  );
+                  needsUpdates['needs.$item'] = newNeed;
+                  needsUpdates['pendingNeeds.$item'] = FieldValue.delete();
+                });
+
+                tx.update(_familyRef(sId), {
+                  ...needsUpdates,
+                  'updatedAt': FieldValue.serverTimestamp(),
+                });
+              }
             }
           }
         }
       } else if (familySnap != null && familySnap.exists) {
         final d = familySnap.data() as Map<String, dynamic>;
         final double target =
-            ((d['assignedPackBudget'] ?? d['targetAmount'] ?? 0) as num)
+            (num.tryParse(
+                      (d['assignedPackBudget'] ?? d['targetAmount'] ?? 0)
+                          .toString(),
+                    ) ??
+                    0)
                 .toDouble();
-        final double currentRaised = (d['raisedAmount'] as num? ?? 0)
-            .toDouble();
+        final double currentRaised =
+            (num.tryParse(d['raisedAmount']?.toString() ?? '0') ?? 0)
+                .toDouble();
 
         if (donationType == 'cash' && effectiveAmount > 0) {
           // 2. Move cash amount from pending → verified atomically
@@ -793,78 +937,68 @@ class FundingService {
             procurementFamilyIds.add(familyId);
           }
         } else if (donationType == 'inKind' && items != null) {
-          // ── In-Kind Verification (Phase IK) ────────────────────────────────────────
-          // C1 Fix — Decrement in-kind needs INSIDE the transaction (atomic)
+          // ── In-Kind Verification (Phase IK) ──
+          // We reserve the items in 'needs' map, but we DO NOT update monetary fields yet.
+          // Recognition of value (inKindValue/combinedProgress) is delayed until the
+          // Purchaser module marks the inbound pickup as 'collected' (status: 'stocked').
           final Map<String, dynamic> needsUpdates = {};
           items.forEach((item, qty) {
-            final num currentNeed = (d['needs']?[item] as num?) ?? 0;
-            final num donated = qty as num;
+            final num currentNeed =
+                num.tryParse(d['needs']?[item]?.toString() ?? '0') ?? 0;
+            final num donated = num.tryParse(qty.toString()) ?? 0;
             final num newNeed = (currentNeed - donated).clamp(0.0, 99999.0);
             needsUpdates['needs.$item'] = newNeed;
+            // G6 Fix — clear pendingNeeds so donor screen stops showing "(pending)"
+            // once the donation has been admin-verified and the pickup task created.
+            needsUpdates['pendingNeeds.$item'] = FieldValue.delete();
           });
 
-          // Also increment inKindValue and recompute combinedProgress
-          // totalLockedValue (set below outside tx) is passed in via closure.
-          tx.update(_familyRef(familyId), {
+          // Write reserved needs only — delayed monetary recognition (Sync Fix)
+          tx.update(_db.collection('families').doc(familyId), {
             ...needsUpdates,
-            'inKindValue': FieldValue.increment(inKindLockedValue),
-            'combinedProgress': FieldValue.increment(inKindLockedValue),
             'updatedAt': FieldValue.serverTimestamp(),
           });
-
-          // Check if combinedProgress will now reach the target
-          final double currentCombined =
-              (d['combinedProgress'] as num? ?? d['raisedAmount'] as num? ?? 0)
-                  .toDouble();
-          if (target > 0 &&
-              (currentCombined + inKindLockedValue) >= target &&
-              (d['fulfillmentStatus'] as String? ?? 'pending') == 'pending') {
-            procurementFamilyIds.add(familyId);
-          }
         }
       }
     });
 
-    // ── Pool-mode in-kind: skip warehouse/pickup creation.
-    // Admin will manually assign to a family via the Admin UI.
-    if (preType == 'inKind' && preFamilyId.isEmpty) {
-      await donationRef.update({
-        'status': 'pending_assignment',
-        'updatedAt': FieldValue.serverTimestamp(),
-        'statusHistory': FieldValue.arrayUnion([
-          {
-            'status': 'pending_assignment',
-            'timestamp': Timestamp.now(),
-            'note': 'Awaiting NGO family assignment',
-          },
-        ]),
-      });
-      return; // No warehouse/pickup docs created yet
-    }
+    // ── In-Kind: unified pickup creation for BOTH direct-family, GRF pool, and Smart Split.
+    //
+    // For Smart Split and GRF Pool (no specific family), we still create a single
+    // Purchaser pickup so the donor's items are physically collected first as a single batch.
+    // For Smart Split, the actual separation of items into multiple warehouse_stock docs
+    // happens LATER when the purchaser marks the items as collected.
+    if (preType == 'inKind' && preItems != null) {
+      final bool isGrfPool =
+          preFamilyId.isEmpty || preFamilyId == 'general_relief_fund';
+      final bool isSmartSplit = preFamilyId == 'smart_allocation';
+      final String effectiveFamilyIdForPickup = isGrfPool
+          ? 'general_relief_fund'
+          : preFamilyId;
 
-    // Normal in-kind: create warehouse batch & pickup task.
-    if (preType == 'inKind' && preItems != null && preFamilyId.isNotEmpty) {
       final batch = _db.batch();
       final stockRef = _db.collection('warehouse_stock').doc();
       final pickupRef = _db.collection('inbound_pickups').doc();
 
-      // Convert items to Map<String, num>
       final Map<String, num> typedItems = preItems.map(
-        (k, v) => MapEntry(k, (v as num)),
+        (k, v) => MapEntry(k, num.tryParse(v.toString()) ?? 0),
       );
 
-      // WarehouseStock document
       batch.set(stockRef, {
-        'familyId': preFamilyId,
+        'familyId': effectiveFamilyIdForPickup,
         'donationId': donationId,
         'donorId': preDonorId,
         'donorName': preDonorName,
         'items': typedItems,
         'itemValueSnapshot': itemValueSnapshot,
         'totalLockedValue': inKindLockedValue,
+        'lockedInKindValue': inKindLockedValue,
         'status': 'pending_pickup',
         'pickupAddress': prePickupAddress,
         'contactNumber': preContactNumber,
+        'itemUnits': preItemUnits ?? packUnitsMap,
+        'isGrfPool': isGrfPool,
+        'isSmartSplit': isSmartSplit,
         'inboundPickupId': pickupRef.id,
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -872,20 +1006,39 @@ class FundingService {
       // InboundPickup task document (assigned to Purchaser open pool)
       batch.set(pickupRef, {
         'batchId': stockRef.id,
-        'familyId': preFamilyId,
+        'familyId': effectiveFamilyIdForPickup,
         'donationId': donationId,
         'donorId': preDonorId,
         'donorName': preDonorName,
         'contactNumber': preContactNumber,
         'pickupAddress': prePickupAddress,
         'items': typedItems,
+        'itemUnits': preItemUnits ?? packUnitsMap,
+        'isGrfPool': isGrfPool,
+        'isSmartSplit': isSmartSplit,
         'status': 'open',
         'createdAt': FieldValue.serverTimestamp(),
       });
 
+      // For GRF Pool mode, update donation status to reflect "awaiting pickup"
+      if (isGrfPool) {
+        batch.update(donationRef, {
+          'status': DonationStatus.pendingAssignment.toFirestore(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'statusHistory': FieldValue.arrayUnion([
+            {
+              'status': DonationStatus.pendingAssignment.toFirestore(),
+              'timestamp': Timestamp.now(),
+              'note': 'Awaiting pickupfrom donor by Purchaser (GRF Pool)',
+            },
+          ]),
+        });
+      }
+
       await batch.commit();
     }
-    // \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     // P9 Fix — Trigger procurement AFTER tx commits using the flag set inside tx.
     // The flag is a local variable set atomically within the tx's closure,
@@ -899,51 +1052,33 @@ class FundingService {
   // ASSIGN POOL IN-KIND DONATION — Admin action
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Admin assigns an unassigned pool-mode in-kind donation to a specific family.
-  /// Creates warehouse_stock + inbound_pickup docs and updates the family's needs.
+  /// Admin assigns a GRF Pool in-kind donation (already collected and in warehouse)
+  /// to a specific family.
+  ///
+  /// New lifecycle (Post Fix): Items are already in warehouse_stock with status='grf_pool'
+  /// when this is called. This function:
+  /// 1. Updates family needs and inKindValue
+  /// 2. Re-assigns the existing warehouse_stock batch to the family
+  /// 3. Marks the donation as 'pool_assigned' (closed lifecycle for donor UI)
+  /// 4. Triggers procurement if the family is now fully funded
   static Future<void> assignPoolInKind({
-    required String donationId,
+    required String stockDocId,
     required String targetFamilyId,
   }) async {
-    final donationRef = _db.collection('donations').doc(donationId);
-    final donationSnap = await donationRef.get();
-    if (!donationSnap.exists) throw Exception('Donation not found');
+    final stockRef = _db.collection('warehouse_stock').doc(stockDocId);
+    final stockSnap = await stockRef.get();
+    if (!stockSnap.exists) throw Exception('Warehouse stock not found');
 
-    final data = donationSnap.data()!;
-    final preItems = data['items'] as Map<String, dynamic>?;
-    if (preItems == null || preItems.isEmpty) {
-      throw Exception('Donation has no items');
-    }
+    final stockData = stockSnap.data()!;
+    final poolItems = Map<String, dynamic>.from(stockData['items'] ?? {});
+    final donationId = stockData['donationId'] as String? ?? '';
 
-    final preDonorId = data['donorId'] as String? ?? '';
-    final preDonorName = data['donorName'] as String? ?? '';
-    final prePickupAddress = data['pickupAddress'] as String? ?? '';
-    final preContactNumber = data['contactNumber'] as String? ?? '';
-    final itemValueSnapshot =
-        (data['itemValueSnapshot'] as Map<String, dynamic>?)?.map(
-          (k, v) => MapEntry(k, (v as num).toDouble()),
-        ) ??
-        {};
-    final inKindLockedValue =
-        (data['lockedInKindValue'] as num?)?.toDouble() ?? 0.0;
+    // We calculate proportional value for partial hits
+    final totalValue =
+        (stockData['totalLockedValue'] ?? stockData['lockedInKindValue'] ?? 0)
+            .toDouble();
 
-    // 1. Update donation: assign to family
-    final now = DateTime.now();
-    await donationRef.update({
-      'familyId': targetFamilyId,
-      'status': 'under_verification',
-      'allocationMode': 'pool_assigned',
-      'updatedAt': FieldValue.serverTimestamp(),
-      'statusHistory': FieldValue.arrayUnion([
-        {
-          'status': 'under_verification',
-          'timestamp': Timestamp.fromDate(now),
-          'note': 'Pool donation assigned to family by admin',
-        },
-      ]),
-    });
-
-    // 2. Update family needs + inKindValue
+    // 1. Get family needs
     final familySnap = await _db
         .collection('families')
         .doc(targetFamilyId)
@@ -952,63 +1087,120 @@ class FundingService {
     final familyData = familySnap.data()!;
     final needsData = (familyData['needs'] as Map<String, dynamic>?) ?? {};
 
-    final Map<String, dynamic> needsUpdates = {};
-    final Map<String, num> typedItems = {};
-    preItems.forEach((item, qty) {
-      final numQty = (qty as num);
-      typedItems[item] = numQty;
-      final currentNeed = (needsData[item] as num?) ?? 0;
-      needsUpdates['needs.$item'] = (currentNeed - numQty).clamp(0, 99999);
+    // 2. Calculate Split
+    final Map<String, num> assignedItems = {};
+    final Map<String, num> remainingItems = {};
+    int totalPoolQty = 0;
+    int totalAssignedQty = 0;
+
+    poolItems.forEach((item, qty) {
+      final poolQty = num.tryParse(qty.toString()) ?? 0;
+      final needQty = num.tryParse(needsData[item]?.toString() ?? '0') ?? 0;
+
+      totalPoolQty += poolQty.toInt();
+
+      if (needQty > 0) {
+        final taken = min(poolQty, needQty);
+        assignedItems[item] = taken;
+        totalAssignedQty += taken.toInt();
+
+        if (poolQty > taken) {
+          remainingItems[item] = poolQty - taken;
+        }
+      } else {
+        remainingItems[item] = poolQty;
+      }
     });
 
-    await _db.collection('families').doc(targetFamilyId).update({
-      ...needsUpdates,
-      'inKindValue': FieldValue.increment(inKindLockedValue),
-      'combinedProgress': FieldValue.increment(inKindLockedValue),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    if (assignedItems.isEmpty) {
+      throw Exception('Family does not need any of the items in this batch.');
+    }
 
-    // 3. Batch: create warehouse_stock + inbound_pickup + mark donation verified
+    // Pro-rate the monetary value based on quantity ratio
+    final double assignedProportion = totalPoolQty > 0
+        ? (totalAssignedQty / totalPoolQty)
+        : 1.0;
+    final double assignedValue = totalValue * assignedProportion;
+    final double remainingValue = totalValue - assignedValue;
+
     final wsBatch = _db.batch();
-    final stockRef = _db.collection('warehouse_stock').doc();
-    final pickupRef = _db.collection('inbound_pickups').doc();
 
-    wsBatch.set(stockRef, {
-      'familyId': targetFamilyId,
-      'donationId': donationId,
-      'donorId': preDonorId,
-      'donorName': preDonorName,
-      'items': typedItems,
-      'itemValueSnapshot': itemValueSnapshot,
-      'totalLockedValue': inKindLockedValue,
-      'status': 'pending_pickup',
-      'pickupAddress': prePickupAddress,
-      'contactNumber': preContactNumber,
-      'inboundPickupId': pickupRef.id,
-      'createdAt': FieldValue.serverTimestamp(),
+    // 3. Update or split warehouse_stock
+    if (remainingItems.isEmpty) {
+      // Full batch consumed
+      wsBatch.update(stockRef, {
+        'status': 'assigned',
+        'familyId': targetFamilyId,
+        'assignedFamilyId': targetFamilyId,
+        'assignedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'items': assignedItems,
+        'totalLockedValue': assignedValue,
+      });
+
+      // Update donation status only if full batch consumed in one go
+      if (donationId.isNotEmpty) {
+        wsBatch.update(_db.collection('donations').doc(donationId), {
+          'familyId': targetFamilyId, // Point donation to the family
+          'status': 'pool_assigned', // Triggers donor UI complete state
+          'allocationMode': 'pool_assigned',
+          'updatedAt': FieldValue.serverTimestamp(),
+          'statusHistory': FieldValue.arrayUnion([
+            {
+              'status': 'pool_assigned',
+              'timestamp': Timestamp.now(),
+              'note': 'GRF Pool items fully assigned to family.',
+            },
+          ]),
+        });
+      }
+    } else {
+      // Partial batch consumed -> Split!
+
+      // A. Keep remaining items in the original doc
+      wsBatch.update(stockRef, {
+        'items': remainingItems,
+        'totalLockedValue': remainingValue,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // B. Create a NEW doc for the assigned items
+      final newStockRef = _db.collection('warehouse_stock').doc();
+      final newStockData = Map<String, dynamic>.from(stockData);
+      newStockData['id'] = newStockRef.id;
+      newStockData['items'] = assignedItems;
+      newStockData['totalLockedValue'] = assignedValue;
+      newStockData['status'] = 'assigned';
+      newStockData['familyId'] = targetFamilyId;
+      newStockData['assignedFamilyId'] = targetFamilyId;
+      newStockData['assignedAt'] = FieldValue.serverTimestamp();
+      newStockData['createdAt'] = FieldValue.serverTimestamp();
+      newStockData['updatedAt'] = FieldValue.serverTimestamp();
+      wsBatch.set(newStockRef, newStockData);
+
+      // We don't mark the original donation as 'pool_assigned' yet because some of it is still in the pool.
+    }
+
+    // 4. Update family: decrement needs + increment inKindValue + combinedProgress
+    final Map<String, dynamic> familyUpdates = {};
+    assignedItems.forEach((item, qty) {
+      final currentNeed = num.tryParse(needsData[item]?.toString() ?? '0') ?? 0;
+      familyUpdates['needs.$item'] = (currentNeed - qty).clamp(0, 99999);
     });
 
-    wsBatch.set(pickupRef, {
-      'batchId': stockRef.id,
-      'familyId': targetFamilyId,
-      'donationId': donationId,
-      'donorId': preDonorId,
-      'donorName': preDonorName,
-      'contactNumber': preContactNumber,
-      'pickupAddress': prePickupAddress,
-      'items': typedItems,
-      'status': 'open',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
-    wsBatch.update(donationRef, {
-      'status': 'verified',
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    if (assignedValue > 0) {
+      familyUpdates['inKindValue'] = FieldValue.increment(assignedValue);
+      familyUpdates['combinedProgress'] = FieldValue.increment(assignedValue);
+    }
+    familyUpdates['updatedAt'] = FieldValue.serverTimestamp();
+    wsBatch.update(
+      _db.collection('families').doc(targetFamilyId),
+      familyUpdates,
+    );
 
     await wsBatch.commit();
 
-    // 4. Trigger procurement if family now fully funded
+    // 5. Trigger procurement if family now fully funded
     final updatedFamSnap = await _db
         .collection('families')
         .doc(targetFamilyId)
@@ -1016,18 +1208,196 @@ class FundingService {
     if (updatedFamSnap.exists) {
       final d = updatedFamSnap.data()!;
       final double target =
-          ((d['assignedPackBudget'] ?? d['targetAmount'] ?? 0) as num)
+          (num.tryParse(
+                    (d['assignedPackBudget'] ?? d['targetAmount'] ?? 0)
+                        .toString(),
+                  ) ??
+                  0)
               .toDouble();
-      final double combined = (d['combinedProgress'] as num? ?? 0).toDouble();
+      final double combined =
+          (num.tryParse(d['combinedProgress']?.toString() ?? '0') ?? 0)
+              .toDouble();
       if (target > 0 &&
           combined >= target &&
           (d['fulfillmentStatus'] as String? ?? 'pending') == 'pending') {
         await ProcurementService.checkAndGenerateRequest(targetFamilyId);
       }
     }
+
+    // 6. Recalculate family funding for real-time dashboard sync
+    await recalculateFamilyFunding(targetFamilyId);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // SMART IN-KIND SPLIT FUNDING — called by Purchaser on pickup completion
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Splits a single Smart In-Kind warehouse_stock document into multiple
+  /// (one per assigned family + one for GRF pool) when the Purchaser
+  /// completes the pickup batch.
+  ///
+  /// Returns a Map<familyId, lockedValue> of the family-reserved splits
+  /// so the caller can immediately apply inKindValue increments without
+  /// a costlier Firestore re-query (which also requires a composite index).
+  static Future<Map<String, double>> processSmartSplitCollectionToWarehouse({
+    required String pickupId,
+    required String batchId,
+    required String donationId,
+    required String pickupAddress,
+    required String contactNumber,
+    required String donorId,
+    required String donorName,
+    required Map<String, dynamic> itemUnits,
+    required Map<String, num> pickupItems,
+    required String collectorUid,
+    required String collectorName,
+    required String? proofUrl,
+    required WriteBatch batch,
+  }) async {
+    // 1. Fetch original donation to get smartSplits
+    final donationSnap = await _db
+        .collection('donations')
+        .doc(donationId)
+        .get();
+    if (!donationSnap.exists) return {};
+
+    final donationData = donationSnap.data()!;
+    final List<dynamic> smartSplits =
+        donationData['smartSplits'] as List<dynamic>? ?? [];
+
+    final stockRef = _db.collection('warehouse_stock').doc(batchId);
+    final stockSnap = await stockRef.get();
+    if (!stockSnap.exists) return {};
+
+    final stockData = stockSnap.data()!;
+    final itemValueSnapshot =
+        stockData['itemValueSnapshot'] as Map<String, dynamic>? ?? {};
+
+    // Compute price per unit
+    final Map<String, double> pricePerUnit = {};
+    pickupItems.forEach((item, qty) {
+      final totalQty = qty.toDouble();
+      final totalVal =
+          (num.tryParse(itemValueSnapshot[item]?.toString() ?? '0') ?? 0)
+              .toDouble();
+      if (totalQty > 0) pricePerUnit[item] = totalVal / totalQty;
+    });
+
+    // Mark the original warehouse_stock doc as 'split_source'
+    batch.update(stockRef, {
+      'status': 'split_source',
+      'receivedBy': collectorUid,
+      'receivedByName': collectorName,
+      'receivedAt': FieldValue.serverTimestamp(),
+      if (proofUrl != null && proofUrl.isNotEmpty) 'pickupProofUrl': proofUrl,
+    });
+
+    // Create a new warehouse_stock doc for each split
+    // Also build the return map: {familyId → lockedValue} for family-reserved splits.
+    final Map<String, double> familySplitValues = {};
+
+    for (final split in smartSplits) {
+      final splitFamilyId = split['familyId'] as String? ?? '';
+      final splitItemsRaw = split['items'] as Map<String, dynamic>? ?? {};
+      if (splitItemsRaw.isEmpty) continue;
+
+      final Map<String, num> splitItems = splitItemsRaw.map(
+        (k, v) => MapEntry(k, num.tryParse(v.toString()) ?? 0),
+      );
+
+      double splitLockedValue = 0.0;
+      splitItems.forEach((item, qty) {
+        splitLockedValue += (pricePerUnit[item] ?? 0.0) * qty.toDouble();
+      });
+
+      final bool isSplitPool =
+          splitFamilyId.isEmpty || splitFamilyId == 'general_relief_fund';
+      final String effectiveFid = isSplitPool
+          ? 'general_relief_fund'
+          : splitFamilyId;
+
+      final newStockRef = _db.collection('warehouse_stock').doc();
+      batch.set(newStockRef, {
+        'familyId': effectiveFid,
+        'donationId': donationId,
+        'donorId': donorId,
+        'donorName': donorName,
+        'items': splitItems,
+        'itemValueSnapshot': itemValueSnapshot,
+        'totalLockedValue': splitLockedValue,
+        'lockedInKindValue': splitLockedValue,
+        'status': isSplitPool ? 'grf_pool' : 'received',
+        'pickupAddress': pickupAddress,
+        'contactNumber': contactNumber,
+        'itemUnits': itemUnits,
+        'isGrfPool': isSplitPool,
+        'isSmartSplit': true,
+        'inboundPickupId': pickupId,
+        'createdAt': stockData['createdAt'] ?? FieldValue.serverTimestamp(),
+        'receivedBy': collectorUid,
+        'receivedByName': collectorName,
+        'receivedAt': FieldValue.serverTimestamp(),
+        if (proofUrl != null && proofUrl.isNotEmpty) 'pickupProofUrl': proofUrl,
+      });
+
+      // Track family-reserved splits for immediate funding update by caller.
+      if (!isSplitPool && splitLockedValue > 0) {
+        familySplitValues[effectiveFid] =
+            (familySplitValues[effectiveFid] ?? 0.0) + splitLockedValue;
+      }
+    }
+
+    return familySplitValues;
+  }
+
+  /// Directly increments `inKindValue` and `combinedProgress` on a specific
+  /// family after its Smart In-Kind waterfall pickup is marked as collected.
+  ///
+  /// Mirrors step 4 of `assignPoolInKind` — skips `recalculateFamilyFunding`
+  /// entirely because that tool queries donations by `familyId`, but smart-split
+  /// donations carry `familyId = 'smart_allocation'` and would never be found.
+  static Future<void> applySmartSplitInKindFunding({
+    required String familyId,
+    required double lockedValue,
+  }) async {
+    if (familyId.isEmpty ||
+        familyId == 'smart_allocation' ||
+        familyId == 'general_relief_fund' ||
+        lockedValue <= 0)
+      return;
+
+    final familyRef = _familyRef(familyId);
+    final famSnap = await familyRef.get();
+    if (!famSnap.exists) return;
+    final d = famSnap.data() as Map<String, dynamic>;
+
+    final double target =
+        (num.tryParse(
+                  (d['assignedPackBudget'] ?? d['targetAmount'] ?? 0)
+                      .toString(),
+                ) ??
+                0)
+            .toDouble();
+    final double combined =
+        (num.tryParse(d['combinedProgress']?.toString() ?? '0') ?? 0)
+            .toDouble();
+    final double newCombined = combined + lockedValue;
+    final bool isFull = target > 0 && newCombined >= target;
+
+    await familyRef.update({
+      'inKindValue': FieldValue.increment(lockedValue),
+      'combinedProgress': FieldValue.increment(lockedValue),
+      'fundingStatus': isFull ? 'fully_funded' : 'partially_funded',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // Trigger procurement if the family is now fully funded
+    if (isFull &&
+        (d['fulfillmentStatus'] as String? ?? 'pending') == 'pending') {
+      await ProcurementService.checkAndGenerateRequest(familyId);
+    }
+  }
+
   // ADMIN REPAIR TOOL — keep for reconciliation only
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -1210,7 +1580,6 @@ class FundingService {
                   as num)
               .toDouble();
 
-      // Sum all verified/active donations
       final donationsSnap = await _db
           .collection('donations')
           .where('familyId', isEqualTo: familyId)
@@ -1220,6 +1589,9 @@ class FundingService {
               'under_verification',
               'pending',
               'verified',
+              'stocked', // G3 Fix — include stocked items
+              'pool_assigned', // GRF Pool items assigned to family
+              'received', // Legacy
               'in_process',
               'out_for_delivery',
               'delivered',
@@ -1228,49 +1600,154 @@ class FundingService {
           )
           .get();
 
-      double raisedAmount = 0;
-      double pendingAmount = 0;
-      final Map<String, num> pendingNeeds = {};
+      // ── Physical Needs Reconciliation ────────────────────────────────────
+      final Map<String, num> baseNeeds = {};
+      final Map<String, String> itemUnits = {};
 
-      for (var doc in donationsSnap.docs) {
-        final data = doc.data();
-        // P10 Fix — Use effectiveAmount (cap-applied) not amount (raw).
-        // amount = donor's full input; effectiveAmount = actual credited amount.
-        // Using amount overstates raisedAmount by the overflow portion.
-        final effectiveAmt = (data['effectiveAmount'] ?? data['amount'] ?? 0)
-            .toDouble();
-        final status = data['status'];
-        final type = data['donationType'];
-        final items = data['items'] as Map<String, dynamic>?;
+      if (familyData['assignedPackId'] != null) {
+        final packDoc = await _db
+            .collection('assistance_packs')
+            .doc(familyData['assignedPackId'])
+            .get();
+        if (packDoc.exists) {
+          final packData = packDoc.data() as Map<String, dynamic>;
+          final List<dynamic> packItems = packData['items'] ?? [];
+          for (var item in packItems) {
+            final name = item['name'] as String? ?? '';
+            final qtyStr = item['quantity'] as String? ?? '0';
+            final unit = item['unit'] as String? ?? '';
 
-        if (type == 'cash' || type == null) {
-          if (status == 'verified') {
-            raisedAmount += effectiveAmt;
-          } else if (status == 'under_verification' || status == 'pending') {
-            pendingAmount += effectiveAmt;
-          }
-        } else if (type == 'inKind') {
-          if (status == 'verified' && effectiveAmt > 0) {
-            raisedAmount += effectiveAmt;
-          } else if ((status == 'under_verification' || status == 'pending') &&
-              effectiveAmt > 0) {
-            pendingAmount += effectiveAmt;
-          }
-          if ((status == 'under_verification' || status == 'pending') &&
-              items != null) {
-            items.forEach((item, qty) {
-              pendingNeeds[item] = (pendingNeeds[item] ?? 0) + (qty as num);
-            });
+            // Extract numeric part from string like "0.5 kg" or just "0.5"
+            final numericPart = qtyStr.split(' ')[0];
+            final qty = num.tryParse(numericPart) ?? 0;
+
+            baseNeeds[name] = qty;
+            itemUnits[name] = unit;
           }
         }
       }
 
-      // Bug #3 fix: fundingStatus based on VERIFIED raisedAmount only
-      // pendingAmount is stored separately for display but doesn't affect status
+      double raisedAmount = 0;
+      double pendingAmount = 0;
+      double inKindValue = 0;
+      final Map<String, num> pendingNeeds = {};
+
+      final Map<String, num> currentNeeds = Map.from(baseNeeds);
+
+      for (var doc in donationsSnap.docs) {
+        final data = doc.data();
+        final effectiveAmt =
+            (data['effectiveAmount'] ??
+                    data['lockedInKindValue'] ??
+                    data['amount'] ??
+                    0)
+                .toDouble();
+        final status = data['status'];
+        final type = data['donationType'];
+        final items = data['items'] as Map<String, dynamic>?;
+
+        // Cash logic
+        if (type == 'cash' || type == null) {
+          if (status == 'verified' ||
+              status == 'stocked' ||
+              status == 'pool_assigned' ||
+              status == 'delivered' ||
+              status == 'closed') {
+            raisedAmount += effectiveAmt;
+          } else if (status == 'under_verification' || status == 'pending') {
+            pendingAmount += effectiveAmt;
+          }
+        }
+        // In-Kind logic
+        else if (type == 'inKind') {
+          // Add to monetary value if verified
+          if ((status == 'verified' ||
+                  status == 'stocked' ||
+                  status == 'pool_assigned' ||
+                  status == 'delivered' ||
+                  status == 'closed') &&
+              effectiveAmt > 0) {
+            inKindValue += effectiveAmt;
+          }
+
+          // Reconciliation: Subtract VERIFIED items from needs
+          if (items != null) {
+            if (status == 'verified' ||
+                status == 'stocked' ||
+                status == 'pool_assigned' ||
+                status == 'delivered' ||
+                status == 'closed') {
+              items.forEach((item, qty) {
+                if (currentNeeds.containsKey(item)) {
+                  currentNeeds[item] = (currentNeeds[item]! - (qty as num))
+                      .clamp(0, double.infinity);
+                }
+              });
+            }
+            // Track Pending items separately
+            else if (status == 'under_verification' || status == 'pending') {
+              items.forEach((item, qty) {
+                pendingNeeds[item] = (pendingNeeds[item] ?? 0) + (qty as num);
+              });
+            }
+          }
+        }
+      }
+
+      // ── GRF Pool In-Kind Contribution ────────────────────────────────────
+      // PROBLEM: donations donated to the GRF pool keep `familyId =
+      // 'general_relief_fund'` on their donation doc. For partial batch splits,
+      // the donation doc is NEVER reassigned to the target family. So the loop
+      // above finds ZERO inKind donations for this family and then OVERWRITES
+      // the family's `inKindValue` and `combinedProgress` back to 0 — erasing
+      // the correct values that `assignPoolInKind` wrote via FieldValue.increment.
+      //
+      // FIX: additionally query warehouse_stock assigned to this family so that
+      // GRF pool contributions are counted even when the donation doc still
+      // points to 'general_relief_fund'.
+      if (familyId != 'general_relief_fund') {
+        final assignedStockSnap = await _db
+            .collection('warehouse_stock')
+            .where('assignedFamilyId', isEqualTo: familyId)
+            .where('status', isEqualTo: 'assigned')
+            .get();
+
+        for (final stockDoc in assignedStockSnap.docs) {
+          final sd = stockDoc.data();
+
+          // Skip if the linked donation was already counted in the loop above
+          // (this happens in the full-batch path where the donation is
+          // reassigned to the target family with status='pool_assigned').
+          final linkedDonationId = sd['donationId'] as String? ?? '';
+          final alreadyCounted =
+              linkedDonationId.isNotEmpty &&
+              donationsSnap.docs.any((d) => d.id == linkedDonationId);
+          if (alreadyCounted) continue;
+
+          // Add the pro-rated monetary value of the assigned items.
+          final stockValue =
+              (sd['totalLockedValue'] ?? sd['lockedInKindValue'] ?? 0)
+                  .toDouble();
+          inKindValue += stockValue;
+
+          // Subtract assigned items from the family's remaining needs.
+          final stockItems = Map<String, dynamic>.from(sd['items'] ?? {});
+          stockItems.forEach((item, qty) {
+            if (currentNeeds.containsKey(item)) {
+              currentNeeds[item] =
+                  (currentNeeds[item]! - (num.tryParse(qty.toString()) ?? 0))
+                      .clamp(0, double.infinity);
+            }
+          });
+        }
+      }
+
+      // Bug #3 fix: fundingStatus based on VERIFIED combined progress
       String fundingStatus = 'pending';
-      if (targetAmount > 0 && raisedAmount >= targetAmount) {
+      double combinedProgress = raisedAmount + inKindValue;
+      if (targetAmount > 0 && combinedProgress >= targetAmount) {
         fundingStatus = 'fully_funded';
-      } else if (raisedAmount > 0) {
+      } else if (combinedProgress > 0) {
         fundingStatus = 'partially_funded';
       }
       if (familyId == 'general_relief_fund') fundingStatus = 'active_pool';
@@ -1278,11 +1755,21 @@ class FundingService {
       await _db.collection('families').doc(familyId).update({
         'raisedAmount': raisedAmount,
         'pendingAmount': pendingAmount,
-        'remainingAmount': (targetAmount - raisedAmount).clamp(0, targetAmount),
-        'surplusAmount': (raisedAmount - targetAmount).clamp(
+        'inKindValue': inKindValue,
+        'combinedProgress': combinedProgress,
+        'remainingAmount': (targetAmount - combinedProgress).clamp(
+          0,
+          targetAmount,
+        ),
+        'surplusAmount': (combinedProgress - targetAmount).clamp(
           0,
           double.infinity,
         ),
+        'needs': currentNeeds,
+        'originalNeeds':
+            baseNeeds, // Component 10: Store original pack quantities
+        'itemUnits':
+            itemUnits, // Fix: persist units so UI can display them accurately
         'pendingNeeds': pendingNeeds,
         'fundingStatus': fundingStatus,
         'updatedAt': FieldValue.serverTimestamp(),
@@ -1321,7 +1808,16 @@ class FundingService {
             if (doc.id == 'general_relief_fund') continue;
 
             totalTarget += (data['targetAmount'] ?? 0).toDouble();
-            totalRaised += (data['raisedAmount'] ?? 0).toDouble();
+
+            // Use combinedProgress if available (it exists in new/synced docs).
+            // Fallback to older sum logic for legacy docs.
+            final combined = (data['combinedProgress'] as num?)?.toDouble();
+            if (combined != null) {
+              totalRaised += combined;
+            } else {
+              totalRaised += (data['raisedAmount'] ?? 0).toDouble();
+              totalRaised += (data['inKindValue'] ?? 0).toDouble();
+            }
           }
           return {
             'totalTarget': totalTarget,
@@ -1340,67 +1836,6 @@ class FundingService {
     final doc = await _masterLedgerRef.get();
     if (!doc.exists) {
       await _masterLedgerRef.set(MasterLedger.empty().toFirestore());
-    }
-  }
-
-  /// Process In-Kind donation: Decrement family needs
-  static Future<void> _processInKindDonation(
-    String familyId,
-    Map<String, num> donatedItems,
-  ) async {
-    try {
-      final familyRef = _db.collection('families').doc(familyId);
-      await _db.runTransaction((tx) async {
-        final snapshot = await tx.get(familyRef);
-        if (!snapshot.exists) throw Exception('Family not found');
-        final data = snapshot.data()!;
-        final Map<String, dynamic> currentNeeds = data['needs'] != null
-            ? Map<String, dynamic>.from(data['needs'])
-            : {};
-
-        if (familyId == 'general_relief_fund') {
-          final collectedItems = data['collectedItems'] != null
-              ? Map<String, dynamic>.from(data['collectedItems'])
-              : {};
-          donatedItems.forEach((item, qty) {
-            collectedItems[item] = (collectedItems[item] as int? ?? 0) + qty;
-          });
-          tx.update(familyRef, {
-            'collectedItems': collectedItems,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-          return;
-        }
-
-        bool needsUpdated = false;
-        donatedItems.forEach((item, qty) {
-          if (currentNeeds.containsKey(item)) {
-            final newQty = (currentNeeds[item] as num).toInt() - qty;
-            if (newQty <= 0) {
-              currentNeeds.remove(item);
-            } else {
-              currentNeeds[item] = newQty;
-            }
-            needsUpdated = true;
-          }
-        });
-
-        if (needsUpdated) {
-          final isFullyFulfilled = currentNeeds.isEmpty;
-          tx.update(familyRef, {
-            'needs': currentNeeds,
-            'fulfillmentStatus': isFullyFulfilled
-                ? 'ready_for_purchase'
-                : (data['fulfillmentStatus'] ?? 'pending'),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-          if (isFullyFulfilled) {
-            NotificationService.notifyFullyFunded(familyId);
-          }
-        }
-      });
-    } catch (e) {
-      rethrow;
     }
   }
 }

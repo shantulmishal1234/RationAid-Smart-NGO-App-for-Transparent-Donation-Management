@@ -212,22 +212,24 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
 
     try {
       final file = File(result.files.single.path!);
-      final url = await CloudinaryService.uploadImage(file);
+      final response = await CloudinaryService.uploadImage(file);
 
       if (!mounted) return;
 
-      if (url == null) {
+      if (!response.isSuccess) {
         setState(() {
           _isUploadingDoc = false;
           _uploadedDocUrl = null;
           _uploadedFileName = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Document upload failed. Please check your internet connection.',
+              response.errorMessage ??
+                  'Document upload failed. Please try again.',
             ),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
         return;
@@ -235,7 +237,7 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
 
       setState(() {
         _isUploadingDoc = false;
-        _uploadedDocUrl = url;
+        _uploadedDocUrl = response.url;
         _uploadedFileName = result.files.single.name;
       });
 
@@ -1071,10 +1073,11 @@ class _EditFamilyScreenState extends State<EditFamilyScreen> {
                 selected: isSelected,
                 onSelected: (selected) {
                   setState(() {
-                    if (selected)
+                    if (selected) {
                       _selectedElectronics.add(item);
-                    else
+                    } else {
                       _selectedElectronics.remove(item);
+                    }
                   });
                 },
                 selectedColor: theme.colorScheme.primary.withValues(alpha: 0.2),

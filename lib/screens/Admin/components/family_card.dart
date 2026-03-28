@@ -53,7 +53,7 @@ class FamilyCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     // Calculate progress with surplus
-    final raised = family.raisedAmount;
+    final raised = family.combinedProgress;
     final target = family.targetAmount > 0
         ? family.targetAmount
         : 1; // Avoid div by zero

@@ -784,7 +784,7 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
         value: value,
-        activeColor: activeColor,
+        activeThumbColor: activeColor,
         onChanged: onChanged,
       ),
     );

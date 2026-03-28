@@ -14,6 +14,8 @@ import 'package:ration_aid/services/cloudinary_service.dart';
 import 'package:ration_aid/services/donation_service.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:ration_aid/services/assistance_pack_service.dart';
+import 'package:ration_aid/models/assistance_pack_model.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/screens/Donor/widgets/donor_scaffold.dart';
 import 'package:ration_aid/screens/Donor/Donation/donation_success_screen.dart';
@@ -53,6 +55,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
   String? _paymentProofUrl;
   bool _isUploading = false;
   final Map<String, num> _selectedItems = {}; // For in-kind donations
+  final Map<String, String> _selectedItemUnits = {}; // New: capture units
   bool _isSaving = false;
   StreamSubscription<DocumentSnapshot>? _familySubscription;
 
@@ -64,6 +67,15 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
   Map<String, num> _overflowItems = {}; // items exceeding family need → pool
   List<InKindSplit> _smartSplits = []; // waterfall splits for Smart Give
   bool _isLoadingSmartSplits = false;
+
+  // Cash Smart Give — live split preview
+  List<Map<String, dynamic>> _cashSmartSplits = [];
+  bool _isLoadingCashSplits = false;
+  Timer? _cashPreviewDebounce;
+
+  // Standardized Items for Pool & Smart modes
+  List<PackItem> _availablePackItems = [];
+  bool _isLoadingPacks = true;
 
   /// Generated once per form open — prevents double-tap duplicate submissions
   final String _idempotencyKey = const Uuid().v4();
@@ -94,14 +106,41 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
     } else {
       _selectedFamily = widget.selectedFamily;
       _allowInKind = _selectedFamily?.acceptsInKind ?? true;
-      // Pre-fill amount with remaining amount if available
-      if (_selectedFamily != null &&
-          _selectedFamily!.computedRemainingAmount > 0) {
-        _amountController.text = _selectedFamily!.computedRemainingAmount
-            .toStringAsFixed(0);
-      }
     }
     _setupFamilyStream();
+    _fetchPackItems();
+    // Live preview for Cash Smart Give — debounced on amount changes
+    _amountController.addListener(_onCashAmountChanged);
+  }
+
+  Future<void> _fetchPackItems() async {
+    try {
+      final packs = await AssistancePackService.getActivePacks();
+      final Map<String, PackItem> uniqueItems = {};
+
+      for (var pack in packs) {
+        for (var item in pack.items) {
+          // Use name + qty as a unique key (e.g., "Flour_15.0") so donors don't
+          // see duplicate listings if multiple packs use the exact same 15kg flour bag.
+          final key = '${item.name}_${item.quantityNum}';
+          if (!uniqueItems.containsKey(key)) {
+            uniqueItems[key] = item;
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _availablePackItems = uniqueItems.values.toList()
+            ..sort((a, b) => a.name.compareTo(b.name));
+          _isLoadingPacks = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingPacks = false);
+      }
+    }
   }
 
   /// Fix #11 — When a new family is selected, rebuild tabs to hide In-Kind
@@ -176,10 +215,12 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
     if (needsUpdate && mounted) {
       setState(() {
         _selectedItems.clear();
+        _selectedItemUnits.clear();
         tempItems.forEach((item, currentQty) {
           final needed = updatedFamily.needs[item] ?? 0;
           if (needed > 0) {
             _selectedItems[item] = currentQty > needed ? needed : currentQty;
+            _selectedItemUnits[item] = updatedFamily.itemUnits[item] ?? '';
           }
         });
       });
@@ -223,6 +264,9 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
     if (donation.items != null) {
       _selectedItems.addAll(donation.items!);
     }
+    if (donation.itemUnits != null) {
+      _selectedItemUnits.addAll(donation.itemUnits!);
+    }
     if (donation.contactNumber != null) {
       _contactController.text = donation.contactNumber!;
     }
@@ -235,6 +279,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
   @override
   void dispose() {
     _familySubscription?.cancel();
+    _cashPreviewDebounce?.cancel();
     _tabController.dispose();
     _amountController.dispose();
     _noteController.dispose();
@@ -256,16 +301,25 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
       setState(() => _isUploading = true);
 
       final imageFile = File(image.path);
-      final imageUrl = await CloudinaryService.uploadImage(imageFile);
+      final response = await CloudinaryService.uploadImage(imageFile);
 
       setState(() {
-        _paymentProofUrl = imageUrl;
+        _paymentProofUrl = response.url;
         _isUploading = false;
       });
 
-      if (mounted) {
+      if (response.isSuccess && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Payment proof uploaded successfully')),
+        );
+      } else if (!response.isSuccess && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              response.errorMessage ?? 'Payment proof upload failed',
+            ),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } catch (e) {
@@ -308,16 +362,20 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
     }
 
     // Validation based on donation type
-    if (_donationType == DonationType.cash) {
-      if (_paymentProofUrl == null && submitForVerification) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Payment proof required for verification'),
+    if (submitForVerification && _paymentProofUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _donationType == DonationType.cash
+                ? 'Payment proof required for verification'
+                : 'Item photo proof required for verification',
           ),
-        );
-        return;
-      }
-    } else {
+        ),
+      );
+      return;
+    }
+
+    if (_donationType == DonationType.inKind) {
       if (_selectedItems.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please select at least one item')),
@@ -340,65 +398,21 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
       final userId = FirebaseAuth.instance.currentUser?.uid;
       if (userId == null) throw Exception('User not logged in');
 
-      // ── Multi-family In-Kind: create one donation doc per split ──────────
-      if (_donationType == DonationType.inKind &&
-          _inKindAllocationMode == 'multi' &&
-          _smartSplits.isNotEmpty) {
-        for (final split in _smartSplits) {
-          final splitDonation = Donation(
-            id: '',
-            donorId: userId,
-            donorName: widget.existingDonation?.donorName,
-            donorEmail: widget.existingDonation?.donorEmail,
-            familyId: split.familyId, // '' = pool split
-            donationType: DonationType.inKind,
-            amount: null,
-            items: split.items,
-            anonymous: _isAnonymous,
-            status: submitForVerification
-                ? DonationStatus.underVerification
-                : DonationStatus.draft,
-            paymentProofUrl: null,
-            donationNote: _noteController.text.isNotEmpty
-                ? _noteController.text
-                : null,
-            pickupAddress: _addressController.text,
-            contactNumber: _contactController.text,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-            statusHistory: [],
-            allocationMode: split.isPool ? 'pool' : 'direct',
-            effectiveAmount: 0,
-            overflowAmount: 0,
-            idempotencyKey: const Uuid().v4(),
-          );
-          await _donationService.createDonation(splitDonation);
-        }
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Multi-family donation submitted (${_smartSplits.length} families)!',
-              ),
-            ),
-          );
-          Navigator.pop(context, true);
-        }
-        return;
-      }
-
       // ── Determine familyId based on in-kind allocation mode ───────────
       String resolvedFamilyId;
       String resolvedMode;
+      List<Map<String, dynamic>>? effectiveSmartSplits;
+
       if (_donationType == DonationType.inKind) {
         switch (_inKindAllocationMode) {
           case 'pool':
-            resolvedFamilyId = '';
+            resolvedFamilyId = 'general_relief_fund';
             resolvedMode = 'pool';
           case 'smart':
-            resolvedFamilyId =
-                ''; // smart saves per-split above; fallthrough only
+            resolvedFamilyId = 'smart_allocation';
             resolvedMode = 'smart';
+            // P16 Fix — Consolidate splits into a single document for professional alignment
+            effectiveSmartSplits = _smartSplits.map((s) => s.toMap()).toList();
           default: // direct
             resolvedFamilyId = _selectedFamily?.id ?? '';
             resolvedMode = 'direct';
@@ -411,6 +425,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
             ? 'smart_allocation'
             : _selectedFamily!.id;
         resolvedMode = _allocationMode;
+        effectiveSmartSplits = _smartSplits.map((s) => s.toMap()).toList();
       }
 
       var donation = Donation(
@@ -426,6 +441,9 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
             ? double.tryParse(_amountController.text)
             : null,
         items: _donationType == DonationType.inKind ? _selectedItems : null,
+        itemUnits: _donationType == DonationType.inKind
+            ? _selectedItemUnits
+            : null,
         anonymous: _isAnonymous,
         status: submitForVerification
             ? DonationStatus.underVerification
@@ -447,6 +465,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
         effectiveAmount: double.tryParse(_amountController.text) ?? 0,
         overflowAmount: 0,
         idempotencyKey: _idempotencyKey,
+        smartSplits: effectiveSmartSplits,
       );
 
       // Update existing or create new
@@ -827,7 +846,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  'Remaining Goal: PKR ${family.computedRemainingAmount.toStringAsFixed(0)}',
+                  'Remaining Goal: PKR ${family.remainingCashNeeded.toStringAsFixed(0)}',
                   style: const TextStyle(
                     fontSize: 13,
                     color: AppColors.donorGreen,
@@ -858,6 +877,13 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
           // ── Transparency Banners (Dynamic) ────────────────────────────
           if (_allocationMode == 'smart') _buildSmartGiveTrustBanner(theme),
           if (_allocationMode == 'general') _buildGRFTrustBanner(theme),
+
+          // ── Cash Smart Give Split Preview ─────────────────────────────
+          if (_allocationMode == 'smart') ...[
+            const SizedBox(height: 16),
+            _buildCashSmartSplitPreview(theme),
+          ],
+
           if (_allocationMode != 'direct') const SizedBox(height: 32),
 
           // ── Payment Proof & Trust Section ─────────────────────────────
@@ -881,7 +907,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            'Payment Proof *',
+            'Payment Proof *', // Cash donation section
             style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 15,
@@ -939,6 +965,14 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                     if (_allocationMode != 'direct') {
                       _selectedFamily = null;
                       _familySubscription?.cancel();
+                    }
+                    // Clear cash preview when leaving Smart mode
+                    if (m.$1 != 'smart') {
+                      _cashSmartSplits = [];
+                      _cashPreviewDebounce?.cancel();
+                    } else {
+                      // Trigger preview immediately if amount is already entered
+                      _onCashAmountChanged();
                     }
                   });
                 },
@@ -1056,28 +1090,54 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
     );
   }
 
-  String _getFormattedQuantity(String itemName, num quantity) {
+  /// Formats a quantity with unit.
+  /// [unit] — when provided (from `family.itemUnits`), it is used directly and
+  /// keyword matching is skipped.  This is the canonical, accurate path.
+  /// Keyword fallback is only used for legacy / pool / smart modes where no
+  /// family context is available.
+  String _getFormattedQuantity(String itemName, num quantity, {String? unit}) {
+    // Format the numeric part (strip trailing zeros)
+    String qtStr;
+    if (quantity % 1 == 0) {
+      qtStr = quantity.toInt().toString();
+    } else {
+      String s = quantity.toStringAsFixed(2);
+      s = s.replaceAll(RegExp(r'0+$'), '');
+      s = s.replaceAll(RegExp(r'\.$'), '');
+      qtStr = s;
+    }
+
+    // ── Use exact unit from the pack whenever it is available ──────────────
+    if (unit != null && unit.isNotEmpty) {
+      return '$qtStr $unit'.trim();
+    }
+
+    // ── Keyword fallback (Pool / Smart Give — no family context) ────────────
     final lower = itemName.toLowerCase();
     if (lower.contains('flour') ||
-        lower.contains('aata') ||
-        lower.contains('wheat')) {
-      return '$quantity kg';
-    } else if (lower.contains('oil') || lower.contains('ghee')) {
-      return '$quantity Litres';
+        lower.contains('wheat') ||
+        lower.contains('rice')) {
+      return '$qtStr kg';
     } else if (lower.contains('sugar') ||
-        lower.contains('rice') ||
         lower.contains('salt') ||
         lower.contains('daal') ||
-        lower.contains('lentil')) {
-      return '$quantity kg';
+        lower.contains('lentil') ||
+        lower.contains('tea') ||
+        lower.contains('besan')) {
+      // Smart Fallback: if quantity is large (e.g. 500, 250), it's likely grams.
+      // If it's small (e.g. 1, 2, 5), it's likely kg.
+      if (quantity >= 100) return '$qtStr g';
+      return '$qtStr kg';
+    } else if (lower.contains('oil') || lower.contains('ghee')) {
+      return '$qtStr L';
     } else if (lower.contains('soap') || lower.contains('wash')) {
-      return '$quantity bars';
-    } else if (lower.contains('dates')) {
-      return '$quantity kg';
+      return '$qtStr bars';
+    } else if (lower.contains('dates') || lower.contains('khajoor')) {
+      return '$qtStr kg';
     } else if (lower.contains('rooh') || lower.contains('syrup')) {
-      return '$quantity Bottles';
+      return '$qtStr bottles';
     }
-    return '$quantity items';
+    return '$qtStr units';
   }
 
   // ── In-Kind Giving Mode Selector ────────────────────────────────────
@@ -1357,9 +1417,16 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                       Text(
                         isPool
                             ? 'NGO Pool (leftover)'
-                            : (split.family?.name ??
-                                  split.family?.area ??
-                                  'Family'),
+                            : (split.family != null
+                                  ? () {
+                                      final area = split.family!.area;
+                                      final city = split.family!.city;
+                                      final loc = area.isNotEmpty
+                                          ? area
+                                          : 'Unknown Area';
+                                      return 'Family · $loc${city.isNotEmpty ? ', $city' : ''}';
+                                    }()
+                                  : 'Family'),
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
@@ -1424,126 +1491,672 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
     }
   }
 
-  // ── Overflow Dialog ──────────────────────────────────────────────────────────
-  Future<void> _showOverflowDialog(String itemName, num needed) async {
-    final excess = (_selectedItems[itemName] ?? 0);
-    final choice = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('More Than Family Needs! 📦'),
-        content: Text(
-          'Family only needs $needed × $itemName.\n\n'
-          'What should we do with the extra?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 0),
-            child: Text(
-              'Cap at $needed',
-              style: const TextStyle(color: Colors.grey),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 1),
-            child: const Text(
-              'Extra to Pool',
-              style: TextStyle(color: Colors.teal),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, 2),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.donorGreen,
-            ),
-            child: const Text(
-              'All to Pool',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
-      ),
+  // ── Cash Smart Give — debounce listener ─────────────────────────────────
+  void _onCashAmountChanged() {
+    if (_allocationMode != 'smart') return;
+    _cashPreviewDebounce?.cancel();
+    _cashPreviewDebounce = Timer(
+      const Duration(milliseconds: 600),
+      _loadCashSmartPreview,
     );
-    if (!mounted || choice == null) return;
-    setState(() {
-      if (choice == 0) {
-        _selectedItems[itemName] = needed;
-        _overflowItems.remove(itemName);
-      } else if (choice == 1) {
-        final overflow = excess - needed;
-        _selectedItems[itemName] = needed;
-        if (overflow > 0) _overflowItems[itemName] = overflow;
-      } else {
-        _overflowItems[itemName] = excess;
-        _selectedItems.remove(itemName);
-      }
-    });
   }
 
-  // ── Add Custom Item Dialog (Pool / Multi) ───────────────────────────────
-  Future<void> _showAddCustomItemDialog() async {
-    final nameCtrl = TextEditingController();
-    final qtyCtrl = TextEditingController(text: '1');
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add Item'),
-        content: Column(
+  // ── Cash Smart Give — fetch preview from AllocationService ───────────────
+  Future<void> _loadCashSmartPreview() async {
+    final amount = double.tryParse(_amountController.text) ?? 0;
+    if (amount < 10) {
+      if (mounted) setState(() => _cashSmartSplits = []);
+      return;
+    }
+    if (mounted) setState(() => _isLoadingCashSplits = true);
+    try {
+      final splits = await AllocationService.previewSmartAllocation(amount);
+      if (mounted) {
+        setState(() {
+          _cashSmartSplits = splits;
+          _isLoadingCashSplits = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingCashSplits = false);
+    }
+  }
+
+  // ── Cash Smart Give — split preview card ─────────────────────────────────
+  Widget _buildCashSmartSplitPreview(ThemeData theme) {
+    if (_isLoadingCashSplits) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Item name (e.g. Rice)',
-              ),
-              textCapitalization: TextCapitalization.words,
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: qtyCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(labelText: 'Quantity'),
+            SizedBox(width: 10),
+            Text('Calculating split…'),
+          ],
+        ),
+      );
+    }
+
+    if (_cashSmartSplits.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Text(
+          'Enter an amount above — Smart Give will show exactly how\nyour donation splits across families in real time.',
+          style: TextStyle(
+            fontSize: 12,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+          ),
+        ),
+      );
+    }
+
+    final familyCount = _cashSmartSplits
+        .where((s) => s['familyId'] != 'general_relief_fund')
+        .length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.auto_awesome,
+              color: AppColors.donorGreen,
+              size: 16,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Smart Split Preview — $familyCount ${familyCount == 1 ? 'family' : 'families'}',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: AppColors.donorGreen,
+              ),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final name = nameCtrl.text.trim();
-              final qty = int.tryParse(qtyCtrl.text) ?? 1;
-              if (name.isNotEmpty && qty > 0) {
-                setState(
-                  () =>
-                      _selectedItems[name] = (_selectedItems[name] ?? 0) + qty,
-                );
-                if (_inKindAllocationMode == 'multi') _loadSmartMatch();
-              }
-              Navigator.pop(ctx);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.donorGreen,
+        const SizedBox(height: 8),
+        ..._cashSmartSplits.map((split) {
+          final isGRF = split['familyId'] == 'general_relief_fund';
+          final family = split['family'] as Family?;
+          final contribution = (split['contribution'] as num?)?.toDouble() ?? 0;
+          final reason = split['reason'] as String? ?? '';
+          final color = isGRF ? Colors.orange : AppColors.donorGreen;
+
+          // Build privacy-safe location label
+          String label;
+          if (isGRF) {
+            label = 'General Relief Fund';
+          } else if (family != null) {
+            final area = family.area.isNotEmpty ? family.area : 'Unknown Area';
+            final city = family.city.isNotEmpty ? ', ${family.city}' : '';
+            label = 'Family · $area$city';
+          } else {
+            label = 'Family';
+          }
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withValues(alpha: 0.3)),
             ),
-            child: const Text('Add', style: TextStyle(color: Colors.white)),
+            child: Row(
+              children: [
+                Icon(
+                  isGRF ? Icons.public : Icons.family_restroom,
+                  color: color,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: color,
+                        ),
+                      ),
+                      if (reason.isNotEmpty)
+                        Text(
+                          reason,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.65,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Text(
+                  'PKR ${contribution.toStringAsFixed(0)}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+        TextButton.icon(
+          onPressed: _loadCashSmartPreview,
+          icon: const Icon(
+            Icons.refresh,
+            size: 16,
+            color: AppColors.donorGreen,
           ),
-        ],
+          label: const Text(
+            'Recalculate',
+            style: TextStyle(color: AppColors.donorGreen, fontSize: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  IconData _getIconForPackItem(String itemName) {
+    final lower = itemName.toLowerCase();
+    if (lower.contains('flour') || lower.contains('wheat')) return Icons.grass;
+    if (lower.contains('rice') ||
+        lower.contains('daal') ||
+        lower.contains('lentil')) {
+      return Icons.rice_bowl_outlined;
+    }
+    if (lower.contains('oil') || lower.contains('ghee')) {
+      return Icons.water_drop_outlined;
+    }
+    if (lower.contains('sugar') || lower.contains('salt')) return Icons.grain;
+    if (lower.contains('soap') || lower.contains('wash')) {
+      return Icons.clean_hands_outlined;
+    }
+    if (lower.contains('date')) return Icons.spa_outlined;
+    return Icons.inventory_2_outlined;
+  }
+
+  Future<void> _showAddItemBottomSheet() async {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // For Direct mode, we can still allow custom. For Pool/Smart, strict standard only.
+    final bool isStrictStandard = _inKindAllocationMode != 'direct';
+
+    PackItem? selectedPackItem;
+    final qtyCtrl = TextEditingController(text: '1');
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setInner) => Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.75,
+          ),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.grey[900] : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 16),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[400],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  'What would you like to donate?',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              if (isStrictStandard)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 8,
+                  ),
+                  child: Text(
+                    'To ensure fair distribution, NGO Pool donations only accept standard packages.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              const SizedBox(height: 12),
+              // Items grid
+              Flexible(
+                child: _isLoadingPacks
+                    ? const Center(child: CircularProgressIndicator())
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Standard Care Packages',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            if (_availablePackItems.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Text(
+                                  'No standard items available right now.',
+                                  style: TextStyle(
+                                    color: theme.colorScheme.error,
+                                  ),
+                                ),
+                              )
+                            else
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: _availablePackItems.map((item) {
+                                  final isSelected = selectedPackItem == item;
+                                  return GestureDetector(
+                                    onTap: () => setInner(() {
+                                      if (selectedPackItem == item) {
+                                        selectedPackItem = null;
+                                      } else {
+                                        selectedPackItem = item;
+                                      }
+                                    }),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 150,
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? AppColors.donorGreen
+                                            : (isDark
+                                                  ? Colors.grey[800]
+                                                  : Colors.grey[100]),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? AppColors.donorGreen
+                                              : Colors.transparent,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            _getIconForPackItem(item.name),
+                                            size: 14,
+                                            color: isSelected
+                                                ? Colors.white
+                                                : theme.colorScheme.onSurface
+                                                      .withValues(alpha: 0.7),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${item.name} (${item.quantity})',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: isSelected
+                                                  ? Colors.white
+                                                  : theme.colorScheme.onSurface,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            const SizedBox(height: 24),
+                            // Quantity
+                            if (selectedPackItem != null) ...[
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: qtyCtrl,
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                      ],
+                                      decoration: InputDecoration(
+                                        labelText: 'Number of Units/Bags',
+                                        helperText:
+                                            'e.g., entering "2" means 2 × ${selectedPackItem!.quantity}',
+                                        suffixText: 'Units',
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              // Real-time calculation helper
+                              ValueListenableBuilder<TextEditingValue>(
+                                valueListenable: qtyCtrl,
+                                builder: (context, value, child) {
+                                  final units = int.tryParse(value.text) ?? 0;
+                                  if (units <= 0) {
+                                    return const SizedBox.shrink();
+                                  }
+
+                                  final totalNum =
+                                      units * selectedPackItem!.quantityNum;
+                                  // Format cleanly (e.g. 30.0 -> 30)
+                                  final formattedTotal = totalNum % 1 == 0
+                                      ? totalNum.toInt().toString()
+                                      : totalNum.toStringAsFixed(2);
+
+                                  return Padding(
+                                    padding: const EdgeInsets.only(
+                                      top: 8.0,
+                                      left: 4.0,
+                                    ),
+                                    child: Text(
+                                      'Total Donation: $formattedTotal ${selectedPackItem!.unit} of ${selectedPackItem!.name}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.donorGreen,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+                          ],
+                        ),
+                      ),
+              ),
+              // Confirm button
+              Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+                  top: 8,
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: selectedPackItem == null
+                        ? null
+                        : () {
+                            final units = int.tryParse(qtyCtrl.text) ?? 1;
+                            if (units > 0) {
+                              // The user selects "Units", but we store the metric absolute quantity
+                              // because family.needs tracks absolute metric quantity (e.g. 30 kg).
+                              final absoluteAmount =
+                                  units * selectedPackItem!.quantityNum;
+                              final rawName = selectedPackItem!.name;
+
+                              setState(() {
+                                _selectedItems[rawName] =
+                                    (_selectedItems[rawName] ?? 0) +
+                                    absoluteAmount;
+                              });
+                              if (_inKindAllocationMode == 'smart') {
+                                _loadSmartMatch();
+                              }
+                            }
+                            Navigator.pop(ctx);
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.donorGreen,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Add to Donation',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  // ── Extracted Item Stepper Row ──────────────────────────────────────────────
+  // ── Pledge Card — Direct Give (one card per needed item) ─────────────────
+  Widget _buildPledgeCard({
+    required String itemName,
+    required num neededQty,
+    String? unit, // Unit from family.itemUnits — accurate first-class unit
+    required bool isPledged,
+    bool isDonated = false,
+    required ThemeData theme,
+    required bool isDark,
+    required VoidCallback onToggle,
+  }) {
+    final itemColor = isDonated ? Colors.grey : AppColors.donorGreen;
+    final nameLower = itemName.toLowerCase();
+    IconData itemIcon = Icons.inventory_2_outlined;
+    if (nameLower.contains('flour') ||
+        nameLower.contains('wheat') ||
+        nameLower.contains('aata')) {
+      itemIcon = Icons.grass;
+    } else if (nameLower.contains('oil') || nameLower.contains('ghee')) {
+      itemIcon = Icons.water_drop_outlined;
+    } else if (nameLower.contains('sugar') || nameLower.contains('salt')) {
+      itemIcon = Icons.grain;
+    } else if (nameLower.contains('soap') || nameLower.contains('wash')) {
+      itemIcon = Icons.clean_hands_outlined;
+    } else if (nameLower.contains('rice') ||
+        nameLower.contains('daal') ||
+        nameLower.contains('lentil')) {
+      itemIcon = Icons.rice_bowl_outlined;
+    } else if (nameLower.contains('date') || nameLower.contains('khajoor')) {
+      itemIcon = Icons.spa_outlined;
+    }
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isPledged
+            ? itemColor.withValues(alpha: 0.08)
+            : (isDark ? Colors.grey[850] : Colors.white),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isPledged
+              ? itemColor
+              : theme.dividerColor.withValues(alpha: 0.2),
+          width: isPledged ? 2 : 1,
+        ),
+        boxShadow: isPledged
+            ? [
+                BoxShadow(
+                  color: itemColor.withValues(alpha: 0.12),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ]
+            : null,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isPledged
+                    ? itemColor
+                    : itemColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                itemIcon,
+                color: isPledged ? Colors.white : itemColor,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    itemName,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isDonated
+                        ? 'Fully Supported: ${_getFormattedQuantity(itemName, neededQty, unit: unit)}'
+                        : 'Needed: ${_getFormattedQuantity(itemName, neededQty, unit: unit)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDonated
+                          ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                          : isPledged
+                          ? itemColor
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                      decoration: isDonated ? TextDecoration.lineThrough : null,
+                      fontWeight: isPledged && !isDonated
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            GestureDetector(
+              onTap: isDonated ? null : onToggle,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: isDonated
+                      ? theme.colorScheme.onSurface.withValues(alpha: 0.1)
+                      : isPledged
+                      ? itemColor
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDonated
+                        ? Colors.transparent
+                        : isPledged
+                        ? itemColor
+                        : theme.dividerColor.withValues(alpha: 0.4),
+                    width: 1.5,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isDonated
+                          ? Icons.check_circle
+                          : isPledged
+                          ? Icons.check_circle_outline
+                          : Icons.volunteer_activism_outlined,
+                      size: 16,
+                      color: isDonated
+                          ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                          : isPledged
+                          ? Colors.white
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      isDonated
+                          ? 'Donated ✓'
+                          : isPledged
+                          ? 'Committed ✓'
+                          : 'I Can Donate',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: isDonated
+                            ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                            : isPledged
+                            ? Colors.white
+                            : theme.colorScheme.onSurface.withValues(
+                                alpha: 0.5,
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Old stepper row — still used for Pool/Smart free quantity entry ─────────
   Widget _buildItemStepperRow({
     required String itemName,
     required num neededQty,
     required num currentQty,
+    String? unit, // New: optional unit for accuracy
     required ThemeData theme,
     required bool isDark,
     bool unlimitedQty = false,
+    bool allOrNothing = false,
     required VoidCallback onIncrement,
     required VoidCallback onDecrement,
+    VoidCallback? onDelete,
   }) {
     final isSelected = currentQty > 0;
     const itemColor = AppColors.donorGreen;
@@ -1612,7 +2225,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                   ),
                   if (!unlimitedQty)
                     Text(
-                      'Goal: ${_getFormattedQuantity(itemName, neededQty)}',
+                      'Goal: ${_getFormattedQuantity(itemName, neededQty, unit: unit)}',
                       style: TextStyle(
                         fontSize: 12,
                         color: theme.colorScheme.onSurface.withValues(
@@ -1623,79 +2236,105 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                 ],
               ),
             ),
-            Container(
-              decoration: BoxDecoration(
-                color: isDark ? Colors.grey[800] : Colors.grey[100],
-                borderRadius: BorderRadius.circular(20),
+            if (onDelete != null)
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20),
+                color: Colors.redAccent,
+                onPressed: onDelete,
+                constraints: const BoxConstraints(),
+                padding: const EdgeInsets.only(right: 8),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    onTap: currentQty > 0 ? onDecrement : null,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: currentQty > 0
-                            ? Colors.white
-                            : Colors.transparent,
-                        shape: BoxShape.circle,
-                        boxShadow: currentQty > 0
-                            ? [
-                                const BoxShadow(
-                                  color: Colors.black12,
-                                  blurRadius: 4,
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: Icon(
-                        Icons.remove,
-                        size: 16,
-                        color: currentQty > 0 ? Colors.black87 : Colors.grey,
-                      ),
+            allOrNothing
+                ? Switch(
+                    value: currentQty > 0,
+                    onChanged: (val) {
+                      if (val) {
+                        onIncrement();
+                      } else {
+                        onDecrement();
+                      }
+                    },
+                    activeThumbColor: itemColor,
+                  )
+                : Container(
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.grey[800] : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: currentQty > 0 ? onDecrement : null,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: currentQty > 0
+                                  ? Colors.white
+                                  : Colors.transparent,
+                              shape: BoxShape.circle,
+                              boxShadow: currentQty > 0
+                                  ? [
+                                      const BoxShadow(
+                                        color: Colors.black12,
+                                        blurRadius: 4,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Icon(
+                              Icons.remove,
+                              size: 16,
+                              color: currentQty > 0
+                                  ? Colors.black87
+                                  : Colors.grey,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          constraints: const BoxConstraints(minWidth: 40),
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text(
+                            currentQty > 0
+                                ? _getFormattedQuantity(
+                                    itemName,
+                                    currentQty,
+                                    unit: unit,
+                                  )
+                                : '0',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14, // Slightly smaller to fit units
+                              color: isSelected
+                                  ? itemColor
+                                  : theme.colorScheme.onSurface,
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: onIncrement,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: unlimitedQty || currentQty < neededQty
+                                  ? itemColor
+                                  : Colors.orange.withValues(alpha: 0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.add,
+                              size: 16,
+                              color: unlimitedQty || currentQty < neededQty
+                                  ? Colors.white
+                                  : Colors.orange,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  Container(
-                    constraints: const BoxConstraints(minWidth: 40),
-                    alignment: Alignment.center,
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Text(
-                      currentQty > 0
-                          ? _getFormattedQuantity(itemName, currentQty)
-                          : '0',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14, // Slightly smaller to fit units
-                        color: isSelected
-                            ? itemColor
-                            : theme.colorScheme.onSurface,
-                      ),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: onIncrement,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: unlimitedQty || currentQty < neededQty
-                            ? itemColor
-                            : Colors.orange.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.add,
-                        size: 16,
-                        color: unlimitedQty || currentQty < neededQty
-                            ? Colors.white
-                            : Colors.orange,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
@@ -1776,91 +2415,118 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
           ),
           const SizedBox(height: 12),
 
-          // Items list
-          if (isDirectMode && family != null)
-            ...family.needs.entries.map((entry) {
-              final String itemName = entry.key;
-              final num neededQty = entry.value;
-              final num currentQty = _selectedItems[itemName] ?? 0;
-              return _buildItemStepperRow(
-                itemName: itemName,
-                neededQty: neededQty,
-                currentQty: currentQty,
-                theme: theme,
-                isDark: isDark,
-                onIncrement: () {
-                  if (currentQty >= neededQty) {
-                    // Trigger overflow dialog
-                    setState(() => _selectedItems[itemName] = currentQty + 1);
-                    _showOverflowDialog(itemName, neededQty);
-                  } else {
-                    setState(() => _selectedItems[itemName] = currentQty + 1);
-                  }
-                },
-                onDecrement: () {
-                  setState(() {
-                    if (currentQty == 1) {
-                      _selectedItems.remove(itemName);
-                    } else {
-                      _selectedItems[itemName] = currentQty - 1;
-                    }
-                  });
-                },
-              );
-            })
-          else if ((isPoolMode || isSmartMode) && _selectedItems.isNotEmpty)
-            ..._selectedItems.entries.map((entry) {
-              final String itemName = entry.key;
-              final num currentQty = entry.value;
-              return _buildItemStepperRow(
-                itemName: itemName,
-                neededQty: 9999,
-                currentQty: currentQty,
-                theme: theme,
-                isDark: isDark,
-                unlimitedQty: true,
-                onIncrement: () {
-                  setState(() => _selectedItems[itemName] = currentQty + 1);
-                  if (isSmartMode) _loadSmartMatch();
-                },
-                onDecrement: () {
-                  setState(() {
-                    if (currentQty == 1) {
-                      _selectedItems.remove(itemName);
-                    } else {
-                      _selectedItems[itemName] = currentQty - 1;
-                    }
-                  });
-                  if (isSmartMode) _loadSmartMatch();
-                },
-              );
-            })
-          else
-            // Empty state
+          // ── DIRECT: Show Pledge Cards ────────────────────────────────────
+          if (isDirectMode && family != null && family.needs.isNotEmpty) ...[
+            // All-or-nothing notice
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.donorGreen.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.donorGreen.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: AppColors.donorGreen,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Commit to donating items in full quantities for efficient logistics. Each item is collected as a whole unit.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.donorGreen.withValues(alpha: 0.85),
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Pledge summary chip
+            if (_selectedItems.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.donorGreen.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '✅ ${_selectedItems.length} of ${family.needs.length} items committed',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.donorGreen,
+                  ),
+                ),
+              ),
+            // Donation commitment cards
+            ...(family.originalNeeds.isNotEmpty
+                    ? family.originalNeeds
+                    : family.needs)
+                .entries
+                .map((entry) {
+                  final String itemName = entry.key;
+                  final num originalQty = entry.value;
+                  // Use the unit stored in family.itemUnits for accurate display.
+                  // This value comes directly from the assistance pack definition.
+                  final String? itemUnit =
+                      family.itemUnits[itemName]?.isNotEmpty == true
+                      ? family.itemUnits[itemName]
+                      : null;
+                  final bool isDonated =
+                      family.needs.containsKey(itemName) &&
+                      family.needs[itemName]! <= 0;
+                  final bool isPledged = _selectedItems.containsKey(itemName);
+                  return _buildPledgeCard(
+                    itemName: itemName,
+                    neededQty: originalQty,
+                    unit: itemUnit,
+                    isPledged: isPledged,
+                    isDonated: isDonated,
+                    theme: theme,
+                    isDark: isDark,
+                    onToggle: () {
+                      if (isDonated) return;
+                      setState(() {
+                        if (isPledged) {
+                          _selectedItems.remove(itemName);
+                        } else {
+                          _selectedItems[itemName] = originalQty;
+                        }
+                      });
+                    },
+                  );
+                }),
+          ] else if (isDirectMode && family == null)
+            // No family selected empty state
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: isDark ? Colors.grey[850] : Colors.grey[100],
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: theme.dividerColor.withValues(alpha: 0.2),
-                ),
               ),
               child: Column(
                 children: [
                   Icon(
-                    isPoolMode || isSmartMode
-                        ? Icons.add_box_outlined
-                        : Icons.family_restroom_outlined,
+                    Icons.family_restroom_outlined,
                     size: 48,
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    isPoolMode || isSmartMode
-                        ? 'Tap “Add Item” below'
-                        : 'No Family Selected',
+                    'No Family Selected',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 15,
@@ -1869,9 +2535,7 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    isPoolMode || isSmartMode
-                        ? 'Type any items you want to donate.'
-                        : 'Select a family above to view their requested items.',
+                    'Select a family above to see their requested items.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
@@ -1880,26 +2544,122 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                   ),
                 ],
               ),
+            )
+          // ── POOL / SMART: Show selected items as chiplist + stepper ──────
+          else if ((isPoolMode || isSmartMode) && _selectedItems.isNotEmpty)
+            ..._selectedItems.entries.map((entry) {
+              final String itemName = entry.key;
+              final num currentQty = entry.value;
+
+              // Find standard pack step size
+              final standardItem = _availablePackItems
+                  .where((p) => p.name == itemName)
+                  .firstOrNull;
+              final num stepSize = standardItem?.quantityNum ?? 1;
+
+              return _buildItemStepperRow(
+                itemName: itemName,
+                neededQty: 9999,
+                currentQty: currentQty,
+                unit: standardItem?.unit,
+                theme: theme,
+                isDark: isDark,
+                unlimitedQty: true,
+                allOrNothing: false,
+                onIncrement: () {
+                  setState(
+                    () => _selectedItems[itemName] = currentQty + stepSize,
+                  );
+                  if (isSmartMode) _loadSmartMatch();
+                },
+                onDecrement: () {
+                  setState(() {
+                    if (currentQty <= stepSize) {
+                      _selectedItems.remove(itemName);
+                    } else {
+                      _selectedItems[itemName] = currentQty - stepSize;
+                    }
+                  });
+                  if (isSmartMode) _loadSmartMatch();
+                },
+                onDelete: () {
+                  setState(() {
+                    _selectedItems.remove(itemName);
+                  });
+                  if (isSmartMode) _loadSmartMatch();
+                },
+              );
+            })
+          else if (isPoolMode || isSmartMode)
+            // Empty state for pool/smart
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.grey[850] : Colors.grey[100],
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.add_box_outlined,
+                    size: 48,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    isSmartMode
+                        ? 'Add items to find the best family'
+                        : 'Add items to donate',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    isSmartMode
+                        ? 'The system will automatically split items across families with the highest need.'
+                        : 'Our team will assign your donated items to the family with the greatest need.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
             ),
 
-          // Add Item button for Pool/Multi
+          // Add Item button for Pool/Smart — uses guided bottom sheet
           if (isPoolMode || isSmartMode) ...[
             const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: _showAddCustomItemDialog,
-              icon: const Icon(
-                Icons.add,
-                color: AppColors.donorGreen,
-                size: 18,
-              ),
-              label: const Text(
-                'Add Item',
-                style: TextStyle(color: AppColors.donorGreen),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.donorGreen),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _showAddItemBottomSheet,
+                icon: const Icon(
+                  Icons.add_circle_outline,
+                  color: AppColors.donorGreen,
+                  size: 18,
+                ),
+                label: const Text(
+                  'Add Item to Donate',
+                  style: TextStyle(
+                    color: AppColors.donorGreen,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(
+                    color: AppColors.donorGreen,
+                    width: 1.5,
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
@@ -2008,6 +2768,17 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
             validator: (v) =>
                 (v == null || v.isEmpty) ? 'Please enter pickup address' : null,
           ),
+          const SizedBox(height: 24),
+          Text(
+            '📸 Item Photo Proof',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 16,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildImageUploadCard(),
           const SizedBox(height: 16),
           _buildOptionalFields(),
           const SizedBox(height: 100),
@@ -2036,11 +2807,6 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
         if (selected != null) {
           setState(() {
             _selectedFamily = selected;
-            if (_amountController.text.isEmpty &&
-                _selectedFamily!.computedRemainingAmount > 0) {
-              _amountController.text = _selectedFamily!.computedRemainingAmount
-                  .toStringAsFixed(0);
-            }
             _setupFamilyStream();
           });
           // Fix #11 — update tab visibility for the newly selected family
@@ -2198,7 +2964,9 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Payment Proof Uploaded!',
+                      _donationType == DonationType.inKind
+                          ? 'Item Photo Uploaded! ✓'
+                          : 'Payment Proof Uploaded!',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -2240,7 +3008,9 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Tap to Upload Payment Proof',
+                      _donationType == DonationType.inKind
+                          ? 'Tap to Upload Item Photo'
+                          : 'Tap to Upload Payment Proof',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,

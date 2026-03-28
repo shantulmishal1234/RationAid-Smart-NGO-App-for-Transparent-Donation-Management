@@ -47,9 +47,9 @@ class _FamilyStatisticsReportScreenState
       final data = doc.data() as Map<String, dynamic>;
 
       final status = data['status'] as String?;
-      if (status == 'accepted')
+      if (status == 'accepted') {
         accepted++;
-      else if (status == 'pending')
+      } else if (status == 'pending')
         pending++;
       else if (status == 'rejected')
         rejected++;

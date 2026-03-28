@@ -587,6 +587,14 @@ class _FamilyCard extends StatelessWidget {
                 ],
               ),
 
+              // Item Chips (show up to 4 items with quantities)
+              if ((family.originalNeeds.isNotEmpty ||
+                      family.needs.isNotEmpty) &&
+                  !family.assistanceNeeds.contains('Medicine')) ...[
+                const SizedBox(height: 10),
+                _buildItemChips(context, family),
+              ],
+
               // Bottom Section: Full-width Progress Bar
               if (family.targetAmount > 0) ...[
                 const SizedBox(height: 16),
@@ -600,7 +608,9 @@ class _FamilyCard extends StatelessWidget {
                             (family.combinedFundingPercent * 100)
                                 .clamp(0.0, 100.0)
                                 .toInt();
-                        final isFull = family.fundingStatus == 'fully_funded';
+                        final isFull =
+                            family.fundingStatus == 'fully_funded' &&
+                            family.targetAmount > 0;
                         return Text(
                           isFull ? '✓ Fully Funded' : '$verifiedPct% Completed',
                           style: TextStyle(
@@ -613,14 +623,13 @@ class _FamilyCard extends StatelessWidget {
                     ),
                     Builder(
                       builder: (context) {
-                        final raisedStr = family.raisedAmount.toStringAsFixed(
-                          0,
-                        );
+                        final progressStr = family.combinedProgress
+                            .toStringAsFixed(0);
                         final targetStr = family.targetAmount.toStringAsFixed(
                           0,
                         );
                         return Text(
-                          'PKR $raisedStr / $targetStr',
+                          'PKR $progressStr / $targetStr',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -641,6 +650,106 @@ class _FamilyCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Compact row of item chips showing [name: qty unit] for up to 4 items.
+  Widget _buildItemChips(BuildContext context, Family family) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final displayNeeds = family.originalNeeds.isNotEmpty
+        ? family.originalNeeds
+        : family.needs;
+
+    final entries = displayNeeds.entries.take(4).toList();
+    final hasMore = displayNeeds.length > 4;
+
+    final chips = <Widget>[];
+    for (final entry in entries) {
+      final itemName = entry.key;
+      final qty = entry.value;
+
+      String qtyStr = qty % 1 == 0 ? qty.toInt().toString() : qty.toString();
+      String finalUnit = (family.itemUnits[itemName] ?? '').trim();
+
+      if (finalUnit.isEmpty) {
+        // Same fallback logic as donation screen
+        final lower = itemName.toLowerCase();
+        if (lower.contains('flour') ||
+            lower.contains('wheat') ||
+            lower.contains('rice')) {
+          finalUnit = 'kg';
+        } else if (lower.contains('sugar') ||
+            lower.contains('salt') ||
+            lower.contains('daal') ||
+            lower.contains('lentil') ||
+            lower.contains('tea') ||
+            lower.contains('besan')) {
+          if (qty >= 100) {
+            finalUnit = 'g';
+          } else {
+            finalUnit = 'kg';
+          }
+        } else if (lower.contains('oil') || lower.contains('ghee')) {
+          finalUnit = 'L';
+        } else if (lower.contains('soap') || lower.contains('wash')) {
+          finalUnit = 'bars';
+        }
+      }
+
+      final label = finalUnit.isNotEmpty
+          ? '$itemName: $qtyStr $finalUnit'
+          : '$itemName: $qtyStr';
+      final isDonated =
+          family.needs.containsKey(itemName) && family.needs[itemName]! <= 0;
+
+      chips.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: isDonated
+                ? AppColors.donorGreen.withValues(alpha: 0.08)
+                : (isDark ? Colors.grey[800] : Colors.grey[100]),
+            borderRadius: BorderRadius.circular(20),
+            border: isDonated
+                ? Border.all(color: AppColors.donorGreen.withValues(alpha: 0.3))
+                : null,
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: isDonated
+                  ? AppColors.donorGreen
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.65),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (hasMore) {
+      chips.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.grey[800] : Colors.grey[100],
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            '+${displayNeeds.length - 4} more',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Wrap(spacing: 6, runSpacing: 4, children: chips);
   }
 }
 

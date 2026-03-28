@@ -56,7 +56,6 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
   // Action: Verify Donation
   Future<void> _verifyDonation(Donation donation) async {
     final isInKind = donation.donationType == DonationType.inKind;
-    final declaredValueController = TextEditingController();
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -79,22 +78,8 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Optionally enter the monetary equivalent of the donated items. This will count toward the family\'s funding progress.',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: declaredValueController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: 'Declared Value (PKR)',
-                  hintText: 'e.g. 5000',
-                  prefixText: 'PKR ',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
+                'The monetary value of these items will be automatically calculated based on the family\'s assigned assistance pack and credited to their funding progress.',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
               ),
             ],
           ],
@@ -117,26 +102,11 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     );
 
     if (confirm != true) {
-      declaredValueController.dispose();
       return;
     }
 
-    // Read text BEFORE disposing the controller (Bug #1 fix)
-    final declaredValueText = declaredValueController.text.trim();
-    declaredValueController.dispose();
-
     setState(() => _isProcessing = true);
     try {
-      // If admin entered a declared value for In-Kind, save it first
-      final declaredValue = double.tryParse(declaredValueText);
-      if (isInKind && declaredValue != null && declaredValue > 0) {
-        await _firestore.collection('donations').doc(donation.id).update({
-          'amount': declaredValue,
-          'declaredValue': declaredValue,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      }
-
       // Route through FundingService.verifyDonation so that:
       // 1. Status is updated properly with history
       // 2. In-Kind donations call _processInKindDonation (decrement family needs)
@@ -159,8 +129,8 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              isInKind && declaredValue != null && declaredValue > 0
-                  ? '✅ In-Kind donation verified (PKR ${declaredValue.toStringAsFixed(0)} credited to funding)'
+              isInKind
+                  ? '✅ In-Kind donation verified successfully.'
                   : 'Donation verified successfully',
             ),
             backgroundColor: Colors.green,
@@ -465,7 +435,7 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                   const SizedBox(height: 12),
                   FrostedPanel(
                     padding: const EdgeInsets.all(16),
-                    child: Container(
+                    child: SizedBox(
                       width: double.infinity,
                       child: Text(
                         '"${donation.donationNote}"',
@@ -486,11 +456,12 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                 // In-Kind Items (if applicable)
                 if (donation.donationType == DonationType.inKind &&
                     donation.items != null) ...[
+                  const SizedBox(height: 24),
                   _sectionHeader('Donated Items'),
                   const SizedBox(height: 12),
-                  _buildInKindItemsSection(donation.items!),
-                  const SizedBox(height: 32),
+                  _buildInKindItemsSection(donation),
                 ],
+                const SizedBox(height: 32),
 
                 // Timestamps
                 _sectionHeader('Timeline'),
@@ -742,6 +713,11 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
       return _infoRow('Donation For', 'General Relief Fund');
     }
 
+    // Handle Unassigned Pool Donations
+    if (donation.familyId.isEmpty) {
+      return _infoRow('Donation For', 'NGO Pool (Wait for Assignment)');
+    }
+
     if (donation.allocationMode == 'smart' &&
         donation.smartSplits != null &&
         donation.smartSplits!.isNotEmpty) {
@@ -756,30 +732,58 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
           ),
           const SizedBox(height: 8),
           ...donation.smartSplits!.map((split) {
-            final double amt = (split['amount'] as num).toDouble();
-            final String fId = split['familyId'].toString();
+            final String fId = split['familyId']?.toString() ?? '';
             final String shortId = fId.length > 5 ? fId.substring(0, 5) : fId;
+            final bool isGrf = fId == 'general_relief_fund' || fId.isEmpty;
+
+            String displayValue;
+            if (donation.donationType == DonationType.cash) {
+              final double amt = (split['amount'] as num?)?.toDouble() ?? 0.0;
+              displayValue = 'PKR ${amt.toStringAsFixed(0)}';
+            } else {
+              final Map<String, dynamic> items =
+                  split['items'] as Map<String, dynamic>? ?? {};
+              final String itemsSummary = items.entries
+                  .map((e) => '${e.key}: ${e.value}')
+                  .join(', ');
+              displayValue = itemsSummary.isEmpty ? 'Reserved' : itemsSummary;
+            }
+
             return Padding(
-              padding: const EdgeInsets.only(bottom: 6.0, left: 8.0),
+              padding: const EdgeInsets.only(bottom: 8.0, left: 4.0),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.check_circle,
-                    size: 14,
-                    color: AppColors.donorGreen,
+                  const Padding(
+                    padding: EdgeInsets.only(top: 2.0),
+                    child: Icon(
+                      Icons.check_circle,
+                      size: 14,
+                      color: AppColors.donorGreen,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Family $shortId...',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  const Spacer(),
-                  Text(
-                    'PKR ${amt.toStringAsFixed(0)}',
+                    isGrf ? 'GRF Pool  ' : 'Family $shortId...',
                     style: const TextStyle(
-                      fontWeight: FontWeight.w700,
                       fontSize: 13,
-                      color: AppColors.donorGreen,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      displayValue,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                        color: donation.donationType == DonationType.cash
+                            ? AppColors.donorGreen
+                            : Colors.teal,
+                      ),
+                      textAlign: TextAlign.right,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -851,12 +855,19 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
     );
   }
 
-  Widget _buildInKindItemsSection(Map<String, num> items) {
+  Widget _buildInKindItemsSection(Donation donation) {
     final theme = Theme.of(context);
+    final items = donation.items ?? {};
+    final units = donation.itemUnits ?? {};
+    final snapshots = donation.itemValueSnapshot ?? {};
+
     return FrostedPanel(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: items.entries.map((entry) {
+          final unit = units[entry.key] ?? '';
+          final value = snapshots[entry.key];
+
           return Padding(
             padding: const EdgeInsets.only(bottom: 8.0),
             child: Row(
@@ -864,16 +875,31 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                 Icon(Icons.circle, size: 8, color: Colors.purple.shade300),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    entry.key,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: theme.colorScheme.onSurface,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        entry.key,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      if (value != null && value > 0)
+                        Text(
+                          'Value: PKR ${value.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.5,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 Text(
-                  'x${entry.value}',
+                  'x${entry.value} $unit'.trim(),
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: theme.colorScheme.primary,

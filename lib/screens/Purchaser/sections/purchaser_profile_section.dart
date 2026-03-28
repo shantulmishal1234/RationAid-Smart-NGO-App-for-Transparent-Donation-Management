@@ -191,9 +191,10 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
 
       setState(() => _isUploadingPhoto = true);
 
-      final url = await CloudinaryService.uploadImage(File(image.path));
+      final response = await CloudinaryService.uploadImage(File(image.path));
 
-      if (url != null) {
+      if (response.isSuccess) {
+        final url = response.url!;
         final userId = FirebaseAuth.instance.currentUser?.uid;
         if (userId != null) {
           await FirebaseFirestore.instance

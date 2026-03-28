@@ -684,8 +684,11 @@ class _AdminDeliveryManagementScreenState
 
     try {
       // 1. Upload proof image
-      final url = await CloudinaryService.uploadImage(proofImage);
-      if (url == null) throw Exception('Image upload failed');
+      final response = await CloudinaryService.uploadImage(proofImage);
+      if (!response.isSuccess) {
+        throw Exception(response.errorMessage ?? 'Image upload failed');
+      }
+      final url = response.url!;
 
       // 2. Update family record
       await FirebaseFirestore.instance

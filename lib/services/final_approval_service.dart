@@ -128,15 +128,14 @@ class FinalApprovalService {
               updateData['remainingAmount'] = matchingPack.budgetAmount;
 
               final Map<String, num> packNeeds = {};
+              final Map<String, String> packUnits = {};
               for (var item in matchingPack.items) {
-                // Extract leading decimal number: "3.5 kg" → 3.5, "5 kg" → 5
-                final qtyMatch = RegExp(r'[\d.]+').firstMatch(item.quantity);
-                final num qty = qtyMatch != null
-                    ? (double.tryParse(qtyMatch.group(0)!) ?? 1.0)
-                    : 1;
-                packNeeds[item.name] = qty;
+                packNeeds[item.name] = item.quantityNum;
+                packUnits[item.name] = item.unit;
               }
               updateData['needs'] = packNeeds;
+              updateData['originalNeeds'] = packNeeds; // Initial original needs
+              updateData['itemUnits'] = packUnits; // Canonical units from pack
 
               await AuditService.logAction(
                 action: 'auto_assign_pack',

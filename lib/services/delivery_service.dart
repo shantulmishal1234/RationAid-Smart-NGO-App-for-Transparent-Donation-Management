@@ -309,8 +309,11 @@ class DeliveryService {
     List<String> donorIds = const [],
   }) async {
     // 1. Upload photo to Cloudinary
-    final photoUrl = await CloudinaryService.uploadImage(proofPhoto);
-    if (photoUrl == null) throw Exception('Failed to upload proof photo');
+    final response = await CloudinaryService.uploadImage(proofPhoto);
+    if (!response.isSuccess) {
+      throw Exception(response.errorMessage ?? 'Failed to upload proof photo');
+    }
+    final photoUrl = response.url!;
 
     final now = DateTime.now();
     final batch = _db.batch();

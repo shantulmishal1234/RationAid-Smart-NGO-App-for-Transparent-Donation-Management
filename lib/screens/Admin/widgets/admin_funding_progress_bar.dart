@@ -15,6 +15,14 @@ class AdminFundingProgressBar extends StatelessWidget {
     return StreamBuilder<Map<String, double>>(
       stream: FundingService.getFundingStatsStream(),
       builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
         if (!snapshot.hasData) return const SizedBox.shrink();
 
         final data = snapshot.data!;

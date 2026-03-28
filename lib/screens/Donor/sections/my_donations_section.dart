@@ -88,13 +88,14 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
     final donations = _cachedDonations;
     final filteredByStatus = _selectedFilter == DonationFilter.all
         ? donations
-        : donations
-              .where(
-                (d) =>
-                    d.status.toFirestore() ==
-                    _getDonationStatus(_selectedFilter).toFirestore(),
-              )
-              .toList();
+        : donations.where((d) {
+            final targetStatus = _getDonationStatus(_selectedFilter);
+            if (targetStatus == DonationStatus.verified) {
+              return d.status == DonationStatus.verified ||
+                  d.status == DonationStatus.pendingAssignment;
+            }
+            return d.status.toFirestore() == targetStatus.toFirestore();
+          }).toList();
     final filteredDonations = _searchQuery.isEmpty
         ? filteredByStatus
         : filteredByStatus.where((donation) {
@@ -117,7 +118,11 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
           .where((d) => d.status == DonationStatus.underVerification)
           .length,
       'Verified': donations
-          .where((d) => d.status == DonationStatus.verified)
+          .where(
+            (d) =>
+                d.status == DonationStatus.verified ||
+                d.status == DonationStatus.pendingAssignment,
+          )
           .length,
       'Delivered': donations
           .where((d) => d.status == DonationStatus.delivered)
@@ -653,8 +658,11 @@ class _DonationCard extends StatelessWidget {
       case DonationStatus.underVerification:
         return Colors.orange[700]!;
       case DonationStatus.verified:
+      case DonationStatus.pendingAssignment:
       case DonationStatus.inProcess:
         return Colors.green[600]!;
+      case DonationStatus.stocked:
+        return const Color(0xFF009688); // Teal — In Warehouse
       case DonationStatus.outForDelivery:
       case DonationStatus.delivered:
         return Colors.blue[600]!;

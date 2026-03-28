@@ -17,7 +17,34 @@ class DonorDashboardSection extends StatefulWidget {
 
 class _DonorDashboardSectionState extends State<DonorDashboardSection> {
   final DonationService _donationService = DonationService();
+
+  // Optimized streams
+  late final Stream<User?> _userStream;
+  Stream<Map<String, int>>? _statsStream;
+  Stream<List<Donation>>? _recentDonationsStream;
+  String? _cachedUid;
+
+  @override
+  void initState() {
+    super.initState();
+    _userStream = FirebaseAuth.instance.userChanges();
+    _initUserStreams();
+  }
+
+  void _initUserStreams() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && user.uid != _cachedUid) {
+      _cachedUid = user.uid;
+      _statsStream = _donationService.streamDonorStats(user.uid);
+      _recentDonationsStream = _donationService.streamRecentDonationsByDonor(
+        user.uid,
+        limit: 3,
+      );
+    }
+  }
+
   Future<void> _onRefresh() async {
+    _initUserStreams(); // Refresh streams on pull-to-refresh
     setState(() {});
   }
 
@@ -27,9 +54,14 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
 
     final isDark = theme.brightness == Brightness.dark;
 
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser?.uid != _cachedUid) {
+      _initUserStreams();
+    }
+
     // Listen to user changes for real-time profile updates
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.userChanges(),
+      stream: _userStream,
       builder: (context, userSnapshot) {
         final user = userSnapshot.data;
 
@@ -109,10 +141,9 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
                   ),
                   const SizedBox(height: 18),
 
-
                   DonorFrostedPanel(
                     child: StreamBuilder<Map<String, int>>(
-                      stream: _donationService.streamDonorStats(user.uid),
+                      stream: _statsStream,
                       builder: (context, snapshot) {
                         if (snapshot.connectionState ==
                             ConnectionState.waiting) {
@@ -208,10 +239,7 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
                   DonorFrostedPanel(
                     padding: const EdgeInsets.all(12),
                     child: StreamBuilder<List<Donation>>(
-                      stream: _donationService.streamRecentDonationsByDonor(
-                        user.uid,
-                        limit: 3,
-                      ),
+                      stream: _recentDonationsStream,
                       builder: (context, snapshot) {
                         if (snapshot.connectionState ==
                             ConnectionState.waiting) {
@@ -472,8 +500,11 @@ class _RecentDonationTile extends StatelessWidget {
       case DonationStatus.underVerification:
         return Colors.orange;
       case DonationStatus.verified:
+      case DonationStatus.pendingAssignment:
       case DonationStatus.inProcess:
         return Colors.blue;
+      case DonationStatus.stocked:
+        return const Color(0xFF009688); // Teal — In Warehouse
       case DonationStatus.outForDelivery:
         return Colors.purple;
       case DonationStatus.delivered:
@@ -484,4 +515,3 @@ class _RecentDonationTile extends StatelessWidget {
     }
   }
 }
-

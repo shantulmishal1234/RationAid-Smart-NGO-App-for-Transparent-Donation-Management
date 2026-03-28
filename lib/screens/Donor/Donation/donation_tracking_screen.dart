@@ -36,9 +36,12 @@ class _DonationTrackingScreenState extends State<DonationTrackingScreen> {
       case DonationStatus.underVerification:
         return 'Verification in Progress';
       case DonationStatus.verified:
+      case DonationStatus.pendingAssignment:
       case DonationStatus.inProcess:
       case DonationStatus.outForDelivery:
         return 'Track Your Donation';
+      case DonationStatus.stocked:
+        return 'Items In Warehouse';
       case DonationStatus.delivered:
       case DonationStatus.closed:
         return 'Donation Receipt';
@@ -115,8 +118,11 @@ class _CurrentStatusHeader extends StatelessWidget {
       case DonationStatus.underVerification:
         return const Color(0xFFFF9800); // Orange
       case DonationStatus.verified:
+      case DonationStatus.pendingAssignment:
       case DonationStatus.inProcess:
         return const Color(0xFF2196F3); // Blue
+      case DonationStatus.stocked:
+        return const Color(0xFF009688); // Teal – In Warehouse
       case DonationStatus.outForDelivery:
         return const Color(0xFF00BCD4); // Teal
       case DonationStatus.delivered:
@@ -136,7 +142,10 @@ class _CurrentStatusHeader extends StatelessWidget {
       case DonationStatus.underVerification:
         return Icons.search;
       case DonationStatus.verified:
+      case DonationStatus.pendingAssignment:
         return Icons.check_circle_outline;
+      case DonationStatus.stocked:
+        return Icons.warehouse_outlined;
       case DonationStatus.inProcess:
         return Icons.inventory_2_outlined;
       case DonationStatus.outForDelivery:
@@ -238,12 +247,15 @@ class _StatusTimeline extends StatelessWidget {
       ];
     }
 
-    // For GRF donations, timeline stops at closed since funds are pooled and consumed virtually.
+    // For GRF/Pool donations, timeline is adapted for virtual assignment.
     if (donation.familyId == 'general_relief_fund' ||
-        donation.allocationMode == 'general') {
+        donation.allocationMode == 'general' ||
+        donation.allocationMode == 'pool' ||
+        donation.allocationMode == 'pool_assigned') {
       return [
         DonationStatus.draft,
         DonationStatus.underVerification,
+        DonationStatus.pendingAssignment,
         DonationStatus.verified,
         DonationStatus.closed,
       ];
@@ -560,8 +572,9 @@ class _TimelineStep extends StatelessWidget {
 
   String _getDisplayName(DonationStatus status) {
     if (status == DonationStatus.outForDelivery) return 'Out for Delivery';
-    if (isGrf && status == DonationStatus.verified)
+    if (isGrf && status == DonationStatus.verified) {
       return 'Awaiting Allocation';
+    }
     if (isGrf && status == DonationStatus.closed) return 'Fund Deployed';
     return status.displayName;
   }
@@ -589,6 +602,7 @@ class _LiveStatusCard extends StatelessWidget {
       case DonationStatus.underVerification:
         return _buildUnderVerificationCard(context);
       case DonationStatus.verified:
+      case DonationStatus.pendingAssignment:
         return _buildVerifiedCard(context);
       case DonationStatus.inProcess:
         return _buildInProcessCard(context);
@@ -1277,6 +1291,104 @@ class _DonationDetailsCard extends StatelessWidget {
               ),
             ),
           ],
+          if (donation.smartSplits != null &&
+              donation.smartSplits!.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(
+                  Icons.auto_awesome,
+                  color: AppColors.donorGreen,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Impact Breakdown',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ...donation.smartSplits!.map((split) {
+              final String familyId = split['familyId'] as String? ?? '';
+              final bool isPool =
+                  familyId.isEmpty || familyId == 'general_relief_fund';
+
+              // Handle both direct family names and pool labels
+              String familyLabel;
+              if (isPool) {
+                familyLabel = 'NGO General Pool';
+              } else {
+                final familyData = split['family'] as Map<String, dynamic>?;
+                final String area = familyData?['area'] as String? ?? 'Family';
+                final String name = familyData?['name'] as String? ?? '';
+                familyLabel = name.isNotEmpty
+                    ? '$name ($area)'
+                    : '$area Family';
+              }
+
+              final Map<String, dynamic> splitItems =
+                  split['items'] as Map<String, dynamic>? ?? {};
+              final String itemsSummary = splitItems.entries
+                  .map((e) => '${e.value}kg ${e.key}')
+                  .join(', ');
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: (isPool ? Colors.teal : AppColors.donorGreen)
+                      .withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: (isPool ? Colors.teal : AppColors.donorGreen)
+                        .withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      familyLabel,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      itemsSummary,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.7,
+                        ),
+                      ),
+                    ),
+                    if (split['reason'] != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Reason: ${split['reason']}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }),
+          ],
         ],
       ),
     );
@@ -1669,7 +1781,7 @@ class _MicroLedgerTracker extends StatelessWidget {
                             ],
                           ),
                         );
-                      }).toList(),
+                      }),
                     ],
                   ),
           ),

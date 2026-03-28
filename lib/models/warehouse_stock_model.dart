@@ -64,12 +64,12 @@ class WarehouseStock {
       donorName: data['donorName'] ?? '',
       items: Map<String, int>.from(
         (data['items'] as Map<String, dynamic>? ?? {}).map(
-          (k, v) => MapEntry(k, (v as num).toInt()),
+          (k, v) => MapEntry(k, (num.tryParse(v.toString()) ?? 0).toInt()),
         ),
       ),
       itemValueSnapshot: Map<String, double>.from(
         (data['itemValueSnapshot'] as Map<String, dynamic>? ?? {}).map(
-          (k, v) => MapEntry(k, (v as num).toDouble()),
+          (k, v) => MapEntry(k, (num.tryParse(v.toString()) ?? 0).toDouble()),
         ),
       ),
       totalLockedValue: (data['totalLockedValue'] as num? ?? 0).toDouble(),

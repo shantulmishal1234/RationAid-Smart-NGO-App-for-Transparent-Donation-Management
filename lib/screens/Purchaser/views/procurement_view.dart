@@ -33,10 +33,27 @@ class _ProcurementViewState extends State<ProcurementView>
   Timer? _debounce;
   final _searchController = TextEditingController();
 
+  // Optimized streams
+  Stream<User?>? _authStream;
+  Stream<List<ProcurementRequest>>? _availablePoolStream;
+  Stream<List<ProcurementRequest>>? _myRequestsStream;
+  String? _cachedUid;
+
   @override
   void initState() {
     super.initState();
     _tab = TabController(length: widget.isSupervisor ? 3 : 2, vsync: this);
+    _authStream = FirebaseAuth.instance.authStateChanges();
+    _initUserStreams();
+  }
+
+  void _initUserStreams() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && user.uid != _cachedUid) {
+      _cachedUid = user.uid;
+      _availablePoolStream = ProcurementService.streamAvailableRequests();
+      _myRequestsStream = ProcurementService.streamMyRequests(user.uid);
+    }
   }
 
   @override
@@ -61,8 +78,13 @@ class _ProcurementViewState extends State<ProcurementView>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    final user = FirebaseAuth.instance.currentUser;
+    if (user?.uid != _cachedUid) {
+      _initUserStreams();
+    }
+
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+      stream: _authStream,
       builder: (context, authSnap) {
         if (!authSnap.hasData) {
           return const Center(
@@ -192,7 +214,7 @@ class _ProcurementViewState extends State<ProcurementView>
     bool isDark,
   ) {
     return StreamBuilder<List<ProcurementRequest>>(
-      stream: ProcurementService.streamAvailableRequests(),
+      stream: _availablePoolStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -525,7 +547,7 @@ class _ProcurementViewState extends State<ProcurementView>
     bool isDark,
   ) {
     return StreamBuilder<List<ProcurementRequest>>(
-      stream: ProcurementService.streamMyRequests(uid),
+      stream: _myRequestsStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(

@@ -15,7 +15,8 @@ import 'package:ration_aid/models/family_model.dart';
 /// Households section for managing families
 /// Optimized: Debounced search, cached overview stats
 class HouseholdsSection extends StatefulWidget {
-  const HouseholdsSection({super.key});
+  final ValueChanged<AdminSection>? onSectionChanged;
+  const HouseholdsSection({super.key, this.onSectionChanged});
 
   @override
   State<HouseholdsSection> createState() => _HouseholdsSectionState();
@@ -232,9 +233,10 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
         ),
 
         // General Relief Fund Wallet Overview
-        const AdminGRFWalletCard(
+        AdminGRFWalletCard(
           onManage:
               null, // To be implemented with a surplus/allocation dialog if needed
+          onManageInKind: null,
         ),
 
         // Toolbar: Search | Filter | Add

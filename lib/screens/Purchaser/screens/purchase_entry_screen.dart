@@ -90,9 +90,13 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final receiptUrl = await CloudinaryService.uploadImage(_receiptImage!);
+      final response = await CloudinaryService.uploadImage(_receiptImage!);
 
-      if (receiptUrl == null) throw Exception('Receipt upload failed');
+      if (!response.isSuccess) {
+        throw Exception(response.errorMessage ?? 'Receipt upload failed');
+      }
+
+      final receiptUrl = response.url!;
 
       final user = FirebaseAuth.instance.currentUser;
 

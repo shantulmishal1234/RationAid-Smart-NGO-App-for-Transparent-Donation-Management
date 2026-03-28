@@ -27,6 +27,10 @@ class ProcurementService {
       // 1. Fully Funded via combined progress (cash + in-kind value >= target)
       // 2. Based on Assistance Category (Food or Medicine)
       // 3. No existing active request
+      //
+      // Guard: targetAmount must be > 0 to prevent false positives on fresh
+      // families with no pack assigned (0 >= 0 would otherwise trigger this).
+      if (family.targetAmount <= 0) return; // No pack assigned yet — skip
       final isFunded =
           family.combinedProgress >= family.targetAmount ||
           family.raisedAmount >= family.targetAmount;
@@ -39,8 +43,9 @@ class ProcurementService {
 
       // If Food, it must have an assigned pack
       if (isFood &&
-          (family.assignedPackId == null || family.assignedPackId!.isEmpty))
+          (family.assignedPackId == null || family.assignedPackId!.isEmpty)) {
         return;
+      }
 
       // Check existing — include 'stocked' to prevent double-ordering
       final existingQuery = await _firestore
@@ -61,7 +66,10 @@ class ProcurementService {
         final stockSnaps = await _firestore
             .collection('warehouse_stock')
             .where('familyId', isEqualTo: familyId)
-            .where('status', isEqualTo: 'received')
+            .where(
+              'status',
+              whereIn: ['pending_pickup', 'in_transit', 'received'],
+            )
             .get();
         for (final doc in stockSnaps.docs) {
           final data = doc.data();
@@ -69,7 +77,8 @@ class ProcurementService {
             data['items'] as Map? ?? {},
           );
           batchItems.forEach(
-            (k, v) => alreadyStocked[k] = (alreadyStocked[k] ?? 0) + (v as num),
+            (k, v) => alreadyStocked[k] =
+                (alreadyStocked[k] ?? 0) + (num.tryParse(v.toString()) ?? 0),
           );
         }
       }
@@ -110,12 +119,8 @@ class ProcurementService {
         double smartBudget = 0.0;
 
         for (final item in pack.items) {
-          // Parse quantity from pack (e.g., "10" or "10kg" — extract the number)
-          final rawQty =
-              double.tryParse(
-                item.quantity.replaceAll(RegExp(r'[^0-9.]'), ''),
-              ) ??
-              1.0;
+          // Use exact numeric quantity from the item model
+          final rawQty = item.quantityNum;
           final stocked = alreadyStocked[item.name] ?? 0;
           final needToBuy = rawQty - stocked;
 
@@ -145,9 +150,53 @@ class ProcurementService {
           debugPrint(
             '[Procurement] All items for family $familyId are in warehouse. Skipping procurement.',
           );
-          await _firestore.collection('families').doc(familyId).update({
-            'fulfillmentStatus': 'ready_for_dispatch',
+
+          final batch = _firestore.batch();
+
+          final geoPoint = family.verifiedLocation ?? family.unverifiedLocation;
+          final lat = geoPoint?.latitude;
+          final lng = geoPoint?.longitude;
+          final locationVerified = family.verifiedLocation != null;
+
+          // Build item map for assignment
+          final itemsMap = <String, num>{};
+          for (final item in pack.items) {
+            itemsMap[item.name] = item.quantityNum;
+          }
+
+          // 1. Create Delivery Assignment
+          await DeliveryService.createAssignment(
+            familyId: family.id,
+            familyArea: family.area,
+            familyCity: family.city,
+            familyAddress: family.address ?? '',
+            familyPhone: family.phone,
+            familySize: family.familySize,
+            familyGeoLat: lat,
+            familyGeoLng: lng,
+            familyLocationVerified: locationVerified,
+            assignedPackId: pack.id,
+            assignedPackName: pack.name,
+            items: itemsMap,
+            batch: batch,
+          );
+
+          // 2. Update family status
+          batch.update(_firestore.collection('families').doc(familyId), {
+            'fulfillmentStatus': 'stocked',
+            'updatedAt': FieldValue.serverTimestamp(),
           });
+
+          await batch.commit();
+
+          await AuditService.logFamilyAction(
+            action: 'Auto-Stocked (100% In-Kind)',
+            familyId: familyId,
+            familyName: family.area,
+            details:
+                'All items covered by In-Kind donations. Delivery assignment auto-created.',
+          );
+
           return;
         }
 
@@ -263,33 +312,23 @@ class ProcurementService {
   /// Stream orders claimed by or submitted by a specific purchaser.
   /// Covers: claimed-but-not-yet-submitted AND purchased/rejected (personal pipeline).
   static Stream<List<ProcurementRequest>> streamMyRequests(String purchaserId) {
-    // Two Firestore queries merged client-side:
-    //   1. Claimed (pending + claimedById == uid)
-    //   2. Already submitted (purchaserId == uid, any post-pending status)
-    final claimedStream = _firestore
+    // Single Firestore query with OR filter (Firestore ^5.0.0+)
+    return _firestore
         .collection(_collection)
-        .where('claimedById', isEqualTo: purchaserId)
+        .where(
+          Filter.or(
+            Filter('claimedById', isEqualTo: purchaserId),
+            Filter('purchaserId', isEqualTo: purchaserId),
+          ),
+        )
         .snapshots()
-        .map((s) => s.docs.map(ProcurementRequest.fromFirestore).toList());
-
-    final submittedStream = _firestore
-        .collection(_collection)
-        .where('purchaserId', isEqualTo: purchaserId)
-        .snapshots()
-        .map((s) => s.docs.map(ProcurementRequest.fromFirestore).toList());
-
-    // Merge and deduplicate by id
-    return claimedStream.asyncExpand((claimed) {
-      return submittedStream.map((submitted) {
-        final seen = <String>{};
-        final merged = <ProcurementRequest>[];
-        for (final r in [...claimed, ...submitted]) {
-          if (seen.add(r.id)) merged.add(r);
-        }
-        merged.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return merged;
-      });
-    });
+        .map((s) {
+          final requests = s.docs
+              .map(ProcurementRequest.fromFirestore)
+              .toList();
+          requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return requests;
+        });
   }
 
   /// Smart UID-filtered history stream (Global if supervisor, personal if not)
@@ -488,12 +527,12 @@ class ProcurementService {
       final lng = geoPoint?.longitude;
       final locationVerified = family.verifiedLocation != null;
 
-      // 3. Build items map from procurement items
-      // ProcurementItem.quantity is a String like "3.5kg" — extract leading num
+      // ProcurementItem.quantity remains a string for now, but we'll parse it cleanly
+      // (ProcurementItem is separate from PackItem, we'll extract the number)
       final itemsMap = <String, num>{};
       for (final item in request.items) {
-        final qtyStr = RegExp(r'[\d.]+').stringMatch(item.quantity);
-        itemsMap[item.name] = qtyStr != null ? double.parse(qtyStr) : 1;
+        final qtyStr = RegExp(r'[\d.]+').stringMatch(item.quantity) ?? '1';
+        itemsMap[item.name] = double.tryParse(qtyStr) ?? 1.0;
       }
 
       // 4. Auto-create DeliveryAssignment (links purchaser → distributor pipeline)

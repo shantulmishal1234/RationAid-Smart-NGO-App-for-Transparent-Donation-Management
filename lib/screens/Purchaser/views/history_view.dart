@@ -28,6 +28,110 @@ class _HistoryViewState extends State<HistoryView> {
   // Date state
   DateTimeRange? _selectedDateRange;
 
+  // Optimized Data Cache
+  late Stream<List<ProcurementRequest>> _historyStream;
+  List<ProcurementRequest> _allHistoryRequests = [];
+  List<ProcurementRequest> _filteredRequests = [];
+
+  // Stats Cache
+  int _processedCountAllTime = 0;
+  double _totalValueAllTime = 0;
+  int _activeCountAllTime = 0;
+  int _deliveredCountAllTime = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    _historyStream = ProcurementService.getSmartHistoryStream(
+      uid,
+      widget.isSupervisor,
+    );
+  }
+
+  void _processData(List<ProcurementRequest> allRequests) {
+    // 1. Base Filter: Post-purchase processes
+    _allHistoryRequests = allRequests.where((r) {
+      return r.status == ProcurementStatus.verified ||
+          r.status == ProcurementStatus.stocked ||
+          r.status == ProcurementStatus.delivered ||
+          r.status == ProcurementStatus.rejected ||
+          r.status == ProcurementStatus.issue_reported ||
+          r.status == ProcurementStatus.written_off;
+    }).toList();
+
+    // 2. Stats Calculation (Before View Filters)
+    _processedCountAllTime = _allHistoryRequests.length;
+    _totalValueAllTime = _allHistoryRequests.fold<double>(
+      0,
+      (sum, r) => sum + r.totalSpent,
+    );
+    _activeCountAllTime = _allHistoryRequests
+        .where(
+          (r) =>
+              r.status == ProcurementStatus.verified ||
+              r.status == ProcurementStatus.stocked,
+        )
+        .length;
+    _deliveredCountAllTime = _allHistoryRequests
+        .where((r) => r.status == ProcurementStatus.delivered)
+        .length;
+
+    _applyFilters();
+  }
+
+  void _applyFilters() {
+    var filtered = List<ProcurementRequest>.from(_allHistoryRequests);
+
+    // 3. Apply View Filters (Status)
+    if (_filterStatus != 'All') {
+      filtered = filtered.where((r) {
+        if (_filterStatus == 'Active') {
+          return r.status == ProcurementStatus.verified ||
+              r.status == ProcurementStatus.stocked ||
+              r.status == ProcurementStatus.issue_reported;
+        }
+        if (_filterStatus == 'Delivered') {
+          return r.status == ProcurementStatus.delivered ||
+              r.status == ProcurementStatus.written_off;
+        }
+        if (_filterStatus == 'Rejected') {
+          return r.status == ProcurementStatus.rejected;
+        }
+        return true;
+      }).toList();
+    }
+
+    // 4. Apply Date Filter
+    if (_selectedDateRange != null) {
+      filtered = filtered.where((r) {
+        final dateToCheck = r.verifiedAt ?? r.createdAt;
+        return dateToCheck.isAfter(
+              _selectedDateRange!.start.subtract(const Duration(seconds: 1)),
+            ) &&
+            dateToCheck.isBefore(
+              _selectedDateRange!.end.add(const Duration(days: 1)),
+            );
+      }).toList();
+    }
+
+    // 5. Apply Search
+    if (_searchQuery.isNotEmpty) {
+      filtered = filtered.where((r) {
+        return r.packName.toLowerCase().contains(_searchQuery);
+      }).toList();
+    }
+
+    // 6. Sort
+    filtered.sort((a, b) {
+      final dateA = a.verifiedAt ?? a.createdAt;
+      final dateB = b.verifiedAt ?? b.createdAt;
+      return dateB.compareTo(dateA);
+    });
+
+    _filteredRequests = filtered;
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -38,9 +142,12 @@ class _HistoryViewState extends State<HistoryView> {
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), () {
-      setState(() {
-        _searchQuery = query.toLowerCase();
-      });
+      if (mounted) {
+        setState(() {
+          _searchQuery = query.toLowerCase();
+          _applyFilters();
+        });
+      }
     });
   }
 
@@ -65,7 +172,10 @@ class _HistoryViewState extends State<HistoryView> {
       },
     );
     if (picked != null) {
-      setState(() => _selectedDateRange = picked);
+      setState(() {
+        _selectedDateRange = picked;
+        _applyFilters();
+      });
     }
   }
 
@@ -73,98 +183,20 @@ class _HistoryViewState extends State<HistoryView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dateFormat = DateFormat('MMM dd, yyyy');
-    final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return StreamBuilder<List<ProcurementRequest>>(
-      stream: ProcurementService.getSmartHistoryStream(
-        uid,
-        widget.isSupervisor,
-      ),
+      stream: _historyStream,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            _allHistoryRequests.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final allRequests = snapshot.data ?? [];
-
-        // 1. Base Filter: Post-purchase processes
-        var historyRequests = allRequests.where((r) {
-          return r.status == ProcurementStatus.verified ||
-              r.status == ProcurementStatus.stocked ||
-              r.status == ProcurementStatus.delivered ||
-              r.status == ProcurementStatus.rejected ||
-              r.status == ProcurementStatus.issue_reported ||
-              r.status == ProcurementStatus.written_off;
-        }).toList();
-
-        // 2. Stats Calculation (Before View Filters)
-        final processedCountAllTime = historyRequests.length;
-        final totalValueAllTime = historyRequests.fold<double>(
-          0,
-          (sum, r) => sum + r.totalSpent,
-        );
-        final activeCountAllTime = historyRequests
-            .where(
-              (r) =>
-                  r.status == ProcurementStatus.verified ||
-                  r.status == ProcurementStatus.stocked,
-            )
-            .length;
-        final deliveredCountAllTime = historyRequests
-            .where((r) => r.status == ProcurementStatus.delivered)
-            .length;
-
-        // 3. Apply View Filters (Status)
-        if (_filterStatus != 'All') {
-          historyRequests = historyRequests.where((r) {
-            if (_filterStatus == 'Active') {
-              return r.status == ProcurementStatus.verified ||
-                  r.status == ProcurementStatus.stocked ||
-                  r.status == ProcurementStatus.issue_reported;
-            }
-            if (_filterStatus == 'Delivered') {
-              return r.status == ProcurementStatus.delivered ||
-                  r.status == ProcurementStatus.written_off;
-            }
-            if (_filterStatus == 'Rejected') {
-              return r.status == ProcurementStatus.rejected;
-            }
-            return true;
-          }).toList();
+        if (snapshot.hasData) {
+          _processData(snapshot.data!);
         }
 
-        // 4. Apply Date Filter
-        if (_selectedDateRange != null) {
-          historyRequests = historyRequests.where((r) {
-            final dateToCheck = r.verifiedAt ?? r.createdAt;
-            // Inclusive check
-            return dateToCheck.isAfter(
-                  _selectedDateRange!.start.subtract(
-                    const Duration(seconds: 1),
-                  ),
-                ) &&
-                dateToCheck.isBefore(
-                  _selectedDateRange!.end.add(const Duration(days: 1)),
-                );
-          }).toList();
-        }
-
-        // 5. Apply Search
-        if (_searchQuery.isNotEmpty) {
-          historyRequests = historyRequests.where((r) {
-            return r.packName.toLowerCase().contains(_searchQuery);
-          }).toList();
-        }
-
-        // Sort by date desc (newest first)
-        historyRequests.sort((a, b) {
-          final dateA = a.verifiedAt ?? a.createdAt;
-          final dateB = b.verifiedAt ?? b.createdAt;
-          return dateB.compareTo(dateA);
-        });
-
-        // Filtered Stats
-        final filteredCount = historyRequests.length;
+        final filteredCount = _filteredRequests.length;
         // Unused: final filteredValue = historyRequests.fold...
 
         return Column(
@@ -217,7 +249,7 @@ class _HistoryViewState extends State<HistoryView> {
                     Expanded(
                       child: _buildStatItem(
                         theme,
-                        'Rs ${(totalValueAllTime / 1000).toStringAsFixed(1)}K',
+                        'Rs ${(_totalValueAllTime / 1000).toStringAsFixed(1)}K',
                         'Total Spent',
                         AppColors.purchaserOrange,
                       ),
@@ -231,7 +263,7 @@ class _HistoryViewState extends State<HistoryView> {
                     Expanded(
                       child: _buildStatItem(
                         theme,
-                        processedCountAllTime.toString(),
+                        _processedCountAllTime.toString(),
                         'Processed',
                         Colors.blue,
                       ),
@@ -245,7 +277,7 @@ class _HistoryViewState extends State<HistoryView> {
                     Expanded(
                       child: _buildStatItem(
                         theme,
-                        activeCountAllTime.toString(),
+                        _activeCountAllTime.toString(),
                         'Active',
                         Colors.orange,
                       ),
@@ -259,7 +291,7 @@ class _HistoryViewState extends State<HistoryView> {
                     Expanded(
                       child: _buildStatItem(
                         theme,
-                        deliveredCountAllTime.toString(),
+                        _deliveredCountAllTime.toString(),
                         'Delivered',
                         Colors.green,
                       ),
@@ -347,8 +379,10 @@ class _HistoryViewState extends State<HistoryView> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       tooltip: 'Filter Status',
-                      onSelected: (value) =>
-                          setState(() => _filterStatus = value),
+                      onSelected: (value) => setState(() {
+                        _filterStatus = value;
+                        _applyFilters();
+                      }),
                       itemBuilder: (context) => [
                         const PopupMenuItem(
                           value: 'All',
@@ -395,7 +429,10 @@ class _HistoryViewState extends State<HistoryView> {
                       tooltip: 'Filter Date',
                       onSelected: (value) {
                         if (value == 'clear') {
-                          setState(() => _selectedDateRange = null);
+                          setState(() {
+                            _selectedDateRange = null;
+                            _applyFilters();
+                          });
                         } else if (value == 'custom')
                           _showCustomRangePicker();
                         else {
@@ -418,12 +455,13 @@ class _HistoryViewState extends State<HistoryView> {
                             59,
                             59,
                           );
-                          setState(
-                            () => _selectedDateRange = DateTimeRange(
+                          setState(() {
+                            _selectedDateRange = DateTimeRange(
                               start: start,
                               end: end,
-                            ),
-                          );
+                            );
+                            _applyFilters();
+                          });
                         }
                       },
                       itemBuilder: (context) => [
@@ -504,7 +542,7 @@ class _HistoryViewState extends State<HistoryView> {
               child: FrostedPanel(
                 margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                 padding: EdgeInsets.zero,
-                child: historyRequests.isEmpty
+                child: _filteredRequests.isEmpty
                     ? Center(
                         child: Text(
                           'No records found',
@@ -519,12 +557,12 @@ class _HistoryViewState extends State<HistoryView> {
                         },
                         child: ListView.separated(
                           padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
-                          itemCount: historyRequests.length + 1,
+                          itemCount: _filteredRequests.length + 1,
                           separatorBuilder: (_, __) => const SizedBox(
                             height: 12,
                           ), // Match Inventory spacing
                           itemBuilder: (context, index) {
-                            if (index == historyRequests.length) {
+                            if (index == _filteredRequests.length) {
                               // Export Button at bottom
                               return Padding(
                                 padding: const EdgeInsets.symmetric(
@@ -534,7 +572,7 @@ class _HistoryViewState extends State<HistoryView> {
                                   child: TextButton.icon(
                                     onPressed: () {
                                       ReportPdfService.generateAndOpenReport(
-                                        historyRequests,
+                                        _filteredRequests,
                                         _selectedDateRange,
                                       );
                                     },
@@ -551,7 +589,7 @@ class _HistoryViewState extends State<HistoryView> {
                               );
                             }
 
-                            final request = historyRequests[index];
+                            final request = _filteredRequests[index];
                             return ProcurementCard(
                               request: request,
                               actionLabel: 'Details',

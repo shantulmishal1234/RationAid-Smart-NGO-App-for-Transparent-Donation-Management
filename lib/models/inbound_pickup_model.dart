@@ -12,8 +12,19 @@ class InboundPickup {
   final String contactNumber;
   final String pickupAddress;
 
+  /// True if this is a GRF Pool pickup — items go into the GRF warehouse,
+  /// not a specific family's stock. Admin assigns them after collection.
+  final bool isGrfPool;
+
+  /// True if this pickup was created from a Smart In-Kind split waterfall.
+  /// Used by _markCollected to apply inKindValue directly to the family.
+  final bool isSmartSplit;
+
   /// Items to collect. { "Rice": 10, "Flour": 20 }
-  final Map<String, int> items;
+  final Map<String, num> items;
+
+  /// Item units at submission. { "Rice": "kg", "Flour": "kg" }
+  final Map<String, String>? itemUnits;
 
   /// Purchaser UID who accepted the task. Null if still in open pool.
   final String? assignedTo;
@@ -42,6 +53,9 @@ class InboundPickup {
     required this.items,
     required this.status,
     required this.createdAt,
+    this.isGrfPool = false,
+    this.isSmartSplit = false,
+    this.itemUnits,
     this.assignedTo,
     this.pickupProofUrl,
     this.proofUploadedAt,
@@ -59,11 +73,18 @@ class InboundPickup {
       donorName: data['donorName'] ?? '',
       contactNumber: data['contactNumber'] ?? '',
       pickupAddress: data['pickupAddress'] ?? '',
-      items: Map<String, int>.from(
+      isGrfPool:
+          data['isGrfPool'] as bool? ??
+          (data['familyId'] == 'general_relief_fund'),
+      isSmartSplit: data['isSmartSplit'] as bool? ?? false,
+      items: Map<String, num>.from(
         (data['items'] as Map<String, dynamic>? ?? {}).map(
-          (k, v) => MapEntry(k, (v as num).toInt()),
+          (k, v) => MapEntry(k, (num.tryParse(v.toString()) ?? 0)),
         ),
       ),
+      itemUnits: data['itemUnits'] != null
+          ? Map<String, String>.from(data['itemUnits'] as Map)
+          : null,
       status: data['status'] ?? 'open',
       assignedTo: data['assignedTo'],
       pickupProofUrl: data['pickupProofUrl'],
@@ -82,7 +103,10 @@ class InboundPickup {
       'donorName': donorName,
       'contactNumber': contactNumber,
       'pickupAddress': pickupAddress,
+      'isGrfPool': isGrfPool,
+      'isSmartSplit': isSmartSplit,
       'items': items,
+      'itemUnits': itemUnits,
       'status': status,
       if (assignedTo != null) 'assignedTo': assignedTo,
       if (pickupProofUrl != null) 'pickupProofUrl': pickupProofUrl,
@@ -99,6 +123,9 @@ class InboundPickup {
     String? pickupProofUrl,
     DateTime? proofUploadedAt,
     String? note,
+    Map<String, String>? itemUnits,
+    bool? isGrfPool,
+    bool? isSmartSplit,
   }) {
     return InboundPickup(
       id: id,
@@ -111,11 +138,14 @@ class InboundPickup {
       pickupAddress: pickupAddress,
       items: items,
       createdAt: createdAt,
+      isGrfPool: isGrfPool ?? this.isGrfPool,
+      isSmartSplit: isSmartSplit ?? this.isSmartSplit,
       status: status ?? this.status,
       assignedTo: assignedTo ?? this.assignedTo,
       pickupProofUrl: pickupProofUrl ?? this.pickupProofUrl,
       proofUploadedAt: proofUploadedAt ?? this.proofUploadedAt,
       note: note ?? this.note,
+      itemUnits: itemUnits ?? this.itemUnits,
     );
   }
 }

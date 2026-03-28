@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:ration_aid/models/inbound_pickup_model.dart';
 import 'package:ration_aid/services/cloudinary_service.dart';
+import 'package:ration_aid/services/funding_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -149,31 +150,145 @@ class _InboundPickupDetailScreenState extends State<InboundPickupDetailScreen> {
     setState(() => _isUploading = true);
     try {
       // 1. Upload proof photo
-      final proofUrl = await CloudinaryService.uploadImage(_proofImage!);
+      final response = await CloudinaryService.uploadImage(_proofImage!);
+      if (!response.isSuccess) {
+        throw Exception(
+          response.errorMessage ?? 'Failed to upload proof photo',
+        );
+      }
+      final proofUrl = response.url!;
+
+      final currentUser = FirebaseAuth.instance.currentUser;
+      final collectorName = currentUser?.displayName ?? 'Purchaser';
+      final collectorUid = currentUser?.uid ?? '';
 
       // 2. Batch: complete the pickup task + mark warehouse batch as received
       final batch = _db.batch();
 
+      // 2a. Complete the Inbound Pickup task
       final pickupRef = _db.collection('inbound_pickups').doc(_pickup.id);
       batch.update(pickupRef, {
         'status': 'completed',
+        'collectedBy': collectorUid,
+        'collectedByName': collectorName,
+        'collectedAt': FieldValue.serverTimestamp(),
         'pickupProofUrl': proofUrl,
-        'proofUploadedAt': FieldValue.serverTimestamp(),
         if (_noteController.text.trim().isNotEmpty)
           'note': _noteController.text.trim(),
       });
 
-      // 3. Also update the linked warehouse_stock document
+      // 2b. Also update or split the linked warehouse_stock document
+      Map<String, double> smartSplitFamilyValues =
+          {}; // for post-commit funding
       if (_pickup.batchId.isNotEmpty) {
-        final stockRef = _db.collection('warehouse_stock').doc(_pickup.batchId);
-        batch.update(stockRef, {
-          'status': 'received',
-          'pickupProofUrl': proofUrl,
-          'receivedAt': FieldValue.serverTimestamp(),
+        if (_pickup.isSmartSplit) {
+          // processSmartSplitCollectionToWarehouse adds to the batch AND returns
+          // the per-family locked values so we can apply funding immediately
+          // after commit — no delayed Firestore re-query needed.
+          smartSplitFamilyValues =
+              await FundingService.processSmartSplitCollectionToWarehouse(
+                pickupId: _pickup.id,
+                batchId: _pickup.batchId,
+                donationId: _pickup.donationId,
+                pickupAddress: _pickup.pickupAddress,
+                contactNumber: _pickup.contactNumber,
+                donorId: _pickup.donorId,
+                donorName: _pickup.donorName,
+                itemUnits: _pickup.itemUnits ?? {},
+                pickupItems: _pickup.items,
+                collectorUid: collectorUid,
+                collectorName: collectorName,
+                proofUrl: proofUrl,
+                batch: batch,
+              );
+        } else {
+          final stockRef = _db
+              .collection('warehouse_stock')
+              .doc(_pickup.batchId);
+          // GRF Pool pickups get 'grf_pool' status so Admin GRF inventory screen can query them.
+          // Direct-family pickups get 'received' as before.
+          final bool isGrfPool = _pickup.familyId == 'general_relief_fund';
+          batch.update(stockRef, {
+            'status': isGrfPool ? 'grf_pool' : 'received',
+            'receivedBy': collectorUid,
+            'receivedByName': collectorName,
+            'receivedAt': FieldValue.serverTimestamp(),
+            'pickupProofUrl': proofUrl,
+          });
+        }
+      }
+
+      // G1 Fix — Update the linked donation status to 'stocked'
+      if (_pickup.donationId.isNotEmpty) {
+        final donationRef = _db.collection('donations').doc(_pickup.donationId);
+        final bool isGrfPool = _pickup.isSmartSplit
+            ? false // Smart splits are stocked into per-family reserved stock
+            : _pickup.familyId == 'general_relief_fund';
+        batch.update(donationRef, {
+          'status': 'stocked',
+          'stockedAt': FieldValue.serverTimestamp(),
+          'collectedBy': collectorUid,
+          'updatedAt': FieldValue.serverTimestamp(),
+          'statusHistory': FieldValue.arrayUnion([
+            {
+              'status': 'stocked',
+              'timestamp': Timestamp.now(),
+              'note': _pickup.isSmartSplit
+                  ? 'Items collected by $collectorName and split into per-family warehouse stock.'
+                  : (isGrfPool
+                        ? 'Items collected by $collectorName and stored in GRF warehouse. Awaiting admin assignment to family.'
+                        : 'Items collected by $collectorName and stored in warehouse.'),
+            },
+          ]),
         });
       }
 
+      // G4 Fix — Write admin notification to Firestore
+      final notifRef = _db.collection('notifications').doc();
+      batch.set(notifRef, {
+        'role': 'admin',
+        'type': 'in_kind_collected',
+        'title': '📦 In-Kind Pickup Completed',
+        'body':
+            '$collectorName has collected items from ${_pickup.donorName}. Items are now${_pickup.isSmartSplit ? ' split into per-family warehouse stock.' : ' in the warehouse.'}',
+        'familyId': _pickup.familyId,
+        'donationId': _pickup.donationId,
+        'pickupId': _pickup.id,
+        'collectedBy': collectorUid,
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
       await batch.commit();
+
+      // ── Post-commit: Apply family funding ─────────────────────────────────
+      // For smart splits: use the values returned by processSmartSplitCollectionToWarehouse
+      // (avoids a Firestore re-query and composite index requirement).
+      // For direct family: recalculate from all donations.
+      // For GRF pool: Admin handles via assignPoolInKind.
+      if (_pickup.isSmartSplit && smartSplitFamilyValues.isNotEmpty) {
+        for (final entry in smartSplitFamilyValues.entries) {
+          try {
+            await FundingService.applySmartSplitInKindFunding(
+              familyId: entry.key,
+              lockedValue: entry.value,
+            );
+          } catch (e) {
+            debugPrint(
+              '[FundingUpdate] Failed to apply smart split funding for ${entry.key}: $e',
+            );
+          }
+        }
+      } else if (!_pickup.isSmartSplit &&
+          _pickup.familyId.isNotEmpty &&
+          _pickup.familyId != 'general_relief_fund') {
+        // Direct family in-kind pickup
+        try {
+          await FundingService.recalculateFamilyFunding(_pickup.familyId);
+        } catch (e) {
+          debugPrint('[FundingUpdate] recalculate failed: $e');
+        }
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -238,6 +353,54 @@ class _InboundPickupDetailScreenState extends State<InboundPickupDetailScreen> {
           children: [
             // Status card
             _statusBanner(isDark),
+
+            // GRF Pool context banner
+            if (_pickup.isGrfPool) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.teal.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.inventory_2_outlined,
+                      color: Colors.teal,
+                      size: 20,
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'NGO General Pool Pickup',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: Colors.teal,
+                              fontSize: 13,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'These items are donated to the GRF pool, NOT a specific family. '
+                            'After you collect and mark as completed, the items will appear '
+                            'in the Admin\'s GRF Warehouse for assignment to a family in need.',
+                            style: TextStyle(color: Colors.teal, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
 
             const SizedBox(height: 20),
 
@@ -532,7 +695,8 @@ class _InboundPickupDetailScreenState extends State<InboundPickupDetailScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    'Qty: ${entry.value}',
+                    'Qty: ${entry.value} ${(_pickup.itemUnits ?? {})[entry.key] ?? ''}'
+                        .trim(),
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 13,

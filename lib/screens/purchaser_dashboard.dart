@@ -23,6 +23,9 @@ class PurchaserDashboard extends StatefulWidget {
 
 class _PurchaserDashboardState extends State<PurchaserDashboard> {
   PurchaserSection _currentSection = PurchaserSection.dashboard;
+  Stream<DocumentSnapshot>? _userStream;
+  Stream<int>? _unreadCountStream;
+  String? _currentUid;
 
   final Map<PurchaserSection, String> _titles = {
     PurchaserSection.dashboard: 'Purchaser Dashboard',
@@ -36,13 +39,34 @@ class _PurchaserDashboardState extends State<PurchaserDashboard> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    _initStreams();
+  }
+
+  void _initStreams() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null && uid != _currentUid) {
+      _currentUid = uid;
+      _userStream = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .snapshots();
+      _unreadCountStream = NotificationService.getPurchaserUnreadCountStream(
+        uid,
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != _currentUid) {
+      _initStreams();
+    }
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: uid == null
-          ? const Stream.empty()
-          : FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+      stream: _userStream ?? const Stream.empty(),
       builder: (context, userSnap) {
         final userData = userSnap.data?.data() as Map<String, dynamic>?;
         final isSupervisor = userData?['isSupervisor'] ?? false;
@@ -60,13 +84,7 @@ class _PurchaserDashboardState extends State<PurchaserDashboard> {
             ],
           ),
           bottomNavigationBar: StreamBuilder<int>(
-            // Stream unread notification count so the badge auto-updates in real time
-            stream: uid == null
-                ? Stream.value(0)
-                : NotificationService.streamPurchaserNotifications(uid).map(
-                    (snap) =>
-                        snap.docs.where((d) => d['isRead'] != true).length,
-                  ),
+            stream: _unreadCountStream ?? Stream.value(0),
             initialData: 0,
             builder: (context, snap) {
               return PurchaserBottomNav(

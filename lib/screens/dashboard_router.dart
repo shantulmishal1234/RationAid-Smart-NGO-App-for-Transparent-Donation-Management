@@ -9,8 +9,28 @@ import 'package:ration_aid/screens/Donor/profile_setup_screen.dart';
 import 'package:ration_aid/screens/purchaser_dashboard.dart';
 import 'package:ration_aid/screens/volunteer_dashboard.dart';
 
-class DashboardRouter extends StatelessWidget {
+class DashboardRouter extends StatefulWidget {
   const DashboardRouter({super.key});
+
+  @override
+  State<DashboardRouter> createState() => _DashboardRouterState();
+}
+
+class _DashboardRouterState extends State<DashboardRouter> {
+  Future<DocumentSnapshot>? _userFuture;
+  User? _currentUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentUser = FirebaseAuth.instance.currentUser;
+    if (_currentUser != null) {
+      _userFuture = FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUser!.uid)
+          .get();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,12 +41,18 @@ class DashboardRouter extends StatelessWidget {
       return const AuthScreen();
     }
 
-    // Fetch user data from Firestore and route based on role
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance
+    // Refresh future if user changed (unlikely here but safe)
+    if (_currentUser?.uid != user.uid) {
+      _currentUser = user;
+      _userFuture = FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
-          .get(),
+          .get();
+    }
+
+    // Fetch user data from Firestore and route based on role
+    return FutureBuilder<DocumentSnapshot>(
+      future: _userFuture,
       builder: (context, snapshot) {
         // Loading state
         if (snapshot.connectionState == ConnectionState.waiting) {

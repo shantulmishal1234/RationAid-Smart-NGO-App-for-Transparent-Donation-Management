@@ -527,6 +527,19 @@ class _PackFormDialogState extends State<PackFormDialog> {
     final nameController = TextEditingController();
     final quantityController = TextEditingController();
     final costController = TextEditingController();
+    String selectedUnit = 'kg';
+
+    const unitOptions = [
+      'kg',
+      'g',
+      'L',
+      'mL',
+      'pcs',
+      'bars',
+      'packets',
+      'bottles',
+      'pairs',
+    ];
 
     showDialog(
       context: context,
@@ -547,78 +560,131 @@ class _PackFormDialogState extends State<PackFormDialog> {
               'Add Item',
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Remaining budget info
-                if (budget > 0)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: wouldOverflow
-                          ? Colors.red.withValues(alpha: 0.08)
-                          : Colors.green.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Remaining budget info
+                  if (budget > 0)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
                         color: wouldOverflow
-                            ? Colors.red.withValues(alpha: 0.3)
-                            : Colors.green.withValues(alpha: 0.3),
+                            ? Colors.red.withValues(alpha: 0.08)
+                            : Colors.green.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: wouldOverflow
+                              ? Colors.red.withValues(alpha: 0.3)
+                              : Colors.green.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Text(
+                        wouldOverflow
+                            ? '⚠  This item exceeds remaining budget of PKR ${remaining.toStringAsFixed(0)}'
+                            : '💰  PKR ${remaining.toStringAsFixed(0)} remaining of PKR ${budget.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: wouldOverflow ? Colors.red : Colors.green[700],
+                        ),
                       ),
                     ),
-                    child: Text(
-                      wouldOverflow
-                          ? '⚠  This item exceeds remaining budget of PKR ${remaining.toStringAsFixed(0)}'
-                          : '💰  PKR ${remaining.toStringAsFixed(0)} remaining of PKR ${budget.toStringAsFixed(0)}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: wouldOverflow ? Colors.red : Colors.green[700],
+                  if (budget > 0) const SizedBox(height: 12),
+                  // ── Item Name ──
+                  TextField(
+                    controller: nameController,
+                    decoration: InputDecoration(
+                      labelText: 'Item Name (e.g., Lemonmax Dish Soap)',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
+                      isDense: true,
                     ),
+                    textCapitalization: TextCapitalization.words,
                   ),
-                if (budget > 0) const SizedBox(height: 12),
-                TextField(
-                  controller: nameController,
-                  decoration: InputDecoration(
-                    labelText: 'Item Name (e.g., Lemonmax Dish Soap)',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
+                  const SizedBox(height: 12),
+                  // ── Quantity (numeric) + Unit dropdown side by side ──
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: TextField(
+                          controller: quantityController,
+                          decoration: InputDecoration(
+                            labelText: 'Qty',
+                            hintText: 'e.g. 3.5',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            isDense: true,
+                          ),
+                          // Allow decimals but block non-numeric chars
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                            signed: false,
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'^\d*\.?\d*'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: DropdownButtonFormField<String>(
+                          value: selectedUnit,
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText: 'Unit',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 12,
+                            ),
+                          ),
+                          items: unitOptions
+                              .map(
+                                (u) =>
+                                    DropdownMenuItem(value: u, child: Text(u)),
+                              )
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null)
+                              dialogSetState(() => selectedUnit = v);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // ── Estimated Cost ──
+                  TextField(
+                    controller: costController,
+                    decoration: InputDecoration(
+                      labelText: 'Estimated Cost (PKR)',
+                      prefixText: 'PKR ',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      isDense: true,
                     ),
-                    isDense: true,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onChanged: (_) => dialogSetState(() {}),
                   ),
-                  textCapitalization: TextCapitalization.words,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: quantityController,
-                  decoration: InputDecoration(
-                    labelText: 'Quantity (e.g., 2 kg / 1 pc)',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: costController,
-                  decoration: InputDecoration(
-                    labelText: 'Estimated Cost (PKR)',
-                    prefixText: 'PKR ',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    isDense: true,
-                  ),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  onChanged: (_) => dialogSetState(() {}),
-                ),
-              ],
+                ],
+              ),
             ),
             actions: [
               TextButton(
@@ -627,14 +693,19 @@ class _PackFormDialogState extends State<PackFormDialog> {
               ),
               ElevatedButton(
                 onPressed: () {
+                  final parsedQty = double.tryParse(
+                    quantityController.text.trim(),
+                  );
                   if (nameController.text.isNotEmpty &&
-                      quantityController.text.isNotEmpty &&
+                      parsedQty != null &&
+                      parsedQty > 0 &&
                       costController.text.isNotEmpty) {
                     setState(() {
                       _items.add(
                         PackItem(
                           name: nameController.text.trim(),
-                          quantity: quantityController.text.trim(),
+                          quantityNum: parsedQty,
+                          unit: selectedUnit,
                           estimatedCost: double.parse(costController.text),
                         ),
                       );

@@ -209,12 +209,9 @@ class AssistancePackService {
 
       final Map<String, num> packNeeds = {};
       for (var item in matchingPack.items) {
-        // Extract leading decimal number: "3.5 kg" → 3.5, "5 kg" → 5
-        final qtyMatch = RegExp(r'[\d.]+').firstMatch(item.quantity);
-        final num qty = qtyMatch != null
-            ? (double.tryParse(qtyMatch.group(0)!) ?? 1.0)
-            : 1;
-        packNeeds[item.name] = qty;
+        // Use the precise numeric quantity stored in the model directly
+        // (no regex parsing — eliminates the '35 kg vs 3.5 kg' bug)
+        packNeeds[item.name] = item.quantityNum;
       }
 
       await _firestore.collection('families').doc(familyId).update({

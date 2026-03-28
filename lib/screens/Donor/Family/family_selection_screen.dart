@@ -167,7 +167,10 @@ class _FamilySelectionCard extends StatelessWidget {
       elevation: 2,
       child: InkWell(
         // Fix #9 — disable based on server-confirmed fundingStatus
-        onTap: (family.fundingStatus == 'fully_funded') ? null : onSelect,
+        onTap:
+            (family.fundingStatus == 'fully_funded' && family.targetAmount > 0)
+            ? null
+            : onSelect,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -297,7 +300,9 @@ class _FamilySelectionCard extends StatelessWidget {
                             (family.combinedFundingPercent * 100)
                                 .clamp(0.0, 100.0)
                                 .toInt();
-                        final isFull = family.fundingStatus == 'fully_funded';
+                        final isFull =
+                            family.fundingStatus == 'fully_funded' &&
+                            family.targetAmount > 0;
                         return Text(
                           isFull ? '✓ Fully Funded' : '$verifiedPct% Completed',
                           style: TextStyle(
@@ -310,14 +315,13 @@ class _FamilySelectionCard extends StatelessWidget {
                     ),
                     Builder(
                       builder: (context) {
-                        final raisedStr = family.raisedAmount.toStringAsFixed(
-                          0,
-                        );
+                        final progressStr = family.combinedProgress
+                            .toStringAsFixed(0);
                         final targetStr = family.targetAmount.toStringAsFixed(
                           0,
                         );
                         return Text(
-                          'PKR $raisedStr / $targetStr',
+                          'PKR $progressStr / $targetStr',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -360,7 +364,8 @@ class _TwoTierProgressBar extends StatelessWidget {
         ? Colors.grey[800]!
         : Colors.grey[200]!;
 
-    final isFull = family.fundingStatus == 'fully_funded';
+    final isFull =
+        family.fundingStatus == 'fully_funded' && family.targetAmount > 0;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(4),
