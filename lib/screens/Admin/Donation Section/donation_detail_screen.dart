@@ -749,45 +749,78 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
               displayValue = itemsSummary.isEmpty ? 'Reserved' : itemsSummary;
             }
 
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8.0, left: 4.0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 2.0),
-                    child: Icon(
-                      Icons.check_circle,
-                      size: 14,
-                      color: AppColors.donorGreen,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    isGrf ? 'GRF Pool  ' : 'Family $shortId...',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      displayValue,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                        color: donation.donationType == DonationType.cash
-                            ? AppColors.donorGreen
-                            : Colors.teal,
+            return FutureBuilder<DocumentSnapshot>(
+              // Don't fetch if it's GRF
+              future: isGrf ? null : FirebaseFirestore.instance.collection('families').doc(fId).get(),
+              builder: (context, snapshot) {
+                String familyName = 'Family $shortId...';
+                if (isGrf) {
+                  familyName = 'GRF Pool';
+                } else if (snapshot.hasData && snapshot.data!.exists) {
+                  try {
+                    final family = Family.fromFirestore(snapshot.data!);
+                    final name = family.name?.isNotEmpty == true 
+                        ? family.name! 
+                        : (family.husbandName?.isNotEmpty == true ? family.husbandName! : 'Family');
+                    final addr = family.address?.isNotEmpty == true 
+                        ? family.address! 
+                        : family.area;
+                    familyName = '$name\n$addr';
+                  } catch (e) {
+                    // Fallback to ID if parsing fails
+                  }
+                } else if (snapshot.connectionState == ConnectionState.waiting) {
+                  familyName = 'Loading...';
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12.0, left: 4.0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 2.0),
+                        child: Icon(
+                          Icons.check_circle,
+                          size: 14,
+                          color: AppColors.donorGreen,
+                        ),
                       ),
-                      textAlign: TextAlign.right,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 5,
+                        child: Text(
+                          familyName,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            height: 1.3,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          displayValue,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: donation.donationType == DonationType.cash
+                                ? AppColors.donorGreen
+                                : Colors.teal,
+                          ),
+                          textAlign: TextAlign.right,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                );
+              },
             );
           }),
           if (donation.overflowAmount > 0)

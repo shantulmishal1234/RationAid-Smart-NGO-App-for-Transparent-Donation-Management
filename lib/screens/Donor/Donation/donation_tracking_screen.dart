@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/models/donation_model.dart';
+import 'package:ration_aid/models/family_model.dart';
 import 'package:ration_aid/services/donation_service.dart';
+import 'package:ration_aid/services/family_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:ration_aid/screens/Donor/widgets/donor_scaffold.dart';
@@ -1256,7 +1258,7 @@ class _DonationDetailsCard extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  Icons.attach_money,
+                  Icons.account_balance_wallet_outlined,
                   size: 20,
                   color: theme.colorScheme.onSurface,
                 ),
@@ -1320,24 +1322,64 @@ class _DonationDetailsCard extends StatelessWidget {
               final bool isPool =
                   familyId.isEmpty || familyId == 'general_relief_fund';
 
-              // Handle both direct family names and pool labels
-              String familyLabel;
+              Widget familyLabelWidget;
               if (isPool) {
-                familyLabel = 'NGO General Pool';
+                familyLabelWidget = const Text(
+                  'NGO General Pool',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                );
               } else {
                 final familyData = split['family'] as Map<String, dynamic>?;
-                final String area = familyData?['area'] as String? ?? 'Family';
-                final String name = familyData?['name'] as String? ?? '';
-                familyLabel = name.isNotEmpty
-                    ? '$name ($area)'
-                    : '$area Family';
+                final String area = familyData?['area'] as String? ?? '';
+                final String shortId = familyId.length > 5 ? familyId.substring(0, 5) : familyId;
+                
+                if (area.isNotEmpty) {
+                  familyLabelWidget = Text(
+                    '$area Family',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  );
+                } else {
+                  // Fallback: Fetch from database dynamically
+                  familyLabelWidget = FutureBuilder<Family?>(
+                    future: FamilyService().getFamilyById(familyId),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return Text(
+                          'Loading family...',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                          ),
+                        );
+                      }
+                      if (snapshot.hasData && snapshot.data != null) {
+                        return Text(
+                          '${snapshot.data!.area} Family',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        );
+                      }
+                      return Text(
+                        'Family $shortId...',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      );
+                    },
+                  );
+                }
               }
 
-              final Map<String, dynamic> splitItems =
-                  split['items'] as Map<String, dynamic>? ?? {};
-              final String itemsSummary = splitItems.entries
-                  .map((e) => '${e.value}kg ${e.key}')
-                  .join(', ');
+              String displayValue;
+              if (donation.donationType == DonationType.cash) {
+                final double amt = (split['amount'] as num?)?.toDouble() ?? 0.0;
+                displayValue = 'PKR ${amt.toStringAsFixed(0)}';
+              } else {
+                final Map<String, dynamic> splitItems =
+                    split['items'] as Map<String, dynamic>? ?? {};
+                final String itemsSummary = splitItems.entries
+                    .map((e) => '${e.value}kg ${e.key}')
+                    .join(', ');
+                displayValue = itemsSummary.isEmpty ? 'Reserved' : itemsSummary;
+              }
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
@@ -1354,16 +1396,10 @@ class _DonationDetailsCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      familyLabel,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
+                    familyLabelWidget,
                     const SizedBox(height: 4),
                     Text(
-                      itemsSummary,
+                      displayValue,
                       style: TextStyle(
                         fontSize: 12,
                         color: theme.colorScheme.onSurface.withValues(

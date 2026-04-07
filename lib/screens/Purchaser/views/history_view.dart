@@ -705,19 +705,15 @@ class _HistoryViewState extends State<HistoryView> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: request.status == ProcurementStatus.verified
-                          ? Colors.green.withValues(alpha: 0.1)
-                          : Colors.red.withValues(alpha: 0.1),
+                      color: _statusColor(request.status).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      request.status.toString().split('.').last.toUpperCase(),
+                      _statusLabel(request.status),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: request.status == ProcurementStatus.verified
-                            ? Colors.green
-                            : Colors.red,
+                        color: _statusColor(request.status),
                       ),
                     ),
                   ),
@@ -870,5 +866,47 @@ class _HistoryViewState extends State<HistoryView> {
         ),
       ),
     );
+  }
+
+  Color _statusColor(ProcurementStatus status) {
+    switch (status) {
+      case ProcurementStatus.verified:
+        return Colors.green;
+      case ProcurementStatus.stocked:
+        return Colors.teal;
+      case ProcurementStatus.in_transit:
+        return Colors.indigo;
+      case ProcurementStatus.delivered:
+        return Colors.purple;
+      case ProcurementStatus.rejected:
+        return Colors.red;
+      case ProcurementStatus.issue_reported:
+        return Colors.orange;
+      case ProcurementStatus.written_off:
+        return Colors.grey;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  String _statusLabel(ProcurementStatus status) {
+    switch (status) {
+      case ProcurementStatus.verified:
+        return 'Verified';
+      case ProcurementStatus.stocked:
+        return 'In Stock';
+      case ProcurementStatus.in_transit:
+        return 'In Transit';
+      case ProcurementStatus.delivered:
+        return 'Delivered';
+      case ProcurementStatus.rejected:
+        return 'Rejected';
+      case ProcurementStatus.issue_reported:
+        return 'Issue Reported';
+      case ProcurementStatus.written_off:
+        return 'Written Off';
+      default:
+        return status.toString().split('.').last;
+    }
   }
 }

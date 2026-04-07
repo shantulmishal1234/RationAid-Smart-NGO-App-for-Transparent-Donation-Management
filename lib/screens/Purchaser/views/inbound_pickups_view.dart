@@ -335,34 +335,55 @@ class InboundPickupsView extends StatelessWidget {
               // CTA
               Align(
                 alignment: Alignment.centerRight,
-                child: ElevatedButton.icon(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => InboundPickupDetailScreen(pickup: pickup),
+                child: () {
+                  // Fix #18: Disable for in_progress tasks assigned to someone else
+                  final isTakenByOther =
+                      pickup.status == 'in_progress' && !isMyTask;
+                  return ElevatedButton.icon(
+                    onPressed: isTakenByOther
+                        ? null // Disabled — already being handled
+                        : () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    InboundPickupDetailScreen(pickup: pickup),
+                              ),
+                            ),
+                    icon: Icon(
+                      isTakenByOther
+                          ? Icons.lock_outline
+                          : Icons.open_in_new,
+                      size: 16,
                     ),
-                  ),
-                  icon: const Icon(Icons.open_in_new, size: 16),
-                  label: Text(isMyTask ? 'Continue Pickup' : 'View & Accept'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isMyTask
-                        ? Colors.orange
-                        : AppColors.purchaserOrange,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
+                    label: Text(
+                      isTakenByOther
+                          ? 'In Progress by Another'
+                          : (isMyTask ? 'Continue Pickup' : 'View & Accept'),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isTakenByOther
+                          ? Colors.grey[300]
+                          : (isMyTask
+                              ? Colors.orange
+                              : AppColors.purchaserOrange),
+                      foregroundColor: isTakenByOther
+                          ? Colors.grey[600]
+                          : Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      textStyle: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                      elevation: 0,
                     ),
-                    textStyle: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                    elevation: 0,
-                  ),
-                ),
+                  );
+                }(),
               ),
             ],
           ),

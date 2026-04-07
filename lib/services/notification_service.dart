@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+
 class NotificationService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -115,6 +116,26 @@ class NotificationService {
           '$purchaserName submitted a purchase for "$packName". Verify now.',
       type: 'purchase_verification',
       relatedId: requestId,
+    );
+  }
+
+  /// Send notification when GRF Pool sweeps variance (Surplus/Deficit)
+  static Future<void> notifyAdminGRFSweep({
+    required double amount,
+    required bool isSurplus,
+    required String packName,
+  }) async {
+    final title =
+        isSurplus ? 'GRF Surplus Recovered 💰' : 'GRF Inflation Subsidy 📉';
+    final message = isSurplus
+        ? 'Successfully swept PKR ${amount.toStringAsFixed(0)} back to GRF Pool from $packName budget.'
+        : 'Deducted PKR ${amount.toStringAsFixed(0)} from GRF Pool to cover inflation deficit for $packName.';
+
+    await sendAdminNotification(
+      title: title,
+      message: message,
+      type: 'grf_audit',
+      relatedId: 'general_relief_fund',
     );
   }
 
@@ -262,6 +283,99 @@ class NotificationService {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // DONOR NOTIFICATIONS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Send a direct notification to a Donor
+  static Future<void> sendDonorNotification({
+    required String userId,
+    required String title,
+    required String message,
+    String? actionType,
+    String? actionId,
+  }) async {
+    try {
+      await _firestore.collection('notifications').add({
+        'userId': userId,
+        'role': 'donor',
+        'title': title,
+        'message': message,
+        'actionType': actionType,
+        'actionId': actionId,
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+      });
+    } catch (e) {
+      print('Error sending donor notification: $e');
+    }
+  }
+
+  /// Get unread notification count for a specific Donor
+  static Stream<int> getDonorUnreadCountStream(String userId) {
+    return _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .where('isRead', isEqualTo: false)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // DISTRIBUTOR NOTIFICATIONS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Send a direct notification to a specific Distributor
+  static Future<void> sendDistributorNotification({
+    required String userId,
+    required String title,
+    required String message,
+    String? actionType,
+    String? actionId,
+  }) async {
+    try {
+      await _firestore.collection('notifications').add({
+        'userId': userId,
+        'role': 'distributor',
+        'title': title,
+        'message': message,
+        'actionType': actionType,
+        'actionId': actionId,
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+      });
+    } catch (e) {
+      print('Error sending distributor notification: $e');
+    }
+  }
+
+  /// Broadcast a notification to ALL Distributors (e.g. new pool delivery)
+  static Future<void> notifyAllDistributors({
+    required String title,
+    required String message,
+    String? actionType,
+    String? actionId,
+  }) async {
+    try {
+      await _firestore.collection('notifications').add({
+        'userId': 'all_distributors',
+        'role': 'distributor',
+        'title': title,
+        'message': message,
+        'actionType': actionType,
+        'actionId': actionId,
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+      });
+    } catch (e) {
+      print('Error sending distributor broadcast: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PURCHASER NOTIFICATIONS (Issue)
+  // ─────────────────────────────────────────────────────────────────────────
+
   /// Send notification when Purchaser reports an issue
   static Future<void> notifyIssueReported({
     required String requestId,
@@ -288,20 +402,20 @@ class NotificationService {
         .map((snapshot) => snapshot.docs.length);
   }
 
-  /// Stream notifications for Distributor role
+  /// Stream notifications for Distributor role (direct + pool broadcasts)
   static Stream<QuerySnapshot> streamDistributorNotifications(String userId) {
     return _firestore
         .collection('notifications')
-        .where('userId', isEqualTo: userId)
+        .where('userId', whereIn: [userId, 'all_distributors'])
         .orderBy('createdAt', descending: true)
         .snapshots();
   }
 
-  /// Get unread count for Distributor
+  /// Get unread count for Distributor (direct + pool broadcasts)
   static Stream<int> getDistributorUnreadCountStream(String userId) {
     return _firestore
         .collection('notifications')
-        .where('userId', isEqualTo: userId)
+        .where('userId', whereIn: [userId, 'all_distributors'])
         .where('isRead', isEqualTo: false)
         .snapshots()
         .map((snapshot) => snapshot.docs.length);

@@ -156,7 +156,9 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
                 const SizedBox(height: 16),
 
                 // Family / Impact Information
-                if (donation.allocationMode == 'smart' &&
+                if (donation.allocationMode == 'displaced_to_grf') ...[
+                  _DisplacedToGrfCard(donation: donation),
+                ] else if (donation.allocationMode == 'smart' &&
                     donation.smartSplits != null &&
                     donation.smartSplits!.isNotEmpty)
                   _ImpactBreakdownCard(donation: donation)
@@ -339,7 +341,28 @@ class _StatusTimelineCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            if (donation.allocationMode == 'smart') ...[
+            if (donation.allocationMode == 'displaced_to_grf') ...[  
+              _buildTimelineItem(
+                context,
+                'Submitted',
+                true,
+                isActive: false,
+              ),
+              _buildTimelineItem(
+                context,
+                'Verified by Admin',
+                true,
+                isActive: false,
+              ),
+              _buildTimelineItem(
+                context,
+                '✅ Redirected to Relief Pool',
+                true,
+                isActive: true,
+                isLast: true,
+                color: Colors.teal,
+              ),
+            ] else if (donation.allocationMode == 'smart') ...[
               _buildTimelineItem(
                 context,
                 'Draft',
@@ -881,6 +904,50 @@ class _ImpactBreakdownCard extends StatelessWidget {
                 displayValue = itemsSummary.isEmpty ? 'Reserved' : itemsSummary;
               }
 
+              Widget familyLabelWidget;
+              if (isGrf) {
+                familyLabelWidget = const Text(
+                  'GRF Pool (Pending Assignment)',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                );
+              } else {
+                final familyData = split['family'] as Map<String, dynamic>?;
+                final String area = familyData?['area'] as String? ?? '';
+                
+                if (area.isNotEmpty) {
+                  familyLabelWidget = Text(
+                    '$area Family',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  );
+                } else {
+                  familyLabelWidget = FutureBuilder<Family?>(
+                    future: FamilyService().getFamilyById(fId),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return Text(
+                          'Loading...',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                          ),
+                        );
+                      }
+                      if (snapshot.hasData && snapshot.data != null) {
+                        return Text(
+                          '${snapshot.data!.area} Family',
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        );
+                      }
+                      return Text(
+                        'Family $shortId...',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      );
+                    },
+                  );
+                }
+              }
+
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: Row(
@@ -908,15 +975,7 @@ class _ImpactBreakdownCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            isGrf
-                                ? 'GRF Pool (Pending Assignment)'
-                                : 'Family $shortId...',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                            ),
-                          ),
+                          familyLabelWidget,
                           const SizedBox(height: 4),
                           Text(
                             displayValue,
@@ -934,6 +993,91 @@ class _ImpactBreakdownCard extends StatelessWidget {
                 ),
               );
             }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Card shown when a cash donation was displaced to GRF because an In-Kind
+/// donation covered the family's physical needs. Gives the donor a clear,
+/// reassuring explanation of what happened to their money.
+class _DisplacedToGrfCard extends StatelessWidget {
+  final Donation donation;
+  const _DisplacedToGrfCard({required this.donation});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final displaced = donation.displacedAmount;
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: Colors.teal.withValues(alpha: 0.08),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.volunteer_activism,
+                    color: Colors.teal,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Your Donation Is Helping Even More!',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.teal[700],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Another donor provided the family with physical groceries, '
+              'covering their immediate food needs directly.\n\n'
+              'As a result, your '
+              '${displaced > 0 ? 'PKR ${displaced.toStringAsFixed(0)}' : 'contribution'} '
+              'has been redirected to our General Relief Pool, '
+              'where it will be used for the next family in need.\n\n'
+              'Nothing is ever wasted — your generosity continues to create impact.',
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.5,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.teal.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '\uD83C\uDFDB Redirected to General Relief Pool',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.teal[700],
+                ),
+              ),
+            ),
           ],
         ),
       ),

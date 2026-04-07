@@ -286,7 +286,7 @@ class _AdminGRFAllocationSheetState extends State<_AdminGRFAllocationSheet> {
             .toDouble();
     if (target <= 0) return 0.0;
 
-    final raised = (data['raisedAmount'] as num? ?? 0).toDouble();
+    final raised = (data['combinedProgress'] as num? ?? data['raisedAmount'] as num? ?? 0).toDouble();
     return (raised / target) *
         100.0; // Higher completion % = higher priority to quick-close
   }
@@ -453,7 +453,7 @@ class _AdminGRFAllocationSheetState extends State<_AdminGRFAllocationSheet> {
                       ((data['assignedPackBudget'] ?? data['targetAmount'] ?? 0)
                               as num)
                           .toDouble();
-                  final raised = (data['raisedAmount'] as num? ?? 0).toDouble();
+                  final raised = (data['combinedProgress'] as num? ?? data['raisedAmount'] as num? ?? 0).toDouble();
 
                   // Filter out fully funded families to save time
                   if (target <= 0 || raised >= target) return false;
@@ -508,7 +508,7 @@ class _AdminGRFAllocationSheetState extends State<_AdminGRFAllocationSheet> {
                                     0)
                                 as num)
                             .toDouble();
-                    final raised = (data['raisedAmount'] as num? ?? 0)
+                    final raised = (data['combinedProgress'] as num? ?? data['raisedAmount'] as num? ?? 0)
                         .toDouble();
                     final gap = target - raised;
                     final progress = (raised / target).clamp(0.0, 1.0);

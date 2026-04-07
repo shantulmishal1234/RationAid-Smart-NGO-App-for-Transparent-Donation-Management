@@ -340,12 +340,9 @@ class Family {
       emergencyNote: data['emergencyNote']?.toString(),
       fundingStatus: data['fundingStatus']?.toString() ?? 'pending',
       // In-Kind Tracking (safe defaults — 0 for legacy docs without these fields)
-      inKindValue: (num.tryParse(data['inKindValue']?.toString() ?? '0') ?? 0)
-          .toDouble(),
+      inKindValue: (num.tryParse(data['inKindValue']?.toString() ?? '0') ?? 0).toDouble(),
       combinedProgress:
-          (num.tryParse(data['combinedProgress']?.toString() ?? '0') ??
-                  num.tryParse(data['raisedAmount']?.toString() ?? '0') ??
-                  0)
+          (num.tryParse(data['combinedProgress']?.toString() ?? data['raisedAmount']?.toString() ?? '0') ?? 0)
               .toDouble(),
     );
   }

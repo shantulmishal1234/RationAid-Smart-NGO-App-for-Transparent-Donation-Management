@@ -249,20 +249,29 @@ class _PurchaserHomeViewState extends State<PurchaserHomeView> {
       return r.status == ProcurementStatus.rejected || isPendingOld;
     }).toList();
 
-    // Financial Logic (Monthly)
+    // Financial Logic (Current Calendar Month only)
     final now = DateTime.now();
-    final verifiedRequests = requests.where(
-      (r) =>
+    final monthStart = DateTime(now.year, now.month, 1);
+    final monthEnd = DateTime(now.year, now.month + 1, 1);
+
+    final verifiedRequests = requests.where((r) {
+      // Only count post-purchase positive statuses
+      final isPostPurchase =
+          r.status == ProcurementStatus.purchased ||
           r.status == ProcurementStatus.verified ||
-          r.status == ProcurementStatus.purchased,
-    ); // Purchased also counts as committed
+          r.status == ProcurementStatus.stocked ||
+          r.status == ProcurementStatus.in_transit ||
+          r.status == ProcurementStatus.delivered;
+      if (!isPostPurchase) return false;
+      // Scope to current month using verifiedAt if set, else createdAt
+      final dateToCheck = r.verifiedAt ?? r.createdAt;
+      return dateToCheck.isAfter(
+            monthStart.subtract(const Duration(seconds: 1)),
+          ) &&
+          dateToCheck.isBefore(monthEnd);
+    });
+
     final monthlySpent = verifiedRequests
-        .where(
-          (r) =>
-              r.purchasedAt != null &&
-              r.purchasedAt!.month == now.month &&
-              r.purchasedAt!.year == now.year,
-        )
         .fold<double>(0, (sum, r) => sum + r.totalSpent);
 
     return Column(
@@ -413,12 +422,12 @@ class _PurchaserHomeViewState extends State<PurchaserHomeView> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Includes pending approvals + verified purchases.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.disabledColor,
-                  fontSize: 10,
+                  'Purchases verified this month.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.disabledColor,
+                    fontSize: 10,
+                  ),
                 ),
-              ),
             ],
           ),
         ),

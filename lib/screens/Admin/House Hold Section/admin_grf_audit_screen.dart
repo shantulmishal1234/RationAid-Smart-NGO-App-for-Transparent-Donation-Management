@@ -18,11 +18,46 @@ class _AdminGRFAuditScreenState extends State<AdminGRFAuditScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isExporting = false;
+  bool _statsLoading = true;
+  double _totalIn = 0;
+  double _totalOut = 0;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _loadAggregateStats();
+  }
+
+  Future<void> _loadAggregateStats() async {
+    try {
+      // 1. Fetch only GRF Outgoing allocations explicitly to isolate from global distributions
+      final outgoingSnap = await FirebaseFirestore.instance
+          .collection('donations')
+          .where('isGrfAllocation', isEqualTo: true)
+          .get();
+
+      double realTotalOut = 0;
+      for (var doc in outgoingSnap.docs) {
+        realTotalOut += (doc.data()['amount'] as num?)?.toDouble() ?? 0.0;
+      }
+
+      // 2. Mathematically pure derivation:
+      // Since `widget.currentBalance` is the true realtime GRF reserve:
+      // Balance = Total_In - Total_Out
+      // Total_In = Balance + Total_Out
+      double realTotalIn = widget.currentBalance + realTotalOut;
+
+      if (mounted) {
+        setState(() {
+          _totalOut = realTotalOut;
+          _totalIn = realTotalIn;
+          _statsLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _statsLoading = false);
+    }
   }
 
   @override
@@ -270,6 +305,7 @@ class _AdminGRFAuditScreenState extends State<AdminGRFAuditScreen>
                   Icons.arrow_downward_rounded,
                   AppColors.donorGreen,
                   'Total In',
+                  _statsLoading ? null : _totalIn,
                 ),
                 const SizedBox(width: 12),
                 _buildMiniStat(
@@ -277,6 +313,7 @@ class _AdminGRFAuditScreenState extends State<AdminGRFAuditScreen>
                   Icons.arrow_upward_rounded,
                   Colors.orange,
                   'Total Out',
+                  _statsLoading ? null : _totalOut,
                 ),
               ],
             ),
@@ -286,7 +323,7 @@ class _AdminGRFAuditScreenState extends State<AdminGRFAuditScreen>
     );
   }
 
-  Widget _buildMiniStat(String label, IconData icon, Color color, String sub) {
+  Widget _buildMiniStat(String label, IconData icon, Color color, String sub, [double? amount]) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -312,13 +349,28 @@ class _AdminGRFAuditScreenState extends State<AdminGRFAuditScreen>
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            if (amount != null)
+              Text(
+                'PKR ${amount.toStringAsFixed(0)}',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                ),
+              )
+            else
+              const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
             const SizedBox(height: 4),
             Text(
               sub,
               style: TextStyle(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.5),
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
               ),
@@ -421,25 +473,64 @@ class _AdminGRFAuditScreenState extends State<AdminGRFAuditScreen>
           itemBuilder: (context, index) {
             final data = displayDocs[index].data() as Map<String, dynamic>;
             final amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
-            final targetFamily =
-                data['familyId'] as String? ?? 'Unknown Family';
+            final targetFamilyId =
+                data['familyId'] as String? ?? 'Unknown';
             final note = data['donationNote'] as String? ?? 'No note';
             final adminUid = data['allocatedByUid'] as String? ?? 'System';
             final timestamp =
                 (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-            final idempotencyKey = data['idempotencyKey'] as String? ?? 'N/A';
+            final rawKey = data['idempotencyKey'] as String? ?? displayDocs[index].id;
+            final receiptKey = rawKey.length > 12 ? rawKey.substring(rawKey.length - 12) : rawKey;
 
-            return _ExpandableTransactionCard(
-              isIncoming: false,
-              amount: amount,
-              title: targetFamily,
-              date: _formatDate(timestamp),
-              details: [
-                _DetailRow('Admin ID', adminUid),
-                _DetailRow('Note', note),
-                _DetailRow('Receipt Key', idempotencyKey),
-                _DetailRow('Time', DateFormat('HH:mm:ss a').format(timestamp)),
-              ],
+            return FutureBuilder<List<DocumentSnapshot?>>(
+              future: Future.wait<DocumentSnapshot?>([
+                FirebaseFirestore.instance.collection('families').doc(targetFamilyId).get(),
+                if (adminUid != 'System' && adminUid.isNotEmpty)
+                  FirebaseFirestore.instance.collection('users').doc(adminUid).get()
+                else
+                  Future.value(null),
+              ]).catchError((_) => <DocumentSnapshot?>[]),
+              builder: (context, snapshot) {
+                String title = targetFamilyId;
+                String adminName = adminUid;
+                String addressDetail = '';
+
+                if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                  // Safely decode Family Name & Address
+                  final famSnap = snapshot.data![0];
+                  if (famSnap != null && famSnap.exists) {
+                    final fData = famSnap.data() as Map<String, dynamic>;
+                    title = fData['registeredName'] ?? fData['area'] ?? title;
+                    final area = fData['area'] as String? ?? '';
+                    final addr = fData['address'] as String? ?? '';
+                    final fullLoc = [area, addr].where((s) => s.trim().isNotEmpty).join(', ');
+                    if (fullLoc.isNotEmpty) addressDetail = fullLoc;
+                  }
+
+                  // Safely decode Admin Name
+                  if (snapshot.data!.length > 1) {
+                    final userSnap = snapshot.data![1];
+                    if (userSnap != null && userSnap.exists) {
+                      final uData = userSnap.data() as Map<String, dynamic>;
+                      adminName = uData['displayName'] ?? uData['name'] ?? uData['email'] ?? adminUid;
+                    }
+                  }
+                }
+
+                return _ExpandableTransactionCard(
+                  isIncoming: false,
+                  amount: amount,
+                  title: title,
+                  date: _formatDate(timestamp),
+                  details: [
+                    _DetailRow('Admin Name', adminName),
+                    if (addressDetail.isNotEmpty) _DetailRow('Location', addressDetail),
+                    _DetailRow('Note', note),
+                    _DetailRow('Receipt No.', receiptKey),
+                    _DetailRow('Time', DateFormat('HH:mm:ss a').format(timestamp)),
+                  ],
+                );
+              },
             );
           },
         );

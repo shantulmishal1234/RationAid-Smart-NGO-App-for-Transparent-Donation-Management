@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:ration_aid/models/procurement_model.dart';
 import 'package:ration_aid/services/procurement_service.dart';
@@ -43,9 +44,45 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
   }
 
   Future<void> _pickReceipt() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take a Photo'),
+              subtitle: const Text('Snap the receipt directly'),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from Gallery'),
+              subtitle: const Text('Select an existing image'),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
+    final pickedFile = await picker.pickImage(source: source);
     if (pickedFile != null) {
       setState(() {
         _receiptImage = File(pickedFile.path);
@@ -98,12 +135,15 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
 
       final receiptUrl = response.url!;
 
+      // Fix #31: Reload user before reading displayName to avoid stale name
       final user = FirebaseAuth.instance.currentUser;
+      await user?.reload();
+      final freshUser = FirebaseAuth.instance.currentUser;
 
       await ProcurementService.submitPurchase(
         requestId: widget.request.id,
-        purchaserId: user?.uid ?? 'unknown',
-        purchaserName: user?.displayName ?? 'Purchaser',
+        purchaserId: freshUser?.uid ?? 'unknown',
+        purchaserName: freshUser?.displayName ?? 'Purchaser',
         receiptUrl: receiptUrl,
         totalSpent: _totalSpent,
         updatedItems: _items,
@@ -246,7 +286,73 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+              
+              // In-Kind Covered Banner (Fully Covered Items)
+              if (widget.request.inKindCoveredItems.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.green.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.volunteer_activism, size: 20, color: Colors.green),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Provided by In-Kind Donations',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                color: Colors.green[800],
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'The following items are already in the warehouse and do not need to be purchased:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.green[800],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: widget.request.inKindCoveredItems.map((item) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              item,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.green[900],
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ),
 
               // Items Section Title
               Padding(
@@ -294,7 +400,7 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Qty: ${item.quantity}  •  Est: Rs. ${item.estimatedCost}',
+                                'Qty: ${item.quantityWithUnit}  •  Est: Rs. ${item.estimatedCost.toStringAsFixed(0)}',
                                 style: TextStyle(
                                   color: theme.colorScheme.onSurface.withValues(
                                     alpha: 0.5,
@@ -302,6 +408,24 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                                   fontSize: 12,
                                 ),
                               ),
+                              if (item.isInKindCovered)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4.0),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.info_outline, size: 12, color: Colors.blue),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Partially covered by warehouse',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.blue[700],
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -337,7 +461,10 @@ class _PurchaseEntryScreenState extends State<PurchaseEntryScreen> {
                                       vertical: 12,
                                     ),
                                   ),
-                                  keyboardType: TextInputType.number,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                                  ],
                                   onChanged: (val) {
                                     final cost = double.tryParse(val) ?? 0.0;
                                     _items[index] = item.copyWith(

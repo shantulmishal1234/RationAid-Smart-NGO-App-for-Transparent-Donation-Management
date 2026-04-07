@@ -41,12 +41,15 @@ class _DonorDashboardState extends State<DonorDashboard> {
         if (route != null) return route;
 
         // Default to main dashboard scaffold
-        return MaterialPageRoute(builder: (_) => _buildDashboardScaffold(user));
+        return MaterialPageRoute(
+          builder: (routeContext) =>
+              _buildDashboardScaffold(user, routeContext),
+        );
       },
     );
   }
 
-  Widget _buildDashboardScaffold(User? user) {
+  Widget _buildDashboardScaffold(User? user, BuildContext routeContext) {
     return DonorScaffold(
       title: 'Donor Dashboard',
       showBackButton: false,

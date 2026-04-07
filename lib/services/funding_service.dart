@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ration_aid/models/donation_model.dart';
 import 'package:ration_aid/models/master_ledger_model.dart';
 import 'package:ration_aid/services/allocation_service.dart';
+import 'package:ration_aid/services/notification_service.dart';
 
 import 'package:ration_aid/services/procurement_service.dart';
 
@@ -99,11 +100,18 @@ class FundingService {
         double remainingAmount = amount;
         smartSplits = [];
 
+        // ── PHASE 1: ALL READS (Firestore tx requires reads before writes) ──
+        final Map<String, DocumentSnapshot> familySnaps = {};
+        for (final fs in topFamilies) {
+          familySnaps[fs.familyId] = await tx.get(_familyRef(fs.familyId));
+        }
+
+        // ── PHASE 2: COMPUTE SPLITS + ALL WRITES ──────────────────────────
         for (final fs in topFamilies) {
           if (remainingAmount <= 0) break;
 
-          final familySnap = await tx.get(_familyRef(fs.familyId));
-          if (!familySnap.exists) continue;
+          final familySnap = familySnaps[fs.familyId];
+          if (familySnap == null || !familySnap.exists) continue;
 
           final familyData = familySnap.data() as Map<String, dynamic>;
           final double target =
@@ -112,8 +120,17 @@ class FundingService {
                           0)
                       as num)
                   .toDouble();
-          final double raised = (familyData['raisedAmount'] as num? ?? 0)
-              .toDouble();
+          // BUG FIX: Use combinedProgress (cash + in-kind) as the true raised amount.
+          // Previously only raisedAmount was used, causing over-allocation when a family
+          // already had in-kind donations that pushed combinedProgress above raisedAmount.
+          final double raised =
+              (num.tryParse(
+                        familyData['combinedProgress']?.toString() ??
+                            familyData['raisedAmount']?.toString() ??
+                            '0',
+                      ) ??
+                      0)
+                  .toDouble();
 
           // TOCTOU Guard: Evaluate live gap inside the atomic lock
           final double gap = (target - raised).clamp(0.0, double.infinity);
@@ -146,8 +163,14 @@ class FundingService {
                         0)
                     as num)
                 .toDouble();
-        final double raised = (familyData['raisedAmount'] as num? ?? 0)
-            .toDouble();
+        final double raised =
+            (num.tryParse(
+                      familyData['combinedProgress']?.toString() ??
+                          familyData['raisedAmount']?.toString() ??
+                          '0',
+                    ) ??
+                    0)
+                .toDouble();
         final double gap = (target - raised).clamp(0.0, double.infinity);
 
         effectiveAmount = min(amount, gap); // Hard cap — no overfunding
@@ -323,8 +346,11 @@ class FundingService {
           ((familyData['assignedPackBudget'] ?? familyData['targetAmount'] ?? 0)
                   as num)
               .toDouble();
-      final double raised = (familyData['raisedAmount'] as num? ?? 0)
-          .toDouble();
+      final double raised =
+          (familyData['combinedProgress'] as num? ??
+                  familyData['raisedAmount'] as num? ??
+                  0)
+              .toDouble();
       final double gap = (target - raised).clamp(0.0, double.infinity);
       final double effective = min(amount, gap); // never over-allocate
 
@@ -347,17 +373,18 @@ class FundingService {
         final isFull = target > 0 && (raised + effective) >= target;
         tx.update(_familyRef(targetFamilyId), {
           'raisedAmount': FieldValue.increment(effective),
+          'combinedProgress': FieldValue.increment(effective),
           'fundingStatus': isFull ? 'fully_funded' : 'partially_funded',
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
 
       // ── Update master ledger ─────────────────────────────────────────
-      tx.update(_masterLedgerRef, {
+      tx.set(_masterLedgerRef, {
         'totalAllocated': FieldValue.increment(effective),
         'generalPoolBalance': FieldValue.increment(-effective),
         'lastUpdated': FieldValue.serverTimestamp(),
-      });
+      }, SetOptions(merge: true));
 
       // ── Create verified pseudo-donation record ───────────────────────
       final donationRef = _db.collection('donations').doc();
@@ -498,8 +525,11 @@ class FundingService {
           ((srcData['assignedPackBudget'] ?? srcData['targetAmount'] ?? 0)
                   as num)
               .toDouble();
-      final double srcRaised = (srcData['raisedAmount'] as num? ?? 0)
-          .toDouble();
+      final double srcRaised =
+          (srcData['combinedProgress'] as num? ??
+                  srcData['raisedAmount'] as num? ??
+                  0)
+              .toDouble();
       final double srcSurplus = (srcRaised - srcTarget).clamp(
         0.0,
         double.infinity,
@@ -514,6 +544,7 @@ class FundingService {
       // ── Deduct from source ───────────────────────────────────────────
       tx.update(_familyRef(fromFamilyId), {
         'raisedAmount': FieldValue.increment(-amount),
+        'combinedProgress': FieldValue.increment(-amount),
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
@@ -538,13 +569,17 @@ class FundingService {
             ((destData['assignedPackBudget'] ?? destData['targetAmount'] ?? 0)
                     as num)
                 .toDouble();
-        final double destRaised = (destData['raisedAmount'] as num? ?? 0)
-            .toDouble();
+        final double destRaised =
+            (destData['combinedProgress'] as num? ??
+                    destData['raisedAmount'] as num? ??
+                    0)
+                .toDouble();
         final double newDestRaised = destRaised + amount;
         final bool destFull = destTarget > 0 && newDestRaised >= destTarget;
 
         tx.update(_familyRef(toFamilyId), {
           'raisedAmount': FieldValue.increment(amount),
+          'combinedProgress': FieldValue.increment(amount),
           'fundingStatus': destFull ? 'fully_funded' : 'partially_funded',
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -692,31 +727,11 @@ class FundingService {
       }
     }
     // ─────────────────────────────────────────────────────────────────────────
-
-    // ── Phase Overlap: Pre-fetch Potential Overlapped Cash Donors ──
-    // Fetch verified cash donors so we can seamlessly shift their surplus to GRF
-    // if this in-kind donation pushes the family over 100% funding.
-    List<DocumentSnapshot> overlapCandidates = [];
-    if (preType == 'inKind' &&
-        preFamilyId.isNotEmpty &&
-        preFamilyId != 'general_relief_fund') {
-      final overrideQuery = await _db
-          .collection('donations')
-          .where('familyId', isEqualTo: preFamilyId)
-          .where('donationType', isEqualTo: 'cash')
-          .where('status', isEqualTo: 'verified')
-          .get();
-
-      overlapCandidates = overrideQuery.docs;
-      // Sort LIFO (Newest first)
-      overlapCandidates.sort((a, b) {
-        final aMap = a.data() as Map<String, dynamic>? ?? {};
-        final bMap = b.data() as Map<String, dynamic>? ?? {};
-        final aTime = aMap['createdAt'] as Timestamp? ?? Timestamp.now();
-        final bTime = bMap['createdAt'] as Timestamp? ?? Timestamp.now();
-        return bTime.compareTo(aTime); // Descending
-      });
-    }
+    // NOTE: Cash Displacement (In-Kind Priority Rule) is handled AFTER the
+    // Purchaser marks items as collected — not here at verification time.
+    // See: performCashDisplacementIfNeeded(), called from recalculateFamilyFunding
+    // and applySmartSplitInKindFunding.
+    // ─────────────────────────────────────────────────────────────────────────
 
     await _db.runTransaction<void>((tx) async {
       // C3 — Read donation INSIDE tx for precondition check
@@ -766,13 +781,6 @@ class FundingService {
           if (sId.isEmpty || sId == 'general_relief_fund') continue;
           smartFamilySnaps[sId] = await tx.get(_familyRef(sId));
         }
-      }
-
-      // Read overlap candidates inside tx to ensure data integrity
-      List<DocumentSnapshot> freshOverlapCandidates = [];
-      for (final doc in overlapCandidates) {
-        final snap = await tx.get(doc.reference);
-        if (snap.exists) freshOverlapCandidates.add(snap);
       }
 
       // ── WRITES ───────────────────────────────────────────────────────
@@ -836,8 +844,11 @@ class FundingService {
           }
 
           if (donationType == 'cash') {
+            // Read 'amount' key (new format). Fall back to 'contribution' for legacy docs.
             final double splitAmt =
-                (num.tryParse(split['amount']?.toString() ?? '0') ?? 0)
+                (num.tryParse(split['amount']?.toString() ?? '') ??
+                        num.tryParse(split['contribution']?.toString() ?? '') ??
+                        0)
                     .toDouble();
             final sSnap = smartFamilySnaps[sId];
             if (sSnap != null && sSnap.exists && splitAmt > 0) {
@@ -863,8 +874,37 @@ class FundingService {
 
               tx.update(_familyRef(sId), {
                 'raisedAmount': FieldValue.increment(splitAmt),
+                'combinedProgress': FieldValue.increment(
+                  splitAmt,
+                ), // Bug fix: was missing
                 'pendingRaisedAmount': FieldValue.increment(-splitAmt),
                 'fundingStatus': newFundingStatus,
+                'updatedAt': FieldValue.serverTimestamp(),
+              });
+
+              // Increment global Master Ledger stats for successfully routed split cash
+              tx.set(_masterLedgerRef, {
+                'totalAllocated': FieldValue.increment(splitAmt),
+                'lastUpdated': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true));
+
+              // Bug Fix: Generate pseudo-donation for this specific slice so recalculateFamilyFunding finds it
+              final sliceRef = _db.collection('donations').doc();
+              tx.set(sliceRef, {
+                'donorId': donationData['donorId'] ?? 'smart_split_slice',
+                'donorName': donationData['donorName'] ?? 'Smart Give Donor',
+                'donorEmail': donationData['donorEmail'],
+                'familyId': sId,
+                'allocationMode': 'smart_split_slice',
+                'donationType': 'cash',
+                'amount': splitAmt,
+                'effectiveAmount': splitAmt,
+                'overflowAmount': 0,
+                'status': 'verified',
+                'anonymous': donationData['anonymous'] ?? false,
+                'isSmartSplitSlice': true,
+                'parentDonationId': donationId,
+                'createdAt': FieldValue.serverTimestamp(),
                 'updatedAt': FieldValue.serverTimestamp(),
               });
 
@@ -915,21 +955,35 @@ class FundingService {
         final double currentRaised =
             (num.tryParse(d['raisedAmount']?.toString() ?? '0') ?? 0)
                 .toDouble();
+        final double currentCombinedProgress =
+            (num.tryParse(d['combinedProgress']?.toString() ?? '0') ??
+                    currentRaised)
+                .toDouble();
 
         if (donationType == 'cash' && effectiveAmount > 0) {
           // 2. Move cash amount from pending → verified atomically
-          final double newRaised = currentRaised + effectiveAmount;
-          final bool isFull = target > 0 && newRaised >= target;
+          final double newCombinedProgress =
+              currentCombinedProgress + effectiveAmount;
+          final bool isFull = target > 0 && newCombinedProgress >= target;
           final String newFundingStatus = isFull
               ? 'fully_funded'
               : 'partially_funded';
 
           tx.update(_familyRef(familyId), {
             'raisedAmount': FieldValue.increment(effectiveAmount),
+            'combinedProgress': FieldValue.increment(
+              effectiveAmount,
+            ), // Bug fix: was missing
             'pendingRaisedAmount': FieldValue.increment(-effectiveAmount),
             'fundingStatus': newFundingStatus,
             'updatedAt': FieldValue.serverTimestamp(),
           });
+
+          // Bug fix: update master ledger totalAllocated for global funding stat
+          tx.set(_masterLedgerRef, {
+            'totalAllocated': FieldValue.increment(effectiveAmount),
+            'lastUpdated': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
 
           // P9 Fix — Set flag inside tx instead of post-tx read+trigger
           if (isFull &&
@@ -1036,6 +1090,25 @@ class FundingService {
       }
 
       await batch.commit();
+
+      // Notify the donor their in-kind pickup order has been created
+      if (preDonorId.isNotEmpty) {
+        await NotificationService.sendDonorNotification(
+          userId: preDonorId,
+          title: 'In-Kind Pickup Order Created ✅',
+          message:
+              'Your in-kind donation has been verified. Our team will coordinate pickup from your registered address.',
+          actionType: 'inkind_pickup_created',
+        );
+      }
+
+      // Notify the Purchaser pool about the new in-kind pickup order
+      await NotificationService.notifyAllPurchasers(
+        title: 'New In-Kind Pickup Order 📦',
+        message:
+            'A new in-kind donation awaits pickup from ${prePickupAddress.isNotEmpty ? prePickupAddress : 'donor address'}. Claim it in the Inbound Pickups section.',
+        actionType: 'inkind_pickup',
+      );
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1045,6 +1118,8 @@ class FundingService {
     // not a separate Firestore read, eliminating the TOCTOU window.
     for (final pId in procurementFamilyIds) {
       await ProcurementService.checkAndGenerateRequest(pId);
+      // Notify Admin that a family's funding is now complete
+      await NotificationService.notifyFullyFunded(pId);
     }
   }
 
@@ -1221,7 +1296,21 @@ class FundingService {
           combined >= target &&
           (d['fulfillmentStatus'] as String? ?? 'pending') == 'pending') {
         await ProcurementService.checkAndGenerateRequest(targetFamilyId);
+        // Notify Admin that the family is now fully funded
+        await NotificationService.notifyFullyFunded(targetFamilyId);
       }
+    }
+
+    // Notify the donor that their items have been assigned to a family
+    final donorId = stockData['donorId'] as String?;
+    if (donorId != null && donorId.isNotEmpty) {
+      await NotificationService.sendDonorNotification(
+        userId: donorId,
+        title: 'Your Donated Items Found a Family! 🙏',
+        message:
+            'Your in-kind donated items have been assigned and reserved for a family in need. Thank you for your generosity!',
+        actionType: 'inkind_pool_assigned',
+      );
     }
 
     // 6. Recalculate family funding for real-time dashboard sync
@@ -1396,6 +1485,172 @@ class FundingService {
         (d['fulfillmentStatus'] as String? ?? 'pending') == 'pending') {
       await ProcurementService.checkAndGenerateRequest(familyId);
     }
+
+    // Gap #5 Fix — After smart-split inKind credit, check if family is overfunded.
+    // If cash + inKind now exceeds target, displace surplus cash (LIFO) to GRF.
+    await performCashDisplacementIfNeeded(familyId: familyId);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // CASH DISPLACEMENT ENGINE — In-Kind Priority Rule (Gap #1 / #2 / #3 Fix)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Called AFTER in-kind monetary value is credited to a family
+  /// (either via recalculateFamilyFunding or applySmartSplitInKindFunding).
+  ///
+  /// If combinedProgress now exceeds the family target, surplus cash donations
+  /// (LIFO — newest first) are redirected to the General Relief Fund.
+  ///
+  /// Fixes:
+  ///   Gap #1 — implements the missing displacement execution loop.
+  ///   Gap #2 — fires AFTER monetary credit (collection), not at verification.
+  ///   Gap #3 — changes displaced donation familyId to 'general_relief_fund'
+  ///             so recalculateFamilyFunding never counts them again.
+  static Future<void> performCashDisplacementIfNeeded({
+    required String familyId,
+  }) async {
+    if (familyId.isEmpty || familyId == 'general_relief_fund') return;
+
+    // 1. Read current family state to check for overfunding
+    final famSnap = await _db.collection('families').doc(familyId).get();
+    if (!famSnap.exists) return;
+    final d = famSnap.data()!;
+
+    final double target =
+        (num.tryParse(
+                  (d['assignedPackBudget'] ?? d['targetAmount'] ?? 0)
+                      .toString(),
+                ) ??
+                0)
+            .toDouble();
+    final double combined =
+        (num.tryParse(d['combinedProgress']?.toString() ?? '0') ?? 0)
+            .toDouble();
+
+    if (target <= 0 || combined <= target)
+      return; // No overfunding — nothing to do
+
+    final double surplus = combined - target;
+
+    // 2. Fetch verified cash donations for this family, LIFO sorted (newest first)
+    final cashSnap = await _db
+        .collection('donations')
+        .where('familyId', isEqualTo: familyId)
+        .where('donationType', isEqualTo: 'cash')
+        .where('status', isEqualTo: 'verified')
+        .get();
+
+    if (cashSnap.docs.isEmpty) return;
+
+    // Sort LIFO — newest displaced first
+    final sortedDocs = List<DocumentSnapshot>.from(cashSnap.docs);
+    sortedDocs.sort((a, b) {
+      final aTime =
+          ((a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?) ??
+          Timestamp.now();
+      final bTime =
+          ((b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?) ??
+          Timestamp.now();
+      return bTime.compareTo(aTime);
+    });
+
+    double remaining = surplus;
+    final batch = _db.batch();
+    double totalActuallyDisplaced = 0.0;
+    final List<String> displacedDonationIds = [];
+
+    // 3. LIFO Displacement Loop — move surplus cash to GRF one donation at a time
+    for (final donDoc in sortedDocs) {
+      if (remaining <= 0) break;
+      final dd = donDoc.data() as Map<String, dynamic>;
+      final double effective =
+          (num.tryParse(dd['effectiveAmount']?.toString() ?? '0') ?? 0)
+              .toDouble();
+      if (effective <= 0) continue;
+
+      final double toDisplace = min(remaining, effective);
+      remaining -= toDisplace;
+      totalActuallyDisplaced += toDisplace;
+      displacedDonationIds.add(donDoc.id);
+
+      // Gap #3 Fix — change familyId to GRF so recalculateFamilyFunding
+      // won't include this donation in future family sums.
+      batch.update(donDoc.reference, {
+        'familyId': 'general_relief_fund',
+        'allocationMode': 'displaced_to_grf',
+        'displacedFromFamilyId': familyId,
+        'displacedAmount': toDisplace,
+        'displacedAt': FieldValue.serverTimestamp(),
+        'displacedReason':
+            'In-kind donation received; physical items cover family needs',
+        'updatedAt': FieldValue.serverTimestamp(),
+        'statusHistory': FieldValue.arrayUnion([
+          {
+            'status': 'displaced_to_grf',
+            'timestamp': Timestamp.now(),
+            'note':
+                'PKR ${toDisplace.toStringAsFixed(0)} redirected to General Relief Fund — '
+                'family needs covered by in-kind donation.',
+          },
+        ]),
+      });
+
+      // Gap #4 Fix — Notify the displaced donor
+      final donorId = dd['donorId'] as String? ?? '';
+      if (donorId.isNotEmpty) {
+        final notifRef = _db.collection('notifications').doc();
+        batch.set(notifRef, {
+          'userId': donorId,
+          'role': 'donor',
+          'type': 'cash_displaced_to_grf',
+          'title': '\u2705 Your donation is helping even more families!',
+          'body':
+              'The family you supported received physical groceries from another donor, '
+              'covering their immediate food needs. Your PKR ${toDisplace.toStringAsFixed(0)} '
+              'has been redirected to our General Relief Pool to support even more families. '
+              'Thank you for your generosity!',
+          'donationId': donDoc.id,
+          'displacedFromFamilyId': familyId,
+          'read': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
+    if (totalActuallyDisplaced <= 0) return;
+
+    // 4. Correct family financial fields
+    batch.update(_familyRef(familyId), {
+      'raisedAmount': FieldValue.increment(-totalActuallyDisplaced),
+      'combinedProgress': FieldValue.increment(-totalActuallyDisplaced),
+      'surplusAmount': 0.0,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // 5. Credit displaced amount to GRF
+    batch.set(_grfRef, {
+      'raisedAmount': FieldValue.increment(totalActuallyDisplaced),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    // Update master ledger general pool balance
+    batch.set(_masterLedgerRef, {
+      'generalPoolBalance': FieldValue.increment(totalActuallyDisplaced),
+      'lastUpdated': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    // Gap #6 Fix — Audit trail for displacement events
+    batch.set(_db.collection('master_ledger_audit').doc(), {
+      'action': 'cash_displacement',
+      'sourceFamilyId': familyId,
+      'targetFamilyId': 'general_relief_fund',
+      'totalDisplaced': totalActuallyDisplaced,
+      'displacedDonations': displacedDonationIds,
+      'reason': 'In-kind donation received; physical items cover family needs',
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
   }
 
   // ADMIN REPAIR TOOL — keep for reconciliation only
@@ -1600,6 +1855,17 @@ class FundingService {
           )
           .get();
 
+      // Fix #2: Include incoming and outgoing surplus `pool_transfers` in the calculation
+      final incomingTransfersSnap = await _db
+          .collection('pool_transfers')
+          .where('toFamilyId', isEqualTo: familyId)
+          .get();
+
+      final outgoingTransfersSnap = await _db
+          .collection('pool_transfers')
+          .where('fromFamilyId', isEqualTo: familyId)
+          .get();
+
       // ── Physical Needs Reconciliation ────────────────────────────────────
       final Map<String, num> baseNeeds = {};
       final Map<String, String> itemUnits = {};
@@ -1694,6 +1960,17 @@ class FundingService {
         }
       }
 
+      // Add incoming surplus transfers
+      for (var doc in incomingTransfersSnap.docs) {
+        raisedAmount += (doc.data()['amount'] as num?)?.toDouble() ?? 0;
+      }
+
+      // Subtract outgoing surplus transfers
+      for (var doc in outgoingTransfersSnap.docs) {
+        raisedAmount -= (doc.data()['amount'] as num?)?.toDouble() ?? 0;
+      }
+      if (raisedAmount < 0) raisedAmount = 0;
+
       // ── GRF Pool In-Kind Contribution ────────────────────────────────────
       // PROBLEM: donations donated to the GRF pool keep `familyId =
       // 'general_relief_fund'` on their donation doc. For partial batch splits,
@@ -1740,7 +2017,40 @@ class FundingService {
             }
           });
         }
+
+        // ── Smart-Split In-Kind Contribution ──────────────────────────────
+        // Smart-split donations use familyId='smart_allocation' on the donation
+        // doc, so the donations loop above never finds them. Their collected
+        // items live in warehouse_stock with familyId=<actualFamilyId>,
+        // isSmartSplit=true, status='received'.
+        // Without this query, recalculateFamilyFunding wipes out the
+        // inKindValue that applySmartSplitInKindFunding correctly set earlier.
+        final smartStockSnap = await _db
+            .collection('warehouse_stock')
+            .where('familyId', isEqualTo: familyId)
+            .where('isSmartSplit', isEqualTo: true)
+            .where('status', isEqualTo: 'received')
+            .get();
+
+        for (final stockDoc in smartStockSnap.docs) {
+          final sd = stockDoc.data();
+          final stockValue =
+              (sd['totalLockedValue'] ?? sd['lockedInKindValue'] ?? 0)
+                  .toDouble();
+          inKindValue += stockValue;
+
+          // Subtract smart-split items from the family's remaining needs.
+          final stockItems = Map<String, dynamic>.from(sd['items'] ?? {});
+          stockItems.forEach((item, qty) {
+            if (currentNeeds.containsKey(item)) {
+              currentNeeds[item] =
+                  (currentNeeds[item]! - (num.tryParse(qty.toString()) ?? 0))
+                      .clamp(0, double.infinity);
+            }
+          });
+        }
       }
+
 
       // Bug #3 fix: fundingStatus based on VERIFIED combined progress
       String fundingStatus = 'pending';
@@ -1781,6 +2091,9 @@ class FundingService {
             currentFulfillment == 'pending') {
           await ProcurementService.checkAndGenerateRequest(familyId);
         }
+        // Gap #1/#2 Fix — After recalculating, check if in-kind funding created
+        // a surplus over the target. If so, displace newest cash to GRF.
+        await performCashDisplacementIfNeeded(familyId: familyId);
       }
     } catch (e) {
       rethrow;

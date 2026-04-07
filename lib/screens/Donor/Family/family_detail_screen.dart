@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:ration_aid/models/family_model.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/screens/Donor/widgets/donor_scaffold.dart';
-import 'package:ration_aid/services/funding_service.dart';
 
 /// Family Detail Screen - View masked family information
 /// Uses StreamBuilder for real-time updates of needs and funding
@@ -20,9 +19,11 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
   @override
   void initState() {
     super.initState();
-    // SELF-HEALING: Recalculate family funding on load to ensure stale
-    // pendingNeeds/raisedAmount are resolved if data was wiped externally.
-    FundingService.recalculateFamilyFunding(widget.family.id);
+    // NOTE: Do NOT call recalculateFamilyFunding here.
+    // This screen uses a StreamBuilder (line 30) for real-time data.
+    // Calling recalculate on every navigation wipes inKindValue/combinedProgress
+    // back to 0 because it re-sums from donations — which may not yet reflect
+    // the stocked in-kind value that was set via FieldValue.increment paths.
   }
 
   @override
@@ -41,7 +42,10 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
         }
 
         final isFullyFunded =
+            updatedFamily.targetAmount > 0 &&
             (updatedFamily.totalFunded >= updatedFamily.targetAmount);
+        final isNeedsEmpty = updatedFamily.needs.isEmpty;
+        final isCompleted = isFullyFunded && isNeedsEmpty;
 
         return DonorScaffold(
           title: 'Family Details',
@@ -60,8 +64,9 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                     // 1. Hero Header
                     _buildHeroHeader(context, updatedFamily, isFullyFunded),
 
-                    // 2. Success Banner (if fully funded)
-                    if (isFullyFunded) _buildSuccessBanner(context),
+                    // 2. Success Banner (if fully funded or completed)
+                    if (isFullyFunded)
+                      _buildSuccessBanner(context, isCompleted),
 
                     const SizedBox(height: 16),
 
@@ -235,22 +240,31 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
   }
 
   // ─── SUCCESS BANNER ───────────────────────────────────────────────
-  Widget _buildSuccessBanner(BuildContext context) {
+  Widget _buildSuccessBanner(BuildContext context, bool isCompleted) {
     return Container(
       width: double.infinity,
-      color: Colors.green.shade600,
+      color: isCompleted ? Colors.green.shade700 : Colors.green.shade600,
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      child: const Row(
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
-          SizedBox(width: 8),
-          Text(
-            'This family has been fully supported. Thank you!',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
+          Icon(
+            isCompleted ? Icons.favorite : Icons.check_circle_outline,
+            color: Colors.white,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              isCompleted
+                  ? 'This family is fully supported and items delivered!'
+                  : 'Financial goal reached! Thank you for your support.',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+              textAlign: TextAlign.center,
             ),
           ),
         ],
@@ -685,7 +699,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
     final String buttonText = isCompleted
         ? 'Fully Supported'
         : isFullyFunded
-        ? 'Goal Reached (Pending Validation)'
+        ? 'Goal Reached'
         : (updatedFamily.raisedAmount > 0)
         ? 'Donate Remaining Amount'
         : 'Donate to this Family';
@@ -720,7 +734,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
           width: double.infinity,
           height: 56,
           child: ElevatedButton.icon(
-            onPressed: isCompleted
+            onPressed: isFullyFunded
                 ? null
                 : () {
                     Navigator.pushNamed(
@@ -729,17 +743,19 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
                       arguments: updatedFamily,
                     );
                   },
-            icon: Icon(isCompleted ? Icons.favorite : Icons.volunteer_activism),
+            icon: Icon(
+              isFullyFunded ? Icons.favorite : Icons.volunteer_activism,
+            ),
             label: Text(
               buttonText,
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: isCompleted
+              backgroundColor: isFullyFunded
                   ? Colors.grey.shade400
                   : AppColors.donorGreen,
               foregroundColor: Colors.white,
-              elevation: isCompleted ? 0 : 4,
+              elevation: isFullyFunded ? 0 : 4,
               shadowColor: AppColors.donorGreen.withValues(alpha: 0.4),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(28),

@@ -425,7 +425,7 @@ class _PackManagementScreenState extends State<PackManagementScreen> {
                   theme: theme,
                 ),
                 _infoChip(
-                  icon: Icons.attach_money,
+                  icon: Icons.account_balance_wallet_outlined,
                   label: 'PKR ${pack.budgetAmount.toStringAsFixed(0)}',
                   theme: theme,
                 ),

@@ -43,6 +43,8 @@ class AllocationService {
 
     for (final doc in snapshot.docs) {
       final data = doc.data();
+      if (doc.id == 'general_relief_fund') continue; // Do not rank the pool as a family
+      
       final fundingStatus = data['fundingStatus'] ?? 'pending';
       if (fundingStatus == 'fully_funded') continue; // Skip complete families
 
@@ -54,7 +56,7 @@ class AllocationService {
                   0)
               .toDouble();
       final double raised =
-          (num.tryParse(data['raisedAmount']?.toString() ?? '0') ?? 0)
+          (num.tryParse(data['combinedProgress']?.toString() ?? data['raisedAmount']?.toString() ?? '0') ?? 0)
               .toDouble();
 
       if (target <= 0) continue;
@@ -132,7 +134,7 @@ class AllocationService {
 
     for (final fs in top) {
       if (remaining <= 0) break;
-      final gap = (fs.family.targetAmount - fs.family.raisedAmount).clamp(
+      final gap = (fs.family.targetAmount - fs.family.combinedProgress).clamp(
         0.0,
         double.infinity,
       );
@@ -214,7 +216,7 @@ class AllocationService {
       if (target <= 0) continue;
 
       final double raised =
-          (num.tryParse(data['raisedAmount']?.toString() ?? '0') ?? 0)
+          (num.tryParse(data['combinedProgress']?.toString() ?? data['raisedAmount']?.toString() ?? '0') ?? 0)
               .toDouble();
       final double deficitRatio = (target - raised) / target;
       if (deficitRatio <= 0) continue;
@@ -431,7 +433,7 @@ class AllocationService {
 
       for (final fs in top) {
         if (grfBalance <= 0) break;
-        final gap = (fs.family.targetAmount - fs.family.raisedAmount).clamp(
+        final gap = (fs.family.targetAmount - fs.family.combinedProgress).clamp(
           0.0,
           double.infinity,
         );

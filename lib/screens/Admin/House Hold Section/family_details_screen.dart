@@ -1424,7 +1424,7 @@ class _FamilyDetailScreenState extends State<FamilyDetailScreen> {
               child: _buildCompactInfoItem(
                 'Income',
                 _formatCurrency(income),
-                Icons.attach_money,
+                Icons.account_balance_wallet_outlined,
               ),
             ),
           ],

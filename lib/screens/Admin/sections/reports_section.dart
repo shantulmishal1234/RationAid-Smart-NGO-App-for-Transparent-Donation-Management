@@ -4,6 +4,7 @@ import 'package:ration_aid/screens/Admin/widgets/report_card.dart';
 import 'package:ration_aid/screens/Admin/Reports&Analytics/hrm_report_screen.dart';
 import 'package:ration_aid/screens/Admin/Reports&Analytics/donations_report_screen.dart';
 import 'package:ration_aid/screens/Admin/Reports&Analytics/family_statistics_report_screen.dart';
+import 'package:ration_aid/screens/Admin/Reports&Analytics/purchasing_report_screen.dart';
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
 
 /// Reports section showing different report types
@@ -97,6 +98,20 @@ class ReportsSection extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                           builder: (_) => const FamilyStatisticsReportScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  ReportCard(
+                    icon: Icons.warehouse,
+                    title: 'Purchasing/Warehouse',
+                    description: 'Procurement spend and inventory',
+                    color: Colors.teal,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const PurchasingReportScreen(),
                         ),
                       );
                     },

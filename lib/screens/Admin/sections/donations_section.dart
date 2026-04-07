@@ -100,13 +100,29 @@ class _DonationsSectionState extends State<DonationsSection> {
                   collapsedShape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  title: Text(
-                    'Overview & Statistics',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-                    ),
+                  title: Row(
+                    children: [
+                      Text(
+                        'Overview & Statistics',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.refresh, size: 18),
+                        onPressed: () {
+                          setState(() {
+                            _loadOverview(forceRefresh: true);
+                          });
+                        },
+                        tooltip: 'Refresh Stats',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
                   ),
                   leading: Icon(
                     Icons.analytics_outlined,
@@ -566,8 +582,8 @@ class _DonationsSectionState extends State<DonationsSection> {
                           data['status'] ?? 'pending',
                         ),
                         assistanceType: assistanceType,
-                        onTap: () {
-                          Navigator.push(
+                        onTap: () async {
+                          await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => DonationDetailScreen(
@@ -576,6 +592,9 @@ class _DonationsSectionState extends State<DonationsSection> {
                               ),
                             ),
                           );
+                          setState(() {
+                            _loadOverview(forceRefresh: true);
+                          });
                         },
                       );
                     }

@@ -496,7 +496,9 @@ class _ProcurementViewState extends State<ProcurementView>
               children: [
                 Icon(Icons.check_circle, color: Colors.white, size: 18),
                 SizedBox(width: 8),
-                Text('Order claimed! Go to My Orders to submit purchase.'),
+                Expanded(
+                  child: Text('Order claimed! Go to My Orders to submit purchase.'),
+                ),
               ],
             ),
             backgroundColor: Colors.green,

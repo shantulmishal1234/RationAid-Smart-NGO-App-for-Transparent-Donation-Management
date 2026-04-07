@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
@@ -91,12 +92,27 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
     setState(() => _isUploading = true);
 
     try {
+      // 1. Fetch donor IDs linked to this family's verified/active donations
+      final donorSnap = await FirebaseFirestore.instance
+          .collection('donations')
+          .where('familyId', isEqualTo: widget.assignment.familyId)
+          .where('status', whereIn: ['verified', 'in_process', 'out_for_delivery'])
+          .get();
+          
+      final donorIds = donorSnap.docs
+          .map((d) => d.data()['donorId'] as String?)
+          .whereType<String>()
+          .toSet()
+          .toList();
+
+      // 2. Submit the proof
       await DeliveryService.submitProofOfDelivery(
         assignmentId: widget.assignment.id,
         familyId: widget.assignment.familyId,
         proofPhoto: _photo!,
         lat: _position?.latitude,
         lng: _position?.longitude,
+        donorIds: donorIds, // Fix #1: Now donors will actually get the notification!
       );
 
       if (mounted) {
@@ -109,21 +125,58 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
         Navigator.pop(context, true);
       }
     } catch (e) {
-      // Save offline for ANY failure (network, Cloudinary, Firestore timeout, etc.)
-      // The user can always manually choose to retry online
-      await _saveOffline();
+      final errStr = e.toString().toLowerCase();
+      final isNetworkError = errStr.contains('socket') || 
+                             errStr.contains('network') || 
+                             errStr.contains('host lookup') ||
+                             errStr.contains('timeout') ||
+                             errStr.contains('offline');
+                             
+      if (isNetworkError) {
+        // Save offline ONLY for connectivity/network related failures
+        await _saveOffline();
+      } else {
+        // Rethrow data/logic errors so the user knows what went wrong and it doesn't get stuck in the offline queue
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to submit proof: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
   }
 
   Future<void> _saveOffline() async {
+    // Attempt to grab donor IDs for offline sync later (fails silently if fully offline)
+    List<String> cachedDonorIds = [];
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('donations')
+          .where('familyId', isEqualTo: widget.assignment.familyId)
+          .where('status', whereIn: ['verified', 'in_process', 'out_for_delivery'])
+          .get(const GetOptions(source: Source.cache));
+          
+      cachedDonorIds = snap.docs
+          .map((d) => d.data()['donorId'] as String?)
+          .whereType<String>()
+          .toSet()
+          .toList();
+    } catch (_) {
+      // Ignore if cache read fails
+    }
+
     await DeliveryService.saveProofOffline(
       assignmentId: widget.assignment.id,
       familyId: widget.assignment.familyId,
       localPhotoPath: _photo!.path,
       lat: _position?.latitude,
       lng: _position?.longitude,
+      donorIds: cachedDonorIds,
     );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

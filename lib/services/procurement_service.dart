@@ -18,7 +18,7 @@ class ProcurementService {
       final familyDoc = await _firestore
           .collection('families')
           .doc(familyId)
-          .get();
+          .get(const GetOptions(source: Source.server));
       if (!familyDoc.exists) return;
 
       final family = Family.fromFirestore(familyDoc);
@@ -55,7 +55,7 @@ class ProcurementService {
             'status',
             whereIn: ['pending', 'purchased', 'verified', 'stocked'],
           )
-          .get();
+          .get(const GetOptions(source: Source.server));
 
       if (existingQuery.docs.isNotEmpty) return; // Already exists
 
@@ -70,7 +70,7 @@ class ProcurementService {
               'status',
               whereIn: ['pending_pickup', 'in_transit', 'received'],
             )
-            .get();
+            .get(const GetOptions(source: Source.server));
         for (final doc in stockSnaps.docs) {
           final data = doc.data();
           final batchItems = Map<String, dynamic>.from(
@@ -116,6 +116,7 @@ class ProcurementService {
 
         // Build a SMART item list — subtract what's already in warehouse
         final List<ProcurementItem> smartItems = [];
+        final List<String> coveredItems = []; // Fully covered by in-kind donations
         double smartBudget = 0.0;
 
         for (final item in pack.items) {
@@ -125,21 +126,25 @@ class ProcurementService {
           final needToBuy = rawQty - stocked;
 
           if (needToBuy <= 0) {
-            // Fully covered by in-kind donation — skip this item
+            // Fully covered by in-kind donation — skip but record for banner
+            coveredItems.add(item.name);
             debugPrint(
               '[Procurement] Skipping ${item.name} — already in warehouse ($stocked units)',
             );
             continue;
           }
 
-          // Partially or fully needed
+          // Partially or fully needed — determine if partially in-kind covered
+          final isPartiallyInKind = stocked > 0;
           final ratio = needToBuy / rawQty;
           final adjustedCost = item.estimatedCost * ratio;
           smartItems.add(
             ProcurementItem(
               name: item.name,
               quantity: needToBuy.toStringAsFixed(0),
+              unit: item.unit, // Pass unit from pack item
               estimatedCost: adjustedCost,
+              isInKindCovered: isPartiallyInKind,
             ),
           );
           smartBudget += adjustedCost;
@@ -211,6 +216,7 @@ class ProcurementService {
           budgetLimit: smartBudget,
           createdAt: DateTime.now(),
           status: ProcurementStatus.pending,
+          inKindCoveredItems: coveredItems,
         );
       }
 
@@ -265,6 +271,25 @@ class ProcurementService {
               .map((doc) => ProcurementRequest.fromFirestore(doc))
               .toList(),
         );
+  }
+
+  /// Notify Admin about stale warehouse stock (> 7 days without delivery)
+  static Future<void> notifyStaleWarehouseItems() async {
+    final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
+    final snap = await _firestore
+        .collection('warehouse_stock')
+        .where('status', whereIn: ['pending_pickup', 'received'])
+        .where('createdAt', isLessThan: Timestamp.fromDate(sevenDaysAgo))
+        .get();
+    
+    if (snap.docs.isNotEmpty) {
+      await NotificationService.sendAdminNotification(
+        title: 'Stale Warehouse Stock Alert ⚠️',
+        message:
+            '${snap.docs.length} warehouse item batch(es) have been waiting over 7 days with no delivery assignment.',
+        type: 'stale_stock',
+      );
+    }
   }
 
   /// Get ALL requests for filtering
@@ -336,10 +361,20 @@ class ProcurementService {
     String purchaserId,
     bool isSupervisor,
   ) {
+    // Expanded status list to include all post-purchase statuses
+    const statuses = [
+      'verified',
+      'stocked',
+      'in_transit',
+      'delivered',
+      'rejected',
+      'issue_reported',
+      'written_off',
+    ];
     if (isSupervisor) {
       return _firestore
           .collection(_collection)
-          .where('status', whereIn: ['verified', 'rejected', 'delivered'])
+          .where('status', whereIn: statuses)
           .orderBy('createdAt', descending: true)
           .snapshots()
           .map((s) => s.docs.map(ProcurementRequest.fromFirestore).toList());
@@ -347,7 +382,7 @@ class ProcurementService {
       return _firestore
           .collection(_collection)
           .where('purchaserId', isEqualTo: purchaserId)
-          .where('status', whereIn: ['verified', 'rejected', 'delivered'])
+          .where('status', whereIn: statuses)
           .orderBy('createdAt', descending: true)
           .snapshots()
           .map((s) => s.docs.map(ProcurementRequest.fromFirestore).toList());
@@ -397,6 +432,21 @@ class ProcurementService {
         entityId: requestId,
         details: '$purchaserName claimed the purchase order',
       );
+
+      // Notify Admin that an order has been claimed
+      final reqDoc = await ref.get();
+      if (reqDoc.exists) {
+        final familyArea = reqDoc.data()?['familyAddress'] ?? '';
+        final packName = reqDoc.data()?['packName'] ?? '';
+        await NotificationService.sendAdminNotification(
+          title: 'Purchase Order Claimed 👤',
+          message:
+              '$purchaserName claimed the "$packName" purchase order for $familyArea.',
+          type: 'order_claimed',
+          relatedId: requestId,
+        );
+      }
+
       return true;
     } catch (e) {
       if (e.toString().contains('already_claimed')) return false;
@@ -471,6 +521,19 @@ class ProcurementService {
     required String packName,
   }) async {
     try {
+      final doc = await _firestore.collection(_collection).doc(requestId).get();
+      if (!doc.exists) throw Exception('Purchase request not found');
+
+      final requestData = doc.data() as Map<String, dynamic>;
+      final budgetLimit = (requestData['budgetLimit'] as num?)?.toDouble() ?? 0.0;
+      final maxAllowed = budgetLimit * 1.10;
+
+      if (totalSpent > maxAllowed) {
+        throw Exception(
+          'Total spent (PKR ${totalSpent.toStringAsFixed(0)}) exceeds the maximum 10% inflation tolerance (PKR ${maxAllowed.toStringAsFixed(0)}). Please contact an Administrator to revise the budget.',
+        );
+      }
+
       await _firestore.collection(_collection).doc(requestId).update({
         'status': 'purchased',
         'purchaserId': purchaserId,
@@ -549,6 +612,7 @@ class ProcurementService {
         assignedPackId: request.packId,
         assignedPackName: request.packName,
         items: itemsMap,
+        inKindCoveredItems: request.inKindCoveredItems,
         procurementRequestId: requestId,
         batch: batch,
       );
@@ -560,10 +624,49 @@ class ProcurementService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+      // 6. Central GRF Financial Reconciliation & Ledger Entry
+      final variance = request.budgetLimit - request.totalSpent;
+      if (variance != 0) {
+        final grfRef =
+            _firestore.collection('families').doc('general_relief_fund');
+        batch.update(grfRef, {
+          'raisedAmount': FieldValue.increment(variance),
+        });
+
+        // Generate official GRF Audit transaction record
+        final ledgerRef = _firestore.collection('donations').doc();
+        batch.set(ledgerRef, {
+          'donationId': ledgerRef.id,
+          'amount': variance.abs(),
+          'familyId': variance > 0 ? 'general_relief_fund' : request.familyId,
+          'isGrfAllocation': variance < 0,
+          'status': 'verified',
+          'donorName':
+              variance > 0 ? 'Savings from ${request.packName}' : 'System',
+          'donorEmail': 'system@rationaid.com',
+          'allocatedByUid': 'system_reconciliation', // Represents System
+          'donationNote':
+              variance > 0
+                  ? 'Surplus Recovery'
+                  : 'Inflation Subsidy for ${request.packName}',
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
       // Commit the batch to ensure total atomicity
       await batch.commit();
 
-      // 6. Notify purchaser
+      // Send the GRF Audit notification if variance applies
+      if (variance != 0) {
+        await NotificationService.notifyAdminGRFSweep(
+          amount: variance.abs(),
+          isSurplus: variance > 0,
+          packName: request.packName,
+        );
+      }
+
+      // 7. Notify purchaser
       if (request.purchaserId != null) {
         await NotificationService.sendPurchaserNotification(
           userId: request.purchaserId!,

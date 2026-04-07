@@ -122,12 +122,20 @@ class DistributorHomeView extends StatelessWidget {
               }
 
               final allDeliveries = snapshot.data!;
-              final completed = allDeliveries
+              final now = DateTime.now();
+              
+              // Filter deliveries to only include the current calendar month
+              final currentMonthDeliveries = allDeliveries.where((a) {
+                final d = a.createdAt;
+                return d.year == now.year && d.month == now.month;
+              }).toList();
+
+              final completed = currentMonthDeliveries
                   .where((a) => a.isCompleted)
                   .length;
-              final active = allDeliveries.where((a) => a.isActive).length;
-              final failed = allDeliveries.where((a) => a.isFailed).length;
-              final total = allDeliveries.length;
+              final active = currentMonthDeliveries.where((a) => a.isActive).length;
+              final failed = currentMonthDeliveries.where((a) => a.isFailed).length;
+              final total = currentMonthDeliveries.length;
               final successRate = total > 0 ? (completed / total * 100) : 0.0;
 
               return Column(
@@ -193,48 +201,7 @@ class DistributorHomeView extends StatelessWidget {
 
                   const SizedBox(height: 20),
 
-                  // ── Quick Actions ───────────────────────────────────
-                  Text(
-                    'Quick Actions',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _QuickActionTile(
-                          icon: Icons.local_shipping,
-                          label: 'Deliveries',
-                          color: AppColors.volunteerBlue,
-                          onTap: () =>
-                              onSectionChange(DistributorSection.deliveries),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _QuickActionTile(
-                          icon: Icons.history,
-                          label: 'History',
-                          color: Colors.purple,
-                          onTap: () =>
-                              onSectionChange(DistributorSection.history),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _QuickActionTile(
-                          icon: Icons.bar_chart,
-                          label: 'Performance',
-                          color: Colors.teal,
-                          onTap: () =>
-                              onSectionChange(DistributorSection.performance),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
+
 
                   // ── Recent Activity ─────────────────────────────────
                   _buildRecentActivity(context, theme, user.uid),
@@ -592,7 +559,7 @@ class _StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      height: 100,
+      height: 110,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: theme.cardColor,
@@ -654,7 +621,7 @@ class _SuccessRateCard extends StatelessWidget {
         ? Colors.orange
         : Colors.red;
     return Container(
-      height: 100,
+      height: 110,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: theme.cardColor,
@@ -710,60 +677,3 @@ class _SuccessRateCard extends StatelessWidget {
   }
 }
 
-class _QuickActionTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _QuickActionTile({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: theme.cardColor,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 18),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: theme.dividerColor.withValues(alpha: 0.4),
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: color, size: 22),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

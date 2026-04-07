@@ -21,6 +21,7 @@ class DistributorProfileSection extends StatefulWidget {
 class _DistributorProfileSectionState extends State<DistributorProfileSection> {
   final ImagePicker _picker = ImagePicker();
   String? _profilePhotoUrl;
+  String? _userPhone;
   bool _isUploadingPhoto = false;
   Map<String, int> _stats = {
     'total': 0,
@@ -46,6 +47,7 @@ class _DistributorProfileSectionState extends State<DistributorProfileSection> {
       if (mounted && doc.exists) {
         setState(() {
           _profilePhotoUrl = doc.data()?['profilePhotoUrl'];
+          _userPhone = doc.data()?['phone'];
         });
       }
     }
@@ -63,7 +65,7 @@ class _DistributorProfileSectionState extends State<DistributorProfileSection> {
 
       int total = queryShot.docs.length;
       final completedDocs = queryShot.docs.where(
-        (d) => d['status'] == 'delivered' || d['status'] == 'adminVerified',
+        (d) => d['status'] == 'delivered' || d['status'] == 'admin_verified',
       );
       int completed = completedDocs.length;
       int pending = queryShot.docs
@@ -679,6 +681,43 @@ class _DistributorProfileSectionState extends State<DistributorProfileSection> {
                         try {
                           await user?.updateDisplayName(nameController.text);
                           await user?.reload();
+                          
+                          if (user != null) {
+                            final db = FirebaseFirestore.instance;
+                            
+                            // 1. Update the main users collection
+                            await db.collection('users').doc(user.uid).update({
+                              'name': nameController.text,
+                              'updatedAt': FieldValue.serverTimestamp(),
+                            });
+
+                            // 2. Sync to all their delivery assignments (Chunked batch)
+                            final assignments = await db
+                                .collection('delivery_assignments')
+                                .where('assignedDistributorId', isEqualTo: user.uid)
+                                .get();
+
+                            if (assignments.docs.isNotEmpty) {
+                              var batch = db.batch();
+                              var opCount = 0;
+
+                              for (var doc in assignments.docs) {
+                                batch.update(doc.reference, {
+                                  'assignedDistributorName': nameController.text,
+                                });
+                                opCount++;
+
+                                if (opCount >= 450) {
+                                  await batch.commit();
+                                  batch = db.batch();
+                                  opCount = 0;
+                                }
+                              }
+                              if (opCount > 0) {
+                                await batch.commit();
+                              }
+                            }
+                          }
                           if (context.mounted) {
                             Navigator.pop(context);
                             setState(() {});
@@ -715,14 +754,16 @@ class _DistributorProfileSectionState extends State<DistributorProfileSection> {
   void _showUpdatePhoneDialog() {
     final user = FirebaseAuth.instance.currentUser;
     final phoneController = TextEditingController(
-      text: user?.phoneNumber ?? '',
+      text: _userPhone ?? user?.phoneNumber ?? '',
     );
     final formKey = GlobalKey<FormState>();
+    bool isLoading = false;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
             Container(
@@ -747,7 +788,7 @@ class _DistributorProfileSectionState extends State<DistributorProfileSection> {
             children: [
               // Current Phone (Read-only)
               TextFormField(
-                initialValue: user?.phoneNumber ?? 'Not set',
+                initialValue: _userPhone ?? user?.phoneNumber ?? 'Not set',
                 enabled: false,
                 decoration: InputDecoration(
                   labelText: 'Current Phone',
@@ -798,26 +839,64 @@ class _DistributorProfileSectionState extends State<DistributorProfileSection> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Phone saved locally'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              }
-            },
+            onPressed: isLoading
+                ? null
+                : () async {
+                    if (formKey.currentState!.validate()) {
+                      setDialogState(() => isLoading = true);
+                      try {
+                        if (user != null) {
+                          await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(user.uid)
+                              .update({
+                            'phone': phoneController.text,
+                            'updatedAt': FieldValue.serverTimestamp(),
+                          });
+                          if (context.mounted) {
+                            setState(() {
+                              _userPhone = phoneController.text;
+                            });
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Phone number updated successfully!'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        }
+                      } catch (e) {
+                        setDialogState(() => isLoading = false);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Failed to update phone: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    }
+                  },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.volunteerBlue,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Save'),
+            child: isLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Text('Save'),
           ),
         ],
       ),
-    );
+    ));
   }
 
   void _showHelpSupportDialog() {

@@ -1471,7 +1471,7 @@ class _InventoryViewState extends State<InventoryView>
                               context,
                               'Avg Cost',
                               'Rs ${(totalValue / count).toStringAsFixed(0)}',
-                              Icons.attach_money,
+                              Icons.money,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -1536,7 +1536,7 @@ class _InventoryViewState extends State<InventoryView>
                                   ],
                                 ),
                                 child: Text(
-                                  '${item.name} (${item.quantity})',
+                                  '${item.name} (${item.quantityWithUnit})',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w500,
@@ -1548,6 +1548,74 @@ class _InventoryViewState extends State<InventoryView>
                             )
                             .toList(),
                       ),
+                      if (requests.first.inKindCoveredItems.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.green.withValues(alpha: 0.2),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.volunteer_activism,
+                                    size: 14,
+                                    color: Colors.green,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Fully covered by In-Kind (Not Purchased)',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.green[800],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: requests.first.inKindCoveredItems
+                                    .map(
+                                      (colItem) => Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green.withValues(
+                                            alpha: 0.15,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          colItem,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.green[900],
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 16),
                     ],
                   ),

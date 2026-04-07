@@ -1,13 +1,14 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/models/donation_model.dart';
+import 'package:ration_aid/models/family_model.dart';
 import 'package:ration_aid/screens/Admin/widgets/stat_card.dart';
 import 'package:ration_aid/services/donation_service.dart';
+import 'package:ration_aid/services/family_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/screens/Donor/widgets/donor_frosted_panel.dart';
 
-/// Donor Dashboard Section - Overview statistics and quick actions
-/// Matching Admin Dashboard style with frosted panels
+/// Donor Dashboard Section - Industry-Level Overview statistics, active tracking, and quick actions
 class DonorDashboardSection extends StatefulWidget {
   const DonorDashboardSection({super.key});
 
@@ -17,11 +18,14 @@ class DonorDashboardSection extends StatefulWidget {
 
 class _DonorDashboardSectionState extends State<DonorDashboardSection> {
   final DonationService _donationService = DonationService();
+  final FamilyService _familyService = FamilyService();
 
   // Optimized streams
   late final Stream<User?> _userStream;
-  Stream<Map<String, int>>? _statsStream;
+  Stream<Map<String, dynamic>>? _statsStream;
   Stream<List<Donation>>? _recentDonationsStream;
+
+  Stream<List<Family>>? _urgentFamiliesStream;
   String? _cachedUid;
 
   @override
@@ -35,31 +39,29 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null && user.uid != _cachedUid) {
       _cachedUid = user.uid;
-      _statsStream = _donationService.streamDonorStats(user.uid);
+      _statsStream = _donationService.streamDonorStatsAdvanced(user.uid);
       _recentDonationsStream = _donationService.streamRecentDonationsByDonor(
         user.uid,
         limit: 3,
+      );
+
+      // Map the generic family stream into a filtered emergency-only list
+      _urgentFamiliesStream = _familyService.streamAcceptedFamilies().map(
+        (families) => families.where((f) => f.isEmergency).toList(),
       );
     }
   }
 
   Future<void> _onRefresh() async {
-    _initUserStreams(); // Refresh streams on pull-to-refresh
-    setState(() {});
+    // Streams are already live — just trigger rebuild to show latest data
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     final isDark = theme.brightness == Brightness.dark;
 
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser?.uid != _cachedUid) {
-      _initUserStreams();
-    }
-
-    // Listen to user changes for real-time profile updates
     return StreamBuilder<User?>(
       stream: _userStream,
       builder: (context, userSnapshot) {
@@ -73,13 +75,14 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
           onRefresh: _onRefresh,
           child: Padding(
             key: const ValueKey('donor-dashboard'),
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 8),
+                  // GREETING
                   Row(
                     children: [
                       Container(
@@ -141,10 +144,14 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
                   ),
                   const SizedBox(height: 18),
 
+                  // TOP TIER STATS
                   DonorFrostedPanel(
-                    child: StreamBuilder<Map<String, int>>(
-                      stream: _statsStream,
-                      builder: (context, snapshot) {
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        StreamBuilder<Map<String, dynamic>>(
+                          stream: _statsStream,
+                          builder: (context, snapshot) {
                         if (snapshot.connectionState ==
                             ConnectionState.waiting) {
                           return const Row(
@@ -161,10 +168,10 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
                             children: [
                               Expanded(
                                 child: StatCard(
-                                  title: 'Donations',
-                                  value: '0',
+                                  title: 'Total Impact',
+                                  value: 'Rs 0',
                                   subtitle: 'Start your journey',
-                                  icon: Icons.volunteer_activism,
+                                  icon: Icons.trending_up,
                                   color: AppColors.donorGreen,
                                 ),
                               ),
@@ -187,47 +194,134 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
                         final families = data['families'] ?? 0;
                         final active = data['active'] ?? 0;
                         final completed = data['completed'] ?? 0;
+                        final totalAmount = data['totalAmount'] ?? 0.0;
 
-                        return Row(
-                          children: [
-                            Expanded(
-                              child: StatCard(
-                                title: 'Total Donations',
-                                value: total.toString(),
-                                subtitle:
-                                    '$active active • $completed completed',
-                                icon: Icons.volunteer_activism,
-                                color: AppColors.donorGreen,
+                        return SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          physics: const BouncingScrollPhysics(),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 220,
+                                child: StatCard(
+                                  title: 'Total Impact',
+                                  value: 'Rs ${totalAmount.toStringAsFixed(0)}',
+                                  subtitle: 'Lifetime Contribution',
+                                  icon: Icons.trending_up,
+                                  color: AppColors.donorGreen,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: StatCard(
-                                title: 'Families Supported',
-                                value: families.toString(),
-                                subtitle: 'Making an impact',
-                                icon: Icons.family_restroom,
-                                color: AppColors.accentGreen,
+                              const SizedBox(width: 12),
+                              SizedBox(
+                                width: 200,
+                                child: StatCard(
+                                  title: 'Donations Made',
+                                  value: total.toString(),
+                                  subtitle:
+                                      '$active active • $completed completed',
+                                  icon: Icons.favorite,
+                                  color: Colors.blue,
+                                ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 12),
+                              SizedBox(
+                                width: 200,
+                                child: StatCard(
+                                  title: 'Families Supported',
+                                  value: families.toString(),
+                                  subtitle: 'Directly impacted',
+                                  icon: Icons.family_restroom,
+                                  color: AppColors.accentGreen,
+                                ),
+                              ),
+                            ],
+                          ),
                         );
                       },
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  DonorFrostedPanel(
-                    child: _QuickActionButton(
-                      icon: Icons.add_circle,
-                      label: 'Make a Donation',
-                      color: AppColors.donorGreen,
-                      onTap: () {
-                        // Navigate to create donation
-                        Navigator.pushNamed(context, '/create-donation');
-                      },
+                        const SizedBox(height: 16),
+                        
+                        // ── MAKE A DONATION CTA (INSIDE PANEL) ──────────────
+                        GestureDetector(
+                          onTap: () =>
+                              Navigator.pushNamed(context, '/create-donation'),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppColors.donorGreen.withValues(alpha: 0.1)
+                                  : AppColors.donorGreen.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: AppColors.donorGreen.withValues(alpha: 0.3),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                // "+" icon container
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.donorGreen.withValues(
+                                      alpha: isDark ? 0.3 : 0.2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: const Icon(
+                                    Icons.add,
+                                    color: AppColors.donorGreen,
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                // Label
+                                Expanded(
+                                  child: Text(
+                                    'Make a Donation',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.donorGreen,
+                                      letterSpacing: 0.3,
+                                    ),
+                                  ),
+                                ),
+                                // Chevron
+                                Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: AppColors.donorGreen,
+                                  size: 24,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  const SizedBox(height: 24),
+
+                  // FEATURED CAUSES
+                  Text(
+                    'Urgent Emergency Needs',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  _FeaturedEmergencyCarousel(stream: _urgentFamiliesStream),
+
                   const SizedBox(height: 22),
+
+                  // RECENT DONATIONS
                   Text(
                     'Recent Donations',
                     style: theme.textTheme.titleMedium?.copyWith(
@@ -318,6 +412,161 @@ class _DonorDashboardSectionState extends State<DonorDashboardSection> {
   }
 }
 
+// ----------------------------------------------------------------------------
+// COMPONENT WIDGETS
+// ----------------------------------------------------------------------------
+
+class _FeaturedEmergencyCarousel extends StatelessWidget {
+  final Stream<List<Family>>? stream;
+  const _FeaturedEmergencyCarousel({required this.stream});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    if (stream == null) return const SizedBox.shrink();
+
+    return StreamBuilder<List<Family>>(
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return DonorFrostedPanel(
+            child: Row(
+              children: [
+                Icon(Icons.check_circle_outline, color: AppColors.donorGreen),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'No emergency families currently waiting. Thank you to our donors!',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final emFamilies = snapshot.data!.take(5).toList();
+
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: emFamilies
+                .map(
+                  (f) => Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: _DashboardEmergencyCard(family: f),
+                  ),
+                )
+                .toList(),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DashboardEmergencyCard extends StatelessWidget {
+  final Family family;
+  const _DashboardEmergencyCard({required this.family});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final progress = family.targetAmount > 0
+        ? (family.combinedProgress / family.targetAmount).clamp(0.0, 1.0)
+        : 0.0;
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.pushNamed(context, '/family-detail', arguments: family);
+      },
+      child: Container(
+        width: 260,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.red.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'EMERGENCY',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 12,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '${family.area}, ${family.city}',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Family of ${family.numberOfAdults + family.numberOfChildren}',
+              style: TextStyle(
+                fontSize: 12,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                backgroundColor: theme.dividerColor,
+                color: Colors.red,
+                minHeight: 6,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SkeletonStatCard extends StatelessWidget {
   const _SkeletonStatCard();
 
@@ -330,67 +579,6 @@ class _SkeletonStatCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: const Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
-    );
-  }
-}
-
-class _QuickActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _QuickActionButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              color.withValues(alpha: 0.1),
-              color.withValues(alpha: 0.05),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: color,
-                ),
-              ),
-            ),
-            Icon(Icons.arrow_forward_ios, color: color, size: 18),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -422,7 +610,6 @@ class _RecentDonationTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Icon
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
@@ -438,7 +625,6 @@ class _RecentDonationTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            // Details
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -463,7 +649,6 @@ class _RecentDonationTile extends StatelessWidget {
                 ],
               ),
             ),
-            // Amount or items count
             if (donation.donationType == DonationType.cash)
               Text(
                 'Rs ${donation.amount?.toStringAsFixed(0) ?? '0'}',
@@ -504,7 +689,7 @@ class _RecentDonationTile extends StatelessWidget {
       case DonationStatus.inProcess:
         return Colors.blue;
       case DonationStatus.stocked:
-        return const Color(0xFF009688); // Teal — In Warehouse
+        return const Color(0xFF009688);
       case DonationStatus.outForDelivery:
         return Colors.purple;
       case DonationStatus.delivered:

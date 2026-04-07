@@ -16,26 +16,32 @@ enum ProcurementStatus {
 /// Item to be purchased (snapshot from PackItem)
 class ProcurementItem {
   final String name;
-  final String quantity; // e.g., "10kg"
+  final String quantity; // e.g., "10"
+  final String unit;     // e.g., "kg", "g", "L", "pcs"
   final double estimatedCost;
   final double actualCost;
   final bool isPurchased;
+  final bool isInKindCovered; // true = partially covered by warehouse in-kind donation
 
   ProcurementItem({
     required this.name,
     required this.quantity,
+    this.unit = '',
     required this.estimatedCost,
     this.actualCost = 0.0,
     this.isPurchased = false,
+    this.isInKindCovered = false,
   });
 
   Map<String, dynamic> toMap() {
     return {
       'name': name,
       'quantity': quantity,
+      'unit': unit,
       'estimatedCost': estimatedCost,
       'actualCost': actualCost,
       'isPurchased': isPurchased,
+      'isInKindCovered': isInKindCovered,
     };
   }
 
@@ -43,27 +49,37 @@ class ProcurementItem {
     return ProcurementItem(
       name: map['name'] ?? '',
       quantity: map['quantity'] ?? '',
+      unit: map['unit'] as String? ?? '',
       estimatedCost: (map['estimatedCost'] ?? 0).toDouble(),
       actualCost: (map['actualCost'] ?? 0).toDouble(),
       isPurchased: map['isPurchased'] ?? false,
+      isInKindCovered: map['isInKindCovered'] as bool? ?? false,
     );
   }
 
   ProcurementItem copyWith({
     String? name,
     String? quantity,
+    String? unit,
     double? estimatedCost,
     double? actualCost,
     bool? isPurchased,
+    bool? isInKindCovered,
   }) {
     return ProcurementItem(
       name: name ?? this.name,
       quantity: quantity ?? this.quantity,
+      unit: unit ?? this.unit,
       estimatedCost: estimatedCost ?? this.estimatedCost,
       actualCost: actualCost ?? this.actualCost,
       isPurchased: isPurchased ?? this.isPurchased,
+      isInKindCovered: isInKindCovered ?? this.isInKindCovered,
     );
   }
+
+  /// Human-readable quantity string like "4 kg" or "500 g"
+  String get quantityWithUnit =>
+      unit.isEmpty ? quantity : '$quantity $unit';
 }
 
 class ProcurementRequest {
@@ -103,6 +119,9 @@ class ProcurementRequest {
   /// When the order was claimed (for 72-hour auto-release timeout).
   final DateTime? claimedAt;
 
+  /// Items that were fully covered by in-kind warehouse donations (skipped from purchase list).
+  final List<String> inKindCoveredItems;
+
   ProcurementRequest({
     required this.id,
     required this.familyId,
@@ -132,6 +151,7 @@ class ProcurementRequest {
     this.claimedById,
     this.claimedByName,
     this.claimedAt,
+    this.inKindCoveredItems = const [],
   });
 
   Map<String, dynamic> toFirestore() {
@@ -157,6 +177,7 @@ class ProcurementRequest {
       'claimedById': claimedById,
       'claimedByName': claimedByName,
       'claimedAt': claimedAt != null ? Timestamp.fromDate(claimedAt!) : null,
+      if (inKindCoveredItems.isNotEmpty) 'inKindCoveredItems': inKindCoveredItems,
     };
   }
 
@@ -201,6 +222,11 @@ class ProcurementRequest {
       claimedById: data['claimedById'],
       claimedByName: data['claimedByName'],
       claimedAt: (data['claimedAt'] as Timestamp?)?.toDate(),
+      inKindCoveredItems:
+          (data['inKindCoveredItems'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
     );
   }
 

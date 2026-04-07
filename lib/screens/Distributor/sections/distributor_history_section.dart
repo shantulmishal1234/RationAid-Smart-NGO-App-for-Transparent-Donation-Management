@@ -18,7 +18,7 @@ class DistributorHistorySection extends StatefulWidget {
 }
 
 class _DistributorHistorySectionState extends State<DistributorHistorySection> {
-  String _filterStatus = 'All'; // All, Active, Completed, Failed
+  String _filterStatus = 'All'; // All, Completed, Pending Verification, Failed
 
   // Search state
   final TextEditingController _searchController = TextEditingController();
@@ -120,7 +120,10 @@ class _DistributorHistorySectionState extends State<DistributorHistorySection> {
 
         if (_filterStatus != 'All') {
           filteredAssignments = filteredAssignments.where((a) {
-            if (_filterStatus == 'Active') return a.isActive || a.isPending;
+            if (_filterStatus == 'Pending Verification') {
+              // Delivered by distributor but not yet admin-verified
+              return a.status == DeliveryStatus.delivered;
+            }
             if (_filterStatus == 'Completed') return a.isCompleted;
             if (_filterStatus == 'Failed') return a.isFailed;
             return true;
@@ -369,8 +372,8 @@ class _DistributorHistorySectionState extends State<DistributorHistorySection> {
                         _buildPopupItem(context, 'All', Icons.all_inclusive),
                         _buildPopupItem(
                           context,
-                          'Active',
-                          Icons.local_shipping,
+                          'Pending Verification',
+                          Icons.pending_actions,
                         ),
                         _buildPopupItem(
                           context,

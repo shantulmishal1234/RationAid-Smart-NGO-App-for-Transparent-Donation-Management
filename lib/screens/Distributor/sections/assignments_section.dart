@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:ration_aid/models/delivery_assignment_model.dart';
 import 'package:ration_aid/screens/Distributor/Delivery/delivery_detail_screen.dart';
+import 'package:ration_aid/screens/Distributor/Delivery/delivery_map_screen.dart';
 import 'package:ration_aid/screens/Distributor/widgets/delivery_card.dart';
 import 'package:ration_aid/services/delivery_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
@@ -55,17 +56,28 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
   Future<void> _fetchLocation() async {
     setState(() => _locationLoading = true);
     try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        throw Exception('Location services disabled');
+      }
+
       final perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied ||
           perm == LocationPermission.deniedForever) {
-        await Geolocator.requestPermission();
+        final newPerm = await Geolocator.requestPermission();
+        if (newPerm == LocationPermission.denied || newPerm == LocationPermission.deniedForever) {
+          throw Exception('Permission denied');
+        }
       }
+
       final pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.medium,
-      );
+      ).timeout(const Duration(seconds: 5));
+
       if (mounted) setState(() => _myPosition = pos);
-    } catch (_) {
+    } catch (e) {
       // Location unavailable — pool shows without proximity sort
+      debugPrint('Location fetch bypassed: $e');
     } finally {
       if (mounted) setState(() => _locationLoading = false);
     }
@@ -212,26 +224,31 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Welcome back,',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.6,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Welcome back,',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
-                      ),
-                      Text(
-                        displayName.split(' ').first,
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: theme.colorScheme.onSurface,
+                        Text(
+                          displayName.split('@').first,
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 16),
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -369,7 +386,7 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
     ThemeData theme,
     bool isDark,
   ) {
-    final num itemCount = a.items.values.fold<num>(0, (sum, qty) => sum + qty);
+    final int itemCount = a.items.length + a.inKindCoveredItems.length;
 
     return Container(
       decoration: BoxDecoration(
@@ -518,8 +535,46 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
     String uid,
     String displayName,
   ) async {
-    // Block if distributor already has an active delivery
-    // (checked against My Deliveries stream implicitly by the claim button logic)
+    // 1. Check limit: block if distributor already has 3 or more active deliveries
+    try {
+      final activeCount = (await DeliveryService.streamAssignmentsByDistributor(
+        uid,
+      ).first).where((assign) => assign.isActive || assign.isPending).length;
+
+      if (activeCount >= 3) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                SizedBox(width: 8),
+                Text('Delivery Limit Reached'),
+              ],
+            ),
+            content: const Text(
+              'You currently have 3 active deliveries in progress.\n\n'
+              'Please complete or release them before claiming any new assignments.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      debugPrint('Error checking active count: $e');
+    }
+
+    // 2. Confirm claim intent
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -832,6 +887,16 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
                                   DeliveryDetailScreen(assignmentId: a.id),
                             ),
                           ),
+                          onNavigate:
+                              (a.familyGeoLat != null && a.familyGeoLng != null)
+                              ? () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        DeliveryMapScreen(assignment: a),
+                                  ),
+                                )
+                              : null,
                           // Release button shown only when status is notStarted
                           trailing: a.isPending
                               ? _releaseButton(a, isDark)

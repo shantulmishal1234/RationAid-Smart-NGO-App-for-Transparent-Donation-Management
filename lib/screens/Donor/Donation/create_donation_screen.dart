@@ -1,4 +1,4 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 import 'dart:io';
@@ -425,7 +425,21 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
             ? 'smart_allocation'
             : _selectedFamily!.id;
         resolvedMode = _allocationMode;
-        effectiveSmartSplits = _smartSplits.map((s) => s.toMap()).toList();
+        if (_allocationMode == 'smart') {
+          // BUG FIX: _cashSmartSplits holds the cash waterfall plan.
+          // Re-key 'contribution' → 'amount' so FundingService.verifyDonation can read it.
+          effectiveSmartSplits = _cashSmartSplits
+              .map(
+                (s) => {
+                  'familyId': s['familyId'] as String? ?? '',
+                  'amount': (s['contribution'] as num?)?.toDouble() ?? 0.0,
+                  'reason': s['reason'] as String? ?? '',
+                },
+              )
+              .toList();
+        } else {
+          effectiveSmartSplits = null; // Direct / General — no splits
+        }
       }
 
       var donation = Donation(
@@ -573,15 +587,12 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
-        children: [
-          _buildSegmentTab(0, 'Cash', Icons.attach_money),
-          _buildSegmentTab(1, 'In-Kind', Icons.inventory_2_outlined),
-        ],
+        children: [_buildSegmentTab(0, 'Cash'), _buildSegmentTab(1, 'In-Kind')],
       ),
     );
   }
 
-  Widget _buildSegmentTab(int index, String title, IconData icon) {
+  Widget _buildSegmentTab(int index, String title, [IconData? icon]) {
     final isSelected = _tabController.index == index;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -620,14 +631,16 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                icon,
-                size: 18,
-                color: isSelected
-                    ? AppColors.donorGreen
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
-              const SizedBox(width: 8),
+              if (icon != null) ...[
+                Icon(
+                  icon,
+                  size: 18,
+                  color: isSelected
+                      ? AppColors.donorGreen
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+                const SizedBox(width: 8),
+              ],
               Text(
                 title,
                 style: TextStyle(
@@ -680,89 +693,11 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
   }
 
   Widget _buildSmartGiveTrustBanner(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.primaryBlue.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primaryBlue.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.auto_awesome,
-            color: AppColors.primaryBlue,
-            size: 20,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Smart Give (Waterfall Engine)',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primaryBlue,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Your donation will be automatically split to completely fund the highest-priority families first. Any excess gracefully cascades into the General Relief Fund.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildGRFTrustBanner(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.public, color: Colors.orange, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'General Relief Fund',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Contributions to the GRF are 100% audited and strictly utilized for mass-procurement, emergency distress relief, and pooling for immediate large-scale needs.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildCashDonationForm(Family? family) {
@@ -1146,8 +1081,8 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
     final isDark = theme.brightness == Brightness.dark;
     const modes = [
       ('direct', Icons.person_outline, 'Direct', 'Pick family'),
-      ('pool', Icons.handshake_outlined, 'NGO Pool', 'We assign'),
       ('smart', Icons.auto_awesome_outlined, 'Smart Give', 'Best fit · Splits'),
+      ('pool', Icons.handshake_outlined, 'NGO Pool', 'We assign'),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1240,99 +1175,34 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
             );
           }).toList(),
         ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          child: Container(
+            margin: const EdgeInsets.only(top: 12),
+            child: _inKindAllocationMode == 'smart'
+                ? _buildModeHelperText(
+                    Icons.lightbulb_outline,
+                    'System allocates automatically to highest-priority unfunded families.',
+                  )
+                : _inKindAllocationMode == 'pool'
+                ? _buildModeHelperText(
+                    Icons.maps_home_work_outlined,
+                    'Items go to the collective NGO Pool for administrative allocation.',
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ),
       ],
     );
   }
 
-  // ── Trust banners for in-kind modes ───────────────────────────────────
+  // ── Trust banners for in-kind modes (Replaced by compact helpers) ────
   Widget _buildInKindPoolBanner() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.teal.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.teal.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.handshake_outlined, color: Colors.teal, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'NGO Pool Donation',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.teal,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Our team will match your items to the family with the highest need. '
-                  "You'll be notified once assigned. Items are tracked end-to-end.",
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.teal.shade700,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildInKindSmartBanner() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.primaryBlue.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primaryBlue.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.auto_awesome_outlined,
-            color: AppColors.primaryBlue,
-            size: 20,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Smart In-Kind Match',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primaryBlue,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'System finds the highest-priority family that needs the items '
-                  "you're offering. Select items below to see your match.",
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppColors.primaryBlue.withValues(alpha: 0.85),
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    return const SizedBox.shrink();
   }
 
   // ── Smart Give Waterfall Preview Card (mirrors Cash Smart Give) ──────────
@@ -1517,8 +1387,18 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
           _isLoadingCashSplits = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _isLoadingCashSplits = false);
+    } catch (e, stack) {
+      debugPrint('SMART ALLOCATION ERROR: $e\n$stack');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Allocation Engine Error: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 8),
+          ),
+        );
+        setState(() => _isLoadingCashSplits = false);
+      }
     }
   }
 
@@ -2359,14 +2239,8 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
           const SizedBox(height: 14),
 
           // Trust banners
-          if (isPoolMode) ...[
-            _buildInKindPoolBanner(),
-            const SizedBox(height: 14),
-          ],
-          if (isSmartMode) ...[
-            _buildInKindSmartBanner(),
-            const SizedBox(height: 14),
-          ],
+          if (isPoolMode) ...[const SizedBox(height: 8)],
+          if (isSmartMode) ...[const SizedBox(height: 8)],
 
           // Family picker (Direct only)
           if (isDirectMode) ...[

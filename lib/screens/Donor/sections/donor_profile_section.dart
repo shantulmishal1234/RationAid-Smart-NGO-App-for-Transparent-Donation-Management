@@ -23,6 +23,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
   final ImagePicker _picker = ImagePicker();
   late Future<Map<String, int>> _statsFuture;
   String? _profilePhotoUrl;
+  Map<String, dynamic>? _userData;
   bool _isUploadingPhoto = false;
   StreamSubscription<DocumentSnapshot>? _profileSubscription;
 
@@ -57,7 +58,8 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
           .listen((doc) {
             if (doc.exists && mounted) {
               setState(() {
-                _profilePhotoUrl = doc.data()?['profilePhotoUrl'];
+                _userData = doc.data() as Map<String, dynamic>?;
+                _profilePhotoUrl = _userData?['profilePhotoUrl'];
               });
             }
           });
@@ -681,7 +683,8 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
   // Show Update Name Dialog
   void _showUpdateNameDialog() {
     final user = FirebaseAuth.instance.currentUser;
-    final nameController = TextEditingController(text: user?.displayName ?? '');
+    final String currentName = _userData?['name'] ?? user?.displayName ?? '';
+    final nameController = TextEditingController(text: currentName);
     final formKey = GlobalKey<FormState>();
     bool isLoading = false;
     String? nameError;
@@ -720,7 +723,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
               children: [
                 // Current Name (Read-only)
                 TextFormField(
-                  initialValue: user?.displayName ?? 'Not set',
+                  initialValue: currentName.isEmpty ? 'Not set' : currentName,
                   enabled: false,
                   decoration: InputDecoration(
                     labelText: 'Current Name',
@@ -829,9 +832,18 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
 
                           final newName = nameController.text.trim();
 
-                          // Update display name
+                          // Update display name in Auth
                           await user.updateDisplayName(newName);
                           await user.reload();
+
+                          // Update name in Firestore
+                          await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(user.uid)
+                              .update({
+                            'name': newName,
+                            'display_name': newName,
+                          });
 
                           if (context.mounted) {
                             Navigator.pop(context);
@@ -912,14 +924,16 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
   // Show Update Phone Dialog
   void _showUpdatePhoneDialog() {
     final user = FirebaseAuth.instance.currentUser;
-    final phoneController = TextEditingController(
-      text: user?.phoneNumber ?? '',
-    );
+    final String currentPhone = _userData?['phone'] ?? user?.phoneNumber ?? '';
+    final phoneController = TextEditingController(text: currentPhone);
     final formKey = GlobalKey<FormState>();
+    bool isLoading = false;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
@@ -946,7 +960,7 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
             children: [
               // Current Phone (Read-only)
               TextFormField(
-                initialValue: user?.phoneNumber ?? 'Not set',
+                initialValue: currentPhone.isEmpty ? 'Not set' : currentPhone,
                 enabled: false,
                 decoration: InputDecoration(
                   labelText: 'Current Phone',
@@ -999,21 +1013,73 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: isLoading ? null : () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Phone number saved'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              }
-            },
+            onPressed: isLoading
+                ? null
+                : () async {
+                    if (formKey.currentState!.validate()) {
+                      setDialogState(() => isLoading = true);
+                      try {
+                        if (user == null) {
+                          throw Exception('No user logged in');
+                        }
+
+                        final newPhone = phoneController.text.trim();
+
+                        // Update phone in Firestore
+                        await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(user.uid)
+                            .update({'phone': newPhone});
+
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.check_circle,
+                                    color: Colors.white,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text('Phone number updated to "$newPhone"'),
+                                ],
+                              ),
+                              backgroundColor: Colors.green,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        setDialogState(() => isLoading = false);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.error_outline,
+                                    color: Colors.white,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text('Failed to update phone: $e'),
+                                  ),
+                                ],
+                              ),
+                              backgroundColor: Colors.red,
+                              behavior: SnackBarBehavior.floating,
+                              duration: const Duration(seconds: 4),
+                            ),
+                          );
+                        }
+                      }
+                    }
+                  },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.donorGreen,
               foregroundColor: Colors.white,
@@ -1021,9 +1087,19 @@ class _DonorProfileSectionState extends State<DonorProfileSection> {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            child: const Text('Save'),
+            child: isLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('Save'),
           ),
         ],
+      ),
       ),
     );
   }

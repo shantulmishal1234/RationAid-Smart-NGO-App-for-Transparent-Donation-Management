@@ -302,14 +302,24 @@ class DonationService {
                 ? 'Your $amountStr $donType donation was rejected. Reason: $rejectionReason'
                 : 'Your $amountStr $donType donation was rejected. Please check the app for details.';
             break;
+          case 'in_process':
+            title = 'Items Being Purchased! 🛒';
+            body =
+                'Great news! Your $amountStr donation is being used to purchase ration items for the family.';
+            break;
           case 'out_for_delivery':
             title = 'On the Way! 🚚';
-            body = 'Your donation is out for delivery to the family.';
+            body = 'Your donation is out for delivery to the family. Almost there!';
             break;
           case 'delivered':
             title = 'Impact Made! ❤️';
             body =
                 'Your $amountStr donation has been delivered. Thank you for making a difference!';
+            break;
+          case 'pool_assigned':
+            title = 'In-Kind Items Assigned to a Family! 📦';
+            body =
+                'Your donated items have been matched and reserved for a family in need.';
             break;
           case 'cancelled':
             title = 'Donation Cancelled';
@@ -320,15 +330,12 @@ class DonationService {
         if (title != null && body != null) {
           final donorId = currentData?['donorId'] as String?;
           if (donorId != null) {
-            await NotificationService.sendToUser(
+            await NotificationService.sendDonorNotification(
               userId: donorId,
               title: title,
-              body: body,
-              data: {
-                'type': 'donation_update',
-                'donationId': donationId,
-                'status': afterStatus,
-              },
+              message: body,
+              actionType: 'donation_update',
+              actionId: donationId,
             );
           }
         }
@@ -394,6 +401,17 @@ class DonationService {
         action: 'reupload_payment_proof',
         donationId: donationId,
         details: 'Status: rejected → under_verification',
+      );
+
+      // Notify admin that proof has been re-submitted
+      final donorName = data?['donorName'] ?? 'A donor';
+      final donType = data?['donationType'] == 'inKind' ? 'In-Kind' : 'Cash';
+      await NotificationService.sendAdminNotification(
+        title: 'Proof Re-Submitted 🔄',
+        message:
+            '$donorName has re-uploaded proof for a rejected $donType donation. Review required.',
+        type: 'donation_resubmitted',
+        relatedId: donationId,
       );
     } catch (e) {
       throw Exception('Failed to reupload payment proof: $e');
@@ -652,9 +670,9 @@ class DonationService {
         });
   }
 
-  /// Fix #10: Cap `streamDonorStats` to avoid unbounded doc reads.
+  /// Stream comprehensive metrics for donor dashboard with a cap.
   /// Reads at most 500 docs — sufficient for any realistic donor history.
-  Stream<Map<String, int>> streamDonorStatsCapped(String donorId) {
+  Stream<Map<String, dynamic>> streamDonorStatsAdvanced(String donorId) {
     return _firestore
         .collection('donations')
         .where('donorId', isEqualTo: donorId)
@@ -665,8 +683,15 @@ class DonationService {
           final donations = snapshot.docs
               .map((doc) => Donation.fromFirestore(doc))
               .toList();
+          
+          double totalAmount = 0;
+          for (var d in donations) {
+             totalAmount += (d.amount ?? 0);
+          }
+
           final familiesSupported = donations
               .map((d) => d.familyId)
+              .where((id) => id.isNotEmpty && id != 'general_relief_fund')
               .toSet()
               .length;
           final activeDonations = donations
@@ -689,6 +714,7 @@ class DonationService {
             'families': familiesSupported,
             'active': activeDonations,
             'completed': completedDeliveries,
+            'totalAmount': totalAmount,
           };
         });
   }

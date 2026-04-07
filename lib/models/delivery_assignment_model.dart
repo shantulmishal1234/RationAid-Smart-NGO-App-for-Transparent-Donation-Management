@@ -178,6 +178,9 @@ class DeliveryAssignment {
   // Procurement link
   final String? procurementRequestId;
 
+  // In-Kind items reserved from warehouse
+  final List<String> inKindCoveredItems;
+
   // Admin notes
   final String? adminNote;
 
@@ -219,6 +222,7 @@ class DeliveryAssignment {
     this.adminVerifiedByName,
     this.donationIds = const [],
     this.procurementRequestId,
+    this.inKindCoveredItems = const [],
     this.adminNote,
     required this.createdAt,
     required this.updatedAt,
@@ -265,6 +269,9 @@ class DeliveryAssignment {
           ? List<String>.from(d['donationIds'])
           : [],
       procurementRequestId: d['procurementRequestId'],
+      inKindCoveredItems: d['inKindCoveredItems'] != null
+          ? List<String>.from(d['inKindCoveredItems'])
+          : [],
       adminNote: d['adminNote'],
       createdAt: (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (d['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -316,6 +323,7 @@ class DeliveryAssignment {
       'adminVerifiedByName': adminVerifiedByName,
       'donationIds': donationIds,
       'procurementRequestId': procurementRequestId,
+      if (inKindCoveredItems.isNotEmpty) 'inKindCoveredItems': inKindCoveredItems,
       'adminNote': adminNote,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),

@@ -210,6 +210,13 @@ class Donation {
   /// Example: [{'familyId': '123', 'amount': 500}, {'familyId': '456', 'amount': 1500}]
   final List<Map<String, dynamic>>? smartSplits;
 
+  /// Cash Displacement fields — set when a cash donation is redirected to GRF
+  /// because an In-Kind donation covered the family's physical needs.
+  /// [displacedAmount] — the portion of cash moved to GRF
+  /// [displacedFromFamilyId] — the original family this donation was funding
+  final double displacedAmount;
+  final String? displacedFromFamilyId;
+
   Donation({
     required this.id,
     required this.donorId,
@@ -247,6 +254,8 @@ class Donation {
     this.grfAllocations,
     this.itemUnits,
     this.itemValueSnapshot,
+    this.displacedAmount = 0,
+    this.displacedFromFamilyId,
   });
 
   /// Factory constructor from Firestore document
@@ -325,6 +334,8 @@ class Donation {
       grfAllocations: data['grfAllocations'] != null
           ? List<Map<String, dynamic>>.from(data['grfAllocations'])
           : null,
+      displacedAmount: (data['displacedAmount'] as num?)?.toDouble() ?? 0,
+      displacedFromFamilyId: data['displacedFromFamilyId'] as String?,
     );
   }
 
@@ -370,6 +381,9 @@ class Donation {
       'idempotencyKey': idempotencyKey,
       if (smartSplits != null) 'smartSplits': smartSplits,
       if (grfAllocations != null) 'grfAllocations': grfAllocations,
+      if (displacedAmount > 0) 'displacedAmount': displacedAmount,
+      if (displacedFromFamilyId != null)
+        'displacedFromFamilyId': displacedFromFamilyId,
     };
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:ration_aid/screens/Distributor/Delivery/delivery_detail_screen.dart';
 import 'package:ration_aid/services/notification_service.dart';
 
 import 'package:ration_aid/theme/app_colors.dart';
@@ -126,12 +127,31 @@ class _DistributorNotificationScreenState
                           if (!isRead) {
                             NotificationService.markNotificationAsRead(doc.id);
                           }
-                          _showNotificationDetails(
-                            context,
-                            data['title'] ?? 'No Title',
-                            data['message'] ?? 'No Message',
-                            createdAt?.toDate(),
-                          );
+                          
+                          // Deep-link: navigate to the relevant delivery if present
+                          final actionType = data['actionType'] as String?;
+                          final actionId = data['actionId'] as String?;
+                          if (actionType == 'delivery' &&
+                              actionId != null &&
+                              actionId.isNotEmpty) {
+                            if (context.mounted) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => DeliveryDetailScreen(
+                                    assignmentId: actionId,
+                                  ),
+                                ),
+                              );
+                            }
+                          } else {
+                            _showNotificationDetails(
+                              context,
+                              data['title'] ?? 'No Title',
+                              data['message'] ?? 'No Message',
+                              createdAt?.toDate(),
+                            );
+                          }
                         },
                       );
                     },

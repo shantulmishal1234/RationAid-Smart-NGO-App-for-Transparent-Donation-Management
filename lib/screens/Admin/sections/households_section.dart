@@ -47,9 +47,7 @@ class _HouseholdsSectionState extends State<HouseholdsSection> {
   // O(1) Firestore Aggregation: Fetch stats precisely using count() to avoid
   // O(N) reads that can crash scale or spike billing.
   Future<Map<String, int>> _fetchStats() async {
-    final base = FirebaseFirestore.instance
-        .collection('families')
-        .where('isArchived', isEqualTo: false);
+    final base = FirebaseFirestore.instance.collection('families');
 
     final results = await Future.wait([
       base.count().get(),

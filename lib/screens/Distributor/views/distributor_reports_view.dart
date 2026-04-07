@@ -53,7 +53,7 @@ class _DistributorReportsViewState extends State<DistributorReportsView> {
     }
 
     return StreamBuilder<List<DeliveryAssignment>>(
-      stream: DeliveryService.getSmartHistoryStream(uid, true),
+      stream: DeliveryService.getSmartDeliveryStream(uid, true),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -105,11 +105,9 @@ class _DistributorReportsViewState extends State<DistributorReportsView> {
         final end = _selectedDateRange?.end ?? DateTime.now();
         final dayCount = end.difference(start).inDays + 1;
 
-        if (dayCount <= 14) {
-          for (int i = 0; i < dayCount; i++) {
-            final d = start.add(Duration(days: i));
-            dailyCompleted[DateTime(d.year, d.month, d.day)] = 0;
-          }
+        for (int i = 0; i < dayCount; i++) {
+          final d = start.add(Duration(days: i));
+          dailyCompleted[DateTime(d.year, d.month, d.day)] = 0;
         }
 
         for (var a in filtered.where((a) => a.isCompleted)) {
@@ -536,7 +534,7 @@ class _KPICard extends StatelessWidget {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
-              color: theme.colorScheme.onSurface,
+              color: color,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

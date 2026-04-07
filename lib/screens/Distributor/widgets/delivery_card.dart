@@ -112,7 +112,7 @@ class DeliveryCard extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    '${assignment.items.length} item type(s) · Family of ${assignment.familySize}',
+                                    '${assignment.items.length + assignment.inKindCoveredItems.length} items to deliver · Family of ${assignment.familySize}',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: theme.colorScheme.onSurface

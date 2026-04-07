@@ -21,14 +21,30 @@ class DistributorDashboard extends StatefulWidget {
   State<DistributorDashboard> createState() => _DistributorDashboardState();
 }
 
-class _DistributorDashboardState extends State<DistributorDashboard> {
+class _DistributorDashboardState extends State<DistributorDashboard>
+    with WidgetsBindingObserver {
   DistributorSection _currentSection = DistributorSection.dashboard;
   int _pendingOffline = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _init();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Re-check offline queue whenever the app comes back to foreground
+    if (state == AppLifecycleState.resumed) {
+      _init();
+    }
   }
 
   Future<void> _init() async {

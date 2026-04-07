@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ration_aid/models/procurement_model.dart';
 import 'package:ration_aid/services/procurement_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
@@ -24,7 +25,9 @@ class _ReportsViewState extends State<ReportsView> {
   @override
   void initState() {
     super.initState();
-    _reportsStream = ProcurementService.getAllRequestsStream();
+    // Fix #24: Scope stream to current purchaser's UID only
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    _reportsStream = ProcurementService.streamMyRequests(uid);
   }
 
   Future<void> _showCustomRangePicker() async {
@@ -69,16 +72,23 @@ class _ReportsViewState extends State<ReportsView> {
 
         final allRequests = snapshot.data ?? [];
 
-        // Filter Logic
+        // Fix #23: Include ALL post-verified statuses for accurate spend calculation
         final verifiedRequests = allRequests.where((r) {
-          if (r.status != ProcurementStatus.verified) return false;
-          if (_selectedDateRange != null && r.verifiedAt != null) {
-            return r.verifiedAt!.isAfter(
+          final isCountable =
+              r.status == ProcurementStatus.verified ||
+              r.status == ProcurementStatus.stocked ||
+              r.status == ProcurementStatus.in_transit ||
+              r.status == ProcurementStatus.delivered;
+          if (!isCountable) return false;
+          if (_selectedDateRange != null) {
+            // Use verifiedAt if available, else createdAt as fallback
+            final dateToCheck = r.verifiedAt ?? r.createdAt;
+            return dateToCheck.isAfter(
                   _selectedDateRange!.start.subtract(
                     const Duration(seconds: 1),
                   ),
                 ) &&
-                r.verifiedAt!.isBefore(
+                dateToCheck.isBefore(
                   _selectedDateRange!.end.add(const Duration(days: 1)),
                 );
           }
@@ -280,7 +290,7 @@ class _ReportsViewState extends State<ReportsView> {
                       theme,
                       'Total Spend',
                       'Rs ${(totalSpent / 1000).toStringAsFixed(1)}K',
-                      Icons.attach_money,
+                      Icons.account_balance_wallet_outlined,
                       Colors.green[600]!,
                     ),
                   ),

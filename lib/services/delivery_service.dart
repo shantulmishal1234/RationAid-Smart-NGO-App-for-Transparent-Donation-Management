@@ -29,6 +29,7 @@ class DeliveryService {
     String? assignedPackId,
     String? assignedPackName,
     Map<String, num> items = const {},
+    List<String> inKindCoveredItems = const [],
     String? distributorId,
     String? distributorName,
     String? procurementRequestId,
@@ -53,6 +54,7 @@ class DeliveryService {
       assignedPackId: assignedPackId,
       assignedPackName: assignedPackName,
       items: items,
+      inKindCoveredItems: inKindCoveredItems,
       assignedDistributorId: distributorId,
       assignedDistributorName: distributorName,
       status: DeliveryStatus.notStarted,
@@ -69,7 +71,7 @@ class DeliveryService {
       await ref.set(assignment.toFirestore());
     }
 
-    // Notify the assigned distributor
+    // Notify the assigned distributor (or broadcast to pool)
     if (distributorId != null) {
       await NotificationService.sendToUser(
         userId: distributorId,
@@ -77,6 +79,14 @@ class DeliveryService {
         body:
             'You have a new delivery to $familyArea, $familyCity. Tap to view details.',
         data: {'type': 'delivery_assigned', 'assignmentId': ref.id},
+      );
+    } else {
+      await NotificationService.notifyAllDistributors(
+        title: 'New Delivery Available 📦',
+        message:
+            'A new pack delivery for $familyArea, $familyCity is available in the pool. Claim it now!',
+        actionType: 'new_delivery_pool',
+        actionId: ref.id,
       );
     }
 
@@ -216,8 +226,12 @@ class DeliveryService {
         if (!snap.exists) throw Exception('Assignment not found');
 
         final current = snap.data()!;
-        // If someone else already claimed it, abort
+        // Guard 1: Already claimed by another distributor
         if (current['assignedDistributorId'] != null) {
+          throw Exception('already_claimed');
+        }
+        // Guard 2: Status must still be not_started (prevents partial-write orphans)
+        if (current['status'] != 'not_started') {
           throw Exception('already_claimed');
         }
 
@@ -234,6 +248,20 @@ class DeliveryService {
         entityId: assignmentId,
         details: '$distributorName claimed the delivery',
       );
+
+      // Notify Admin that a delivery has been claimed
+      final doc = await ref.get();
+      if (doc.exists) {
+        final familyArea = doc.data()?['familyArea'] ?? '';
+        await NotificationService.sendAdminNotification(
+          title: 'Delivery Claimed 🚚',
+          message:
+              '$distributorName has claimed the delivery assignment for $familyArea.',
+          type: 'delivery_claimed',
+          relatedId: assignmentId,
+        );
+      }
+
       return true;
     } catch (e) {
       if (e.toString().contains('already_claimed')) return false;
@@ -276,6 +304,15 @@ class DeliveryService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
+    // Notify Admin that items have been collected
+    await NotificationService.sendAdminNotification(
+      title: 'Items Picked Up from Warehouse 📦',
+      message:
+          'Delivery for ${assignment.familyArea} has been collected from the warehouse by the distributor.',
+      type: 'delivery_pickup',
+      relatedId: assignmentId,
+    );
+
     if (assignment.procurementRequestId != null) {
       await _db
           .collection('procurement_requests')
@@ -315,11 +352,15 @@ class DeliveryService {
     }
     final photoUrl = response.url!;
 
+    // FIX D10: Fetch assignment details BEFORE starting the batch to avoid stale cache reads
+    final assignmentRef = _db.collection(_collection).doc(assignmentId);
+    final assignmentDoc = await assignmentRef.get();
+    final assignment = DeliveryAssignment.fromFirestore(assignmentDoc);
+
     final now = DateTime.now();
     final batch = _db.batch();
 
     // 2. Update delivery assignment
-    final assignmentRef = _db.collection(_collection).doc(assignmentId);
     batch.update(assignmentRef, {
       'status': DeliveryStatus.delivered.toFirestore(),
       'deliveredAt': Timestamp.fromDate(now),
@@ -341,13 +382,31 @@ class DeliveryService {
     });
 
     // 3b. Update original procurement request
-    final assignmentDoc = await assignmentRef.get();
-    final assignment = DeliveryAssignment.fromFirestore(assignmentDoc);
+
     if (assignment.procurementRequestId != null) {
       final procRef = _db
           .collection('procurement_requests')
           .doc(assignment.procurementRequestId);
       batch.update(procRef, {'status': 'delivered'});
+    }
+
+    // 3c. Liquidate targeted in-kind warehouse stock
+    if (assignment.inKindCoveredItems.isNotEmpty) {
+      final stockSnaps = await _db
+          .collection('warehouse_stock')
+          .where('familyId', isEqualTo: familyId)
+          .where(
+            'status',
+            whereIn: ['pending_pickup', 'in_transit', 'received'],
+          )
+          .get();
+      for (final sDoc in stockSnaps.docs) {
+        batch.update(sDoc.reference, {
+          'status': 'delivered',
+          'deliveredAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
     }
 
     // Commit all state updates atomically
@@ -594,6 +653,101 @@ class DeliveryService {
       details:
           'Verified by ${user?.email ?? "Admin"}. ${donationIds.length} donations marked delivered.',
     );
+
+    // Notify Distributor
+    final distributorId = data['assignedDistributorId'] as String?;
+    if (distributorId != null) {
+      await NotificationService.sendDistributorNotification(
+        userId: distributorId,
+        title: 'Delivery Officially Verified ✅',
+        message: 'Admin has confirmed your delivery. Great work! This delivery is now complete.',
+        actionType: 'delivery_admin_verified',
+        actionId: assignmentId,
+      );
+    }
+
+    // Notify Donors
+    for (final donationId in donationIds) {
+      final donDoc = await _db.collection('donations').doc(donationId).get();
+      final donorId = donDoc.data()?['donorId'] as String?;
+      if (donorId != null) {
+        await NotificationService.sendDonorNotification(
+          userId: donorId,
+          title: 'Delivery Officially Verified ✅',
+          message: 'An Admin has confirmed your donation reached the family safely!',
+          actionType: 'delivery_admin_verified',
+          actionId: assignmentId,
+        );
+      }
+    }
+  }
+
+  /// Admin rejects proof of delivery — ATOMIC via WriteBatch
+  static Future<void> adminRejectDelivery(String assignmentId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    final doc = await _db.collection(_collection).doc(assignmentId).get();
+    if (!doc.exists) return;
+    
+    final data = doc.data()!;
+    final familyId = data['familyId'] as String;
+
+    final batch = _db.batch();
+
+    // 1. Update assignment status to failed
+    batch.update(_db.collection(_collection).doc(assignmentId), {
+      'status': DeliveryStatus.failed.toFirestore(),
+      'failedAt': FieldValue.serverTimestamp(),
+      'failureReason': DeliveryFailureReason.other.toFirestore(),
+      'failureNotes': 'Proof rejected by Administrator (${user?.email ?? "Admin"}).',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // 2. Cascade failure back to family
+    batch.update(_db.collection('families').doc(familyId), {
+      'fulfillmentStatus': 'issue_reported',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // 3. Cascade failure back to procurement
+    final procId = data['procurementRequestId'] as String?;
+    if (procId != null) {
+      batch.update(_db.collection('procurement_requests').doc(procId), {
+        'status': 'issue_reported'
+      });
+    }
+
+    // 4. Revert linked donations
+    final donationIds = data['donationIds'] != null
+        ? List<String>.from(data['donationIds'] as List)
+        : <String>[];
+
+    for (final donationId in donationIds) {
+      batch.update(_db.collection('donations').doc(donationId), {
+        'status': 'verified',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    await batch.commit();
+
+    await AuditService.logFamilyAction(
+      action: 'Delivery proof rejected',
+      familyId: familyId,
+      familyName: 'Family',
+      details: 'Proof rejected by ${user?.email ?? "Admin"}.',
+    );
+
+    // Notify Distributor
+    final distributorId = data['assignedDistributorId'] as String?;
+    if (distributorId != null) {
+      await NotificationService.sendDistributorNotification(
+        userId: distributorId,
+        title: 'Delivery Proof Rejected ❌',
+        message: 'Admin rejected your submitted proof of delivery.',
+        actionType: 'delivery_admin_rejected',
+        actionId: assignmentId,
+      );
+    }
   }
 
   /// Admin reassigns a failed delivery to another distributor

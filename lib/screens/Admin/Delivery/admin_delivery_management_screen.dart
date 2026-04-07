@@ -1,26 +1,19 @@
-import 'dart:io';
-
 import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+
 import 'package:intl/intl.dart';
 import 'package:ration_aid/models/delivery_assignment_model.dart';
-import 'package:ration_aid/models/family_model.dart';
-import 'package:ration_aid/screens/Admin/widgets/admin_scaffold.dart';
+
 import 'package:ration_aid/screens/Admin/widgets/frosted_panel.dart';
-import 'package:ration_aid/services/audit_service.dart';
-import 'package:ration_aid/services/cloudinary_service.dart';
 import 'package:ration_aid/services/delivery_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 
+enum DeliveryFilter { pending, active, toVerify, completed, failed }
+
 /// Unified Admin Delivery Management Screen.
-/// Tab 1 – Pending (not_started)
-/// Tab 2 – Active (picked_up / in_transit)
-/// Tab 3 – To Verify (delivered, awaiting admin)
-/// Tab 4 – Failed
-/// Tab 5 – Direct (families stocked by admin, no distributor — merged from old DeliveryVerificationScreen)
+/// Uses a single-list layout with a dropdown filter instead of tabs.
 class AdminDeliveryManagementScreen extends StatefulWidget {
   const AdminDeliveryManagementScreen({super.key});
 
@@ -30,34 +23,21 @@ class AdminDeliveryManagementScreen extends StatefulWidget {
 }
 
 class _AdminDeliveryManagementScreenState
-    extends State<AdminDeliveryManagementScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+    extends State<AdminDeliveryManagementScreen> {
+  DeliveryFilter _currentFilter = DeliveryFilter.toVerify;
   String _searchQuery = '';
-
-  // ----- Direct delivery state (from old DeliveryVerificationScreen) -----
-  bool _isDirectProcessing = false;
-  File? _directImageFile;
-  final _picker = ImagePicker();
 
   // ── Bulk Assignment State ──
   final Set<String> _selectedAssignments = {};
 
-  // ── Shared Stream (single Firestore listener for ALL tabs) ──
+  // ── Shared Stream (single Firestore listener for ALL filters) ──
   late final Stream<List<DeliveryAssignment>> _assignmentsStream;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
     _assignmentsStream = DeliveryService.streamAllAssignments()
         .asBroadcastStream();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -68,154 +48,302 @@ class _AdminDeliveryManagementScreenState
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return AdminScaffold(
-      title: 'Delivery Management',
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              // ── Search Bar ───────────────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Search by area, city, distributor, or pack...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    filled: true,
-                    fillColor: isDark
-                        ? const Color(0xFF1E1E1E)
-                        : Colors.grey[100],
-                  ),
-                  onChanged: (val) {
-                    setState(() => _searchQuery = val.toLowerCase().trim());
-                  },
-                ),
-              ),
-              // ── Tab bar ──────────────────────────────────────────────────────
-              Container(
-                color: isDark ? const Color(0xFF121212) : Colors.white,
-                child: TabBar(
-                  controller: _tabController,
-                  labelColor: AppColors.volunteerBlue,
-                  unselectedLabelColor: theme.colorScheme.onSurface.withValues(
-                    alpha: 0.45,
-                  ),
-                  indicatorColor: AppColors.volunteerBlue,
-                  isScrollable: true,
-                  tabAlignment: TabAlignment.start,
-                  labelStyle: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                  onTap: (_) => setState(
-                    () => _selectedAssignments.clear(),
-                  ), // Clear selection on tab switch
-                  tabs: const [
-                    Tab(text: 'Pending'),
-                    Tab(text: 'Active'),
-                    Tab(text: 'To Verify'),
-                    Tab(text: 'Completed'),
-                    Tab(text: 'Failed'),
-                    Tab(text: 'Direct'),
-                  ],
-                ),
-              ),
+    Widget currentPanel;
+    bool showFab = false;
 
-              Expanded(
-                child: FrostedPanel(
-                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                  padding: EdgeInsets.zero,
-                  child: TabBarView(
-                    controller: _tabController,
-                    physics: const NeverScrollableScrollPhysics(),
-                    children: [
-                      // Tabs 1–4: from delivery_assignments collection
-                      _assignmentTab(
-                        statusFilter: (a) =>
-                            a.status == DeliveryStatus.notStarted,
-                        emptyMsg: 'No pending deliveries',
-                        emptyIcon: Icons.hourglass_empty,
-                        isDark: isDark,
-                        showAssignButton: true,
-                      ),
-                      _assignmentTab(
-                        statusFilter: (a) =>
-                            a.status == DeliveryStatus.pickedUp ||
-                            a.status == DeliveryStatus.inTransit,
-                        emptyMsg: 'No active deliveries',
-                        emptyIcon: Icons.local_shipping_outlined,
-                        isDark: isDark,
-                      ),
-                      _assignmentTab(
-                        statusFilter: (a) =>
-                            a.status == DeliveryStatus.delivered &&
-                            !a.adminVerified,
-                        emptyMsg: 'No deliveries awaiting verification',
-                        emptyIcon: Icons.pending_actions,
-                        isDark: isDark,
-                        showVerifyButton: true,
-                      ),
-                      _assignmentTab(
-                        statusFilter: (a) =>
-                            a.status == DeliveryStatus.delivered &&
-                            a.adminVerified,
-                        emptyMsg: 'No completed deliveries',
-                        emptyIcon: Icons.verified_user,
-                        isDark: isDark,
-                      ),
-                      _assignmentTab(
-                        statusFilter: (a) =>
-                            a.status == DeliveryStatus.failed ||
-                            a.status == DeliveryStatus.reassigned,
-                        emptyMsg: 'No failed deliveries',
-                        emptyIcon: Icons.check_circle_outline,
-                        isDark: isDark,
-                        showReassignButton: true,
-                      ),
-                      // Tab 6: Direct delivery (stocked families, admin confirms directly)
-                      _buildDirectTab(isDark),
-                    ],
+    switch (_currentFilter) {
+      case DeliveryFilter.pending:
+        currentPanel = _assignmentTab(
+          statusFilter: (a) => a.status == DeliveryStatus.notStarted,
+          emptyMsg: 'No pending deliveries',
+          emptyIcon: Icons.hourglass_empty,
+          isDark: isDark,
+          showAssignButton: true,
+        );
+        showFab = _selectedAssignments.isNotEmpty;
+        break;
+      case DeliveryFilter.active:
+        currentPanel = _assignmentTab(
+          statusFilter: (a) =>
+              a.status == DeliveryStatus.pickedUp ||
+              a.status == DeliveryStatus.inTransit,
+          emptyMsg: 'No active deliveries',
+          emptyIcon: Icons.local_shipping_outlined,
+          isDark: isDark,
+        );
+        break;
+      case DeliveryFilter.toVerify:
+        currentPanel = _assignmentTab(
+          statusFilter: (a) =>
+              a.status == DeliveryStatus.delivered && !a.adminVerified,
+          emptyMsg: 'No deliveries awaiting verification',
+          emptyIcon: Icons.pending_actions,
+          isDark: isDark,
+          showVerifyButton: true,
+        );
+        break;
+      case DeliveryFilter.completed:
+        currentPanel = _assignmentTab(
+          statusFilter: (a) =>
+              a.status == DeliveryStatus.delivered && a.adminVerified,
+          emptyMsg: 'No completed deliveries',
+          emptyIcon: Icons.verified_user,
+          isDark: isDark,
+        );
+        break;
+      case DeliveryFilter.failed:
+        currentPanel = _assignmentTab(
+          statusFilter: (a) =>
+              a.status == DeliveryStatus.failed ||
+              a.status == DeliveryStatus.reassigned,
+          emptyMsg: 'No failed deliveries',
+          emptyIcon: Icons.check_circle_outline,
+          isDark: isDark,
+          showReassignButton: true,
+        );
+        break;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ── Header/Title ──
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Center(
+            child: Text(
+              'Delivery Management',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: theme.colorScheme.onSurface,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+        ),
+
+        // ── Collapsible Overview ──
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: FrostedPanel(
+            padding: EdgeInsets.zero,
+            child: StreamBuilder<List<DeliveryAssignment>>(
+              stream: _assignmentsStream,
+              builder: (context, snapshot) {
+                final assignments = snapshot.data ?? [];
+                int total = assignments.length;
+                int pending = assignments
+                    .where((a) => a.status == DeliveryStatus.notStarted)
+                    .length;
+                int toVerify = assignments
+                    .where(
+                      (a) =>
+                          a.status == DeliveryStatus.delivered &&
+                          !a.adminVerified,
+                    )
+                    .length;
+                int completed = assignments
+                    .where(
+                      (a) =>
+                          a.status == DeliveryStatus.delivered &&
+                          a.adminVerified,
+                    )
+                    .length;
+                int failed = assignments
+                    .where(
+                      (a) =>
+                          a.status == DeliveryStatus.failed ||
+                          a.status == DeliveryStatus.reassigned,
+                    )
+                    .length;
+
+                return ExpansionTile(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  collapsedShape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  title: Text(
+                    'Overview & Statistics',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                    ),
+                  ),
+                  leading: Icon(
+                    Icons.analytics_outlined,
+                    color: theme.colorScheme.primary,
+                  ),
+                  childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  children: [
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        _statItem(
+                          'Total',
+                          total.toString(),
+                          AppColors.volunteerBlue,
+                        ),
+                        _statItem(
+                          'Pending',
+                          pending.toString(),
+                          Colors.amber[700]!,
+                        ),
+                        _statItem(
+                          'To Verify',
+                          toVerify.toString(),
+                          Colors.blue[600]!,
+                        ),
+                        _statItem(
+                          'Completed',
+                          completed.toString(),
+                          Colors.green[600]!,
+                        ),
+                        _statItem(
+                          'Failed',
+                          failed.toString(),
+                          Colors.red[400]!,
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ── Search & Filter Row ──
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Search deliveries...',
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      filled: true,
+                      fillColor: isDark
+                          ? const Color(0xFF1E1E1E)
+                          : Colors.grey[100],
+                    ),
+                    onChanged: (val) {
+                      setState(() => _searchQuery = val.toLowerCase().trim());
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                height: 48,
+                width: 48,
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E1E1E) : Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: PopupMenuButton<DeliveryFilter>(
+                  icon: Icon(
+                    Icons.filter_list,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                    size: 22,
+                  ),
+                  tooltip: 'Filter by Status',
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  onSelected: (val) {
+                    setState(() {
+                      _selectedAssignments.clear(); // Clear selections
+                      _currentFilter = val;
+                    });
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: DeliveryFilter.toVerify,
+                      child: Text(
+                        'To Verify',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: DeliveryFilter.pending,
+                      child: Text('Pending'),
+                    ),
+                    PopupMenuItem(
+                      value: DeliveryFilter.active,
+                      child: Text('Active'),
+                    ),
+                    PopupMenuItem(
+                      value: DeliveryFilter.completed,
+                      child: Text('Completed'),
+                    ),
+                    PopupMenuItem(
+                      value: DeliveryFilter.failed,
+                      child: Text('Failed'),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
+        ),
 
-          // ── Bulk Assign Floating Button ──
-          if (_selectedAssignments.isNotEmpty && _tabController.index == 0)
-            Positioned(
-              bottom: 24,
-              left: 16,
-              right: 16,
-              child: ElevatedButton.icon(
-                onPressed: _showBulkAssignDialog,
-                icon: const Icon(Icons.group_add),
-                label: Text('Assign ${_selectedAssignments.length} Deliveries'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.volunteerBlue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 8,
-                  shadowColor: AppColors.volunteerBlue.withValues(alpha: 0.5),
-                ),
+        // ── Main Content Area ──
+        Expanded(
+          child: Stack(
+            children: [
+              FrostedPanel(
+                margin: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+                padding: EdgeInsets.zero,
+                child: currentPanel,
               ),
-            ),
-        ],
-      ),
+
+              // ── Bulk Assign Floating Button ──
+              if (showFab)
+                Positioned(
+                  bottom: 24,
+                  left: 16,
+                  right: 16,
+                  child: ElevatedButton.icon(
+                    onPressed: _showBulkAssignDialog,
+                    icon: const Icon(Icons.group_add),
+                    label: Text(
+                      'Assign ${_selectedAssignments.length} Deliveries',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.volunteerBlue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 8,
+                      shadowColor: AppColors.volunteerBlue.withValues(
+                        alpha: 0.5,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -319,415 +447,6 @@ class _AdminDeliveryManagementScreenState
     );
   }
 
-  /// Tab 5 — Direct delivery: stocked families waiting for admin confirmation
-  Widget _buildDirectTab(bool isDark) {
-    return _isDirectProcessing
-        ? const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(color: AppColors.volunteerBlue),
-                SizedBox(height: 16),
-                Text('Processing delivery confirmation…'),
-              ],
-            ),
-          )
-        : StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('families')
-                .where('status', isEqualTo: 'accepted')
-                .where('fulfillmentStatus', isEqualTo: 'stocked')
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
-              }
-              if (!snapshot.hasData) {
-                return const Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.volunteerBlue,
-                  ),
-                );
-              }
-
-              var docs = snapshot.data!.docs;
-              if (_searchQuery.isNotEmpty) {
-                docs = docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final area = (data['area'] ?? '').toString().toLowerCase();
-                  final city = (data['city'] ?? '').toString().toLowerCase();
-                  return area.contains(_searchQuery) ||
-                      city.contains(_searchQuery);
-                }).toList();
-              }
-              if (docs.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.local_shipping_outlined,
-                        size: 64,
-                        color: Colors.grey[300],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No stocked families pending direct delivery',
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Families with fulfillmentStatus = stocked\nwill appear here for direct admin confirmation.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              return ListView.separated(
-                padding: const EdgeInsets.all(12),
-                itemCount: docs.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final family = Family.fromFirestore(docs[index]);
-                  return _buildDirectDeliveryCard(family, isDark);
-                },
-              );
-            },
-          );
-  }
-
-  Widget _buildDirectDeliveryCard(Family family, bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Theme.of(context).dividerColor.withValues(alpha: 0.6),
-        ),
-      ),
-      child: Column(
-        children: [
-          Container(
-            height: 4,
-            decoration: const BoxDecoration(
-              color: Colors.teal,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.teal.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.home_work_outlined,
-                        color: Colors.teal,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${family.address}, ${family.area}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                            ),
-                          ),
-                          Text(
-                            family.city,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.5),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.teal.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.teal.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: const Text(
-                        'Stocked',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.teal,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                const Divider(height: 1),
-                const SizedBox(height: 10),
-                _infoRow(
-                  context,
-                  'Pack',
-                  family.assignedPackName ?? 'Standard Pack',
-                ),
-                _infoRow(context, 'Phone', family.phone ?? 'N/A'),
-                _infoRow(
-                  context,
-                  'Family Size',
-                  '${family.familySize} members',
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _confirmDirectDelivery(family),
-                    icon: const Icon(Icons.camera_alt, size: 18),
-                    label: const Text(
-                      'Confirm Delivery (Upload Proof)',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ════════════════════════════════════════════════════════════════════════
-  // DIRECT DELIVERY LOGIC (merged from DeliveryVerificationScreen)
-  // ════════════════════════════════════════════════════════════════════════
-
-  Future<void> _confirmDirectDelivery(Family family) async {
-    // BUG6 FIX: Use a LOCAL variable per dialog invocation so that
-    // each family dialog gets its own isolated image state.
-    File? dialogImageFile;
-
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDlgState) => AlertDialog(
-          title: Row(
-            children: [
-              const Icon(Icons.verified_outlined, color: Colors.teal),
-              const SizedBox(width: 8),
-              const Text('Confirm Direct Delivery'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.teal.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.teal.withValues(alpha: 0.2)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.location_on, color: Colors.teal, size: 16),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        '${family.address}, ${family.area}, ${family.city}',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                'Take or select a proof of delivery photo:',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-              const SizedBox(height: 10),
-              GestureDetector(
-                onTap: () async {
-                  final picked = await _picker.pickImage(
-                    source: ImageSource.camera,
-                    imageQuality: 85,
-                  );
-                  if (picked != null) {
-                    setDlgState(() => dialogImageFile = File(picked.path));
-                  }
-                },
-                child: Container(
-                  height: 170,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: _directImageFile != null
-                          ? Colors.green
-                          : Colors.grey.withValues(alpha: 0.4),
-                      width: 2,
-                    ),
-                  ),
-                  child: dialogImageFile != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: Image.file(
-                            dialogImageFile!,
-                            fit: BoxFit.cover,
-                          ),
-                        )
-                      : const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.camera_alt,
-                              size: 44,
-                              color: Colors.grey,
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              'Tap to take photo',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          ],
-                        ),
-                ),
-              ),
-              if (dialogImageFile != null) ...[
-                const SizedBox(height: 8),
-                TextButton.icon(
-                  onPressed: () async {
-                    final picked = await _picker.pickImage(
-                      source: ImageSource.gallery,
-                      imageQuality: 85,
-                    );
-                    if (picked != null) {
-                      setDlgState(() => dialogImageFile = File(picked.path));
-                    }
-                  },
-                  icon: const Icon(Icons.photo_library, size: 16),
-                  label: const Text('Choose from Gallery'),
-                  style: TextButton.styleFrom(foregroundColor: Colors.teal),
-                ),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton.icon(
-              onPressed: dialogImageFile == null
-                  ? null
-                  : () {
-                      Navigator.pop(dialogContext);
-                      _processDirectDelivery(family, dialogImageFile!);
-                    },
-              icon: const Icon(Icons.check_circle, size: 18),
-              label: const Text('Confirm Delivery'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _processDirectDelivery(Family family, File proofImage) async {
-    setState(() => _isDirectProcessing = true);
-
-    try {
-      // 1. Upload proof image
-      final response = await CloudinaryService.uploadImage(proofImage);
-      if (!response.isSuccess) {
-        throw Exception(response.errorMessage ?? 'Image upload failed');
-      }
-      final url = response.url!;
-
-      // 2. Update family record
-      await FirebaseFirestore.instance
-          .collection('families')
-          .doc(family.id)
-          .update({
-            'fulfillmentStatus': 'delivered',
-            'deliveredAt': FieldValue.serverTimestamp(),
-            'deliveryProof': url,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-
-      // 3. Log to audit
-      await AuditService.logFamilyAction(
-        action: 'Direct Delivery Confirmed (Admin)',
-        familyId: family.id,
-        familyName: '${family.area}, ${family.city}',
-        details: 'Proof photo uploaded via Direct tab',
-      );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Direct delivery confirmed successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isDirectProcessing = false);
-    }
-  }
-
   // ════════════════════════════════════════════════════════════════════════
   // ASSIGNMENT ACTIONS (Tabs 1–4)
   // ════════════════════════════════════════════════════════════════════════
@@ -767,7 +486,7 @@ class _AdminDeliveryManagementScreenState
       isMissingGPS = true;
     }
 
-    final confirm = await showDialog<bool>(
+    final confirm = await showDialog<bool?>(
       context: context,
       builder: (_) => AlertDialog(
         title: Row(
@@ -829,8 +548,16 @@ class _AdminDeliveryManagementScreenState
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(context, null),
             child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, false),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Reject Proof'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -843,17 +570,30 @@ class _AdminDeliveryManagementScreenState
         ],
       ),
     );
-    if (confirm != true) return;
+    if (confirm == null) return;
 
     try {
-      await DeliveryService.adminVerifyDelivery(a.id);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Delivery verified successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+      if (confirm == true) {
+        await DeliveryService.adminVerifyDelivery(a.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Delivery verified successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        // _showRejectionReasonDialog or just direct reject
+        await DeliveryService.adminRejectDelivery(a.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ Delivery proof rejected.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1453,35 +1193,34 @@ class _AdminDeliveryManagementScreenState
     }
   }
 
-  // ════════════════════════════════════════════════════════════════════════
-  // SHARED HELPERS
-  // ════════════════════════════════════════════════════════════════════════
-
-  Widget _infoRow(BuildContext context, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 3),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.45),
-              ),
-            ),
+  Widget _statItem(String label, String value, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          '$label: ',
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.6),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-            ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: color,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -1519,227 +1258,276 @@ class _AdminDeliveryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final a = assignment;
     final fmt = DateFormat('MMM dd, hh:mm a');
+    final theme = Theme.of(context);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Theme.of(context).dividerColor.withValues(alpha: 0.6),
-        ),
+    return Card(
+      elevation: 1,
+      shadowColor: Colors.black12,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.3)),
       ),
-      child: Column(
-        children: [
-          Container(
-            height: 3,
-            decoration: BoxDecoration(
-              color: _statusColor(a.status),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(8),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Row(
-                  children: [
-                    if (onSelectChanged != null)
-                      Checkbox(
-                        value: isSelected,
-                        onChanged: onSelectChanged,
-                        activeColor: AppColors.volunteerBlue,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    Expanded(
-                      child: Text(
-                        '${a.familyArea}, ${a.familyCity}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                        ),
+                if (onSelectChanged != null)
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: Checkbox(
+                      value: isSelected,
+                      onChanged: onSelectChanged,
+                      activeColor: AppColors.volunteerBlue,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
                       ),
                     ),
-                    _chip(a.status),
-                  ],
+                  ),
+                if (onSelectChanged != null) const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Delivery to ${a.familyArea}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        a.familyCity,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 8),
-                _row(
-                  context,
-                  'Distributor',
-                  a.assignedDistributorName ?? 'Unassigned',
+                _chip(a.status),
+              ],
+            ),
+
+            const SizedBox(height: 8),
+
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              children: [
+                _infoChip(
+                  icon: Icons.inventory_2_outlined,
+                  label: a.assignedPackName ?? 'Standard Pack',
+                  theme: theme,
                 ),
-                _row(context, 'Pack', a.assignedPackName ?? 'Standard Pack'),
-                _row(
-                  context,
-                  'Items',
-                  '${a.items.length} types · Family of ${a.familySize}',
+                _infoChip(
+                  icon: Icons.group_outlined,
+                  label: 'Family of ${a.familySize}',
+                  theme: theme,
+                ),
+                _infoChip(
+                  icon: Icons.local_shipping_outlined,
+                  label: a.assignedDistributorName ?? 'Unassigned',
+                  theme: theme,
                 ),
                 if (a.scheduledAt != null)
-                  _row(context, 'Scheduled', fmt.format(a.scheduledAt!)),
-                if (a.failureReason != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    'Failure: ${a.failureReason!.displayName}',
-                    style: const TextStyle(
-                      color: Colors.red,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
+                  _infoChip(
+                    icon: Icons.event,
+                    label: fmt.format(a.scheduledAt!),
+                    theme: theme,
+                  ),
+              ],
+            ),
+
+            if (a.failureReason != null) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.error_outline, size: 14, color: Colors.red),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Failed: ${a.failureReason!.displayName}${a.failureNotes?.isNotEmpty == true ? ' - ${a.failureNotes}' : ''}',
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (a.failureNotes?.isNotEmpty == true)
-                    Text(
-                      a.failureNotes!,
-                      style: const TextStyle(color: Colors.red, fontSize: 12),
-                    ),
                 ],
+              ),
+            ],
 
-                // Proof Preview
-                if (a.proofPhotoUrl != null) ...[
-                  const SizedBox(height: 10),
+            // Proof Preview
+            if (a.proofPhotoUrl != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                     child: Image.network(
                       a.proofPhotoUrl!,
-                      height: 140,
-                      width: double.infinity,
+                      height: 60,
+                      width: 80,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
-                        height: 80,
+                        height: 60,
+                        width: 80,
                         color: Colors.grey[200],
                         child: const Center(
-                          child: Icon(Icons.broken_image, color: Colors.grey),
+                          child: Icon(
+                            Icons.broken_image,
+                            color: Colors.grey,
+                            size: 20,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                  if (a.proofGeoLat != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Row(
+                  if (a.proofGeoLat != null) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(
-                            Icons.gps_fixed,
-                            size: 12,
-                            color: Colors.green,
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.location_on,
+                                size: 12,
+                                color: Colors.green,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'GPS Locked',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.green[700],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 4),
                           Text(
-                            '${a.proofGeoLat!.toStringAsFixed(5)}, ${a.proofGeoLng!.toStringAsFixed(5)}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.green,
+                            '${a.proofGeoLat!.toStringAsFixed(4)}, ${a.proofGeoLng!.toStringAsFixed(4)}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.5,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
+                  ],
                 ],
+              ),
+            ],
 
-                if (showAssignButton ||
-                    showVerifyButton ||
-                    showReassignButton) ...[
-                  const SizedBox(height: 12),
+            if (showAssignButton || showVerifyButton || showReassignButton) ...[
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
                   if (showAssignButton)
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: onAssign,
-                        icon: const Icon(Icons.person_add, size: 16),
-                        label: Text(
-                          a.assignedDistributorId == null
-                              ? 'Assign Distributor'
-                              : 'Reassign Distributor',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.volunteerBlue,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          elevation: 0,
-                        ),
+                    TextButton.icon(
+                      onPressed: onAssign,
+                      icon: const Icon(Icons.person_add, size: 14),
+                      label: Text(
+                        a.assignedDistributorId == null ? 'Assign' : 'Reassign',
+                        style: const TextStyle(fontSize: 12),
                       ),
-                    ),
-                  if (showVerifyButton)
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: onVerify,
-                        icon: const Icon(Icons.verified, size: 16),
-                        label: const Text(
-                          'Verify Delivery',
-                          style: TextStyle(fontWeight: FontWeight.w700),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.volunteerBlue,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 0,
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          elevation: 0,
-                        ),
+                        minimumSize: const Size(0, 32),
                       ),
                     ),
                   if (showReassignButton)
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: onReassign,
-                        icon: const Icon(Icons.swap_horiz, size: 16),
-                        label: const Text(
-                          'Reassign Delivery',
-                          style: TextStyle(fontWeight: FontWeight.w700),
+                    TextButton.icon(
+                      onPressed: onReassign,
+                      icon: const Icon(Icons.swap_horiz, size: 14),
+                      label: const Text(
+                        'Reassign Force',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.deepOrange,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 0,
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.deepOrange,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          elevation: 0,
+                        minimumSize: const Size(0, 32),
+                      ),
+                    ),
+                  if (showVerifyButton)
+                    FilledButton.icon(
+                      onPressed: onVerify,
+                      icon: const Icon(Icons.verified, size: 14),
+                      label: const Text(
+                        'Verify',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 0,
                         ),
+                        minimumSize: const Size(0, 32),
                       ),
                     ),
                 ],
-              ],
-            ),
-          ),
-        ],
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _row(BuildContext context, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 3),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 82,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.45),
-              ),
-            ),
+  Widget _infoChip({
+    required IconData icon,
+    required String label,
+    required ThemeData theme,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          icon,
+          size: 14,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

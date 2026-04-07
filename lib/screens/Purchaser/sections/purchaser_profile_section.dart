@@ -664,14 +664,98 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
                       if (formKey.currentState!.validate()) {
                         setDialogState(() => isLoading = true);
                         try {
-                          await user?.updateDisplayName(nameController.text);
+                          final newName = nameController.text;
+                          await user?.updateDisplayName(newName);
+                          
+                          if (user?.uid != null) {
+                            final newName = nameController.text.trim();
+
+                            // Collect ALL docs that need updating
+                            final claims = await FirebaseFirestore.instance
+                                .collection('procurement_requests')
+                                .where('claimedById', isEqualTo: user!.uid)
+                                .get();
+                            final purchases = await FirebaseFirestore.instance
+                                .collection('procurement_requests')
+                                .where('purchaserId', isEqualTo: user.uid)
+                                .get();
+                            final pickups = await FirebaseFirestore.instance
+                                .collection('inbound_pickups')
+                                .where('collectedBy', isEqualTo: user.uid)
+                                .get();
+                            final warehouse = await FirebaseFirestore.instance
+                                .collection('warehouse_stock')
+                                .where('receivedBy', isEqualTo: user.uid)
+                                .get();
+
+                            // Build flat list of (ref, data) update pairs
+                            final List<Map<String, dynamic>> allUpdates = [
+                              // Core user
+                              {
+                                'ref': FirebaseFirestore.instance
+                                    .collection('users')
+                                    .doc(user.uid),
+                                'data': {'name': newName},
+                              },
+                              // Claims
+                              for (var doc in claims.docs)
+                                {
+                                  'ref': doc.reference,
+                                  'data': {'claimedByName': newName},
+                                },
+                              // Purchases
+                              for (var doc in purchases.docs)
+                                {
+                                  'ref': doc.reference,
+                                  'data': {'purchaserName': newName},
+                                },
+                              // Pickups
+                              for (var doc in pickups.docs)
+                                {
+                                  'ref': doc.reference,
+                                  'data': {'collectedByName': newName},
+                                },
+                              // Warehouse
+                              for (var doc in warehouse.docs)
+                                {
+                                  'ref': doc.reference,
+                                  'data': {'receivedByName': newName},
+                                },
+                            ];
+
+                            // Fix #32: Chunk into batches of 450 to respect
+                            // Firestore's 500-operation batch limit
+                            const int chunkSize = 450;
+                            for (
+                              int i = 0;
+                              i < allUpdates.length;
+                              i += chunkSize
+                            ) {
+                              final chunk = allUpdates.sublist(
+                                i,
+                                (i + chunkSize).clamp(0, allUpdates.length),
+                              );
+                              final batch =
+                                  FirebaseFirestore.instance.batch();
+                              for (final update in chunk) {
+                                batch.update(
+                                  update['ref']
+                                      as DocumentReference,
+                                  update['data']
+                                      as Map<String, dynamic>,
+                                );
+                              }
+                              await batch.commit();
+                            }
+                          }
                           await user?.reload();
+
                           if (context.mounted) {
                             Navigator.pop(context);
-                            setState(() {});
+                            setState(() {}); // refresh the UI widget
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Name updated!'),
+                                content: Text('Name updated synchronously with database!'),
                                 backgroundColor: Colors.green,
                               ),
                             );
@@ -691,7 +775,16 @@ class _PurchaserProfileSectionState extends State<PurchaserProfileSection> {
                 backgroundColor: AppColors.purchaserOrange,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Save'),
+              child: isLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text('Save'),
             ),
           ],
         ),
