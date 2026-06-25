@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ration_aid/models/delivery_assignment_model.dart';
+import 'package:ration_aid/models/donation_model.dart';
 import 'package:ration_aid/services/audit_service.dart';
 import 'package:ration_aid/services/cloudinary_service.dart';
 import 'package:ration_aid/services/notification_service.dart';
@@ -29,6 +31,7 @@ class DeliveryService {
     String? assignedPackId,
     String? assignedPackName,
     Map<String, num> items = const {},
+    Map<String, String> itemUnits = const {},
     List<String> inKindCoveredItems = const [],
     String? distributorId,
     String? distributorName,
@@ -54,6 +57,7 @@ class DeliveryService {
       assignedPackId: assignedPackId,
       assignedPackName: assignedPackName,
       items: items,
+      itemUnits: itemUnits,
       inKindCoveredItems: inKindCoveredItems,
       assignedDistributorId: distributorId,
       assignedDistributorName: distributorName,
@@ -298,13 +302,47 @@ class DeliveryService {
 
     final assignment = DeliveryAssignment.fromFirestore(doc);
 
-    await _db.collection(_collection).doc(assignmentId).update({
+    // Use a WriteBatch so the assignment update and warehouse stock clearing are atomic.
+    final batch = _db.batch();
+
+    // 1. Advance delivery assignment status
+    batch.update(_db.collection(_collection).doc(assignmentId), {
       'status': DeliveryStatus.pickedUp.toFirestore(),
       'pickedUpAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // Notify Admin that items have been collected
+    // 2. Advance procurement to in_transit — pack is now in the hands of the distributor
+    if (assignment.procurementRequestId != null) {
+      batch.update(
+        _db.collection('procurement_requests').doc(assignment.procurementRequestId),
+        {'status': 'in_transit'}, // Purchaser sees "Out for Delivery"
+      );
+    }
+
+    // 3. Clear family-reserved in-kind stock from the Purchaser In-Kind Warehouse tab.
+    //    When a delivery is picked up for a family (procurement OR in-kind), the physical
+    //    items are leaving the warehouse — advance warehouse_stock to 'in_transit' so
+    //    they stop appearing in the Family Reserved view (which only shows
+    //    'received' and 'pending_pickup').
+    final stockSnaps = await _db
+        .collection('warehouse_stock')
+        .where('familyId', isEqualTo: assignment.familyId)
+        .where('status', whereIn: ['received', 'pending_pickup'])
+        .get();
+
+    for (final sDoc in stockSnaps.docs) {
+      batch.update(sDoc.reference, {
+        'status': 'in_transit',
+        'pickedUpAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Commit atomically
+    await batch.commit();
+
+    // 4. Notify Admin that items have been collected (after commit — non-blocking)
     await NotificationService.sendAdminNotification(
       title: 'Items Picked Up from Warehouse 📦',
       message:
@@ -312,16 +350,6 @@ class DeliveryService {
       type: 'delivery_pickup',
       relatedId: assignmentId,
     );
-
-    if (assignment.procurementRequestId != null) {
-      await _db
-          .collection('procurement_requests')
-          .doc(assignment.procurementRequestId)
-          .update({
-            'status':
-                'stocked', // Stocked acts as 'In Progress' for Purchaser Inventory
-          });
-    }
   }
 
   /// Move assignment to In Transit
@@ -331,6 +359,49 @@ class DeliveryService {
       'inTransitAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    // Sync donations to out_for_delivery
+    // Fix #4: include 'verified' as safety net in case earlier stages didn't catch them
+    final doc = await _db.collection(_collection).doc(assignmentId).get();
+    final familyId = doc.data()?['familyId'] as String?;
+    if (familyId != null) {
+      await _syncDonationsToStatus(
+        familyId,
+        [
+          DonationStatus.inProcess.toFirestore(),
+          DonationStatus.stocked.toFirestore(),
+          DonationStatus.verified.toFirestore(), // safety net
+        ],
+        DonationStatus.outForDelivery.toFirestore(),
+        'Your donation is on the way to the family!',
+      );
+
+      // Notify donors of all donations now marked out_for_delivery
+      final updatedSnaps = await _db
+          .collection('donations')
+          .where('familyId', isEqualTo: familyId)
+          .where('status', isEqualTo: DonationStatus.outForDelivery.toFirestore())
+          .get();
+      // Collect unique donorIds to avoid duplicate notifications
+      final notifiedDonors = <String>{};
+      for (final dDoc in updatedSnaps.docs) {
+        final donorId = dDoc.data()['donorId'] as String? ?? '';
+        final isSlice = dDoc.data()['isSmartSplitSlice'] as bool? ?? false;
+        // Only notify on parent donations or direct donations, not on child slices
+        // (the parent will carry the notification for the whole smart donation).
+        if (donorId.isNotEmpty && !isSlice && !notifiedDonors.contains(donorId)) {
+          notifiedDonors.add(donorId);
+          await NotificationService.sendDonorNotification(
+            userId: donorId,
+            title: 'Your Donation is On the Way! 🚚',
+            message:
+                'Great news! Your donation is now out for delivery to the family. It should arrive very soon!',
+            actionType: 'donation_out_for_delivery',
+            actionId: dDoc.id,
+          );
+        }
+      }
+    }
   }
 
   // ─── Proof of Delivery ─────────────────────────────────────────────────────
@@ -381,14 +452,8 @@ class DeliveryService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // 3b. Update original procurement request
-
-    if (assignment.procurementRequestId != null) {
-      final procRef = _db
-          .collection('procurement_requests')
-          .doc(assignment.procurementRequestId);
-      batch.update(procRef, {'status': 'delivered'});
-    }
+    // 3b. Procurement stays in_transit — only Admin verification advances it to delivered
+    // (Invisible Review: do NOT set procurement to delivered here yet)
 
     // 3c. Liquidate targeted in-kind warehouse stock
     if (assignment.inKindCoveredItems.isNotEmpty) {
@@ -420,23 +485,102 @@ class DeliveryService {
       data: {'type': 'delivery_proof_submitted', 'assignmentId': assignmentId},
     );
 
-    // 5. Notify donors
-    for (final donorId in donorIds) {
-      await NotificationService.sendToUser(
-        userId: donorId,
-        title: 'Your Donation Reached the Family! ❤️',
-        body:
-            'The items you donated have been delivered to the family. Thank you!',
-        data: {'type': 'donation_delivered', 'assignmentId': assignmentId},
-      );
-    }
-
     await AuditService.logFamilyAction(
       action: 'Delivery proof submitted',
       familyId: familyId,
       familyName: 'Family',
       details: 'Proof photo uploaded. GPS: ${lat ?? "N/A"}, ${lng ?? "N/A"}',
     );
+  }
+
+  static Future<void> _syncDonationsToStatus(
+    String familyId,
+    List<String> allowedPriorStatuses,
+    String newStatus,
+    String notificationNote,
+  ) async {
+    final snaps = await _db
+        .collection('donations')
+        .where('familyId', isEqualTo: familyId)
+        .where('status', whereIn: allowedPriorStatuses)
+        .get();
+
+    if (snaps.docs.isEmpty) {
+      // Still try to advance parent smart donations even if no direct donations found
+      await _syncParentSmartDonations(familyId, newStatus, notificationNote);
+      return;
+    }
+
+    final batch = _db.batch();
+    for (final doc in snaps.docs) {
+      batch.update(doc.reference, {
+        'status': newStatus,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'statusHistory': FieldValue.arrayUnion([
+          {
+            'status': newStatus,
+            'timestamp': Timestamp.now(),
+            'note': notificationNote,
+          }
+        ]),
+      });
+    }
+    await batch.commit();
+
+    // Also advance any parent Smart Give donations whose slices belong to this family
+    await _syncParentSmartDonations(familyId, newStatus, notificationNote);
+  }
+
+  /// Updates parent Smart Give donation when a family's slices advance.
+  /// Only ever increases status — never regresses.
+  static Future<void> _syncParentSmartDonations(
+    String familyId,
+    String newStatus,
+    String note,
+  ) async {
+    const statusOrder = [
+      'draft', 'pending', 'under_verification', 'verified',
+      'stocked', 'in_process', 'out_for_delivery', 'delivered', 'closed',
+    ];
+    final newIdx = statusOrder.indexOf(newStatus);
+    if (newIdx < 0) return;
+
+    // Find smart-split slices for this family
+    final sliceSnaps = await _db
+        .collection('donations')
+        .where('familyId', isEqualTo: familyId)
+        .where('isSmartSplitSlice', isEqualTo: true)
+        .get();
+    if (sliceSnaps.docs.isEmpty) return;
+
+    final parentIds = sliceSnaps.docs
+        .map((d) => d.data()['parentDonationId'] as String?)
+        .where((id) => id != null && id.isNotEmpty)
+        .toSet();
+    if (parentIds.isEmpty) return;
+
+    for (final parentId in parentIds) {
+      final parentRef = _db.collection('donations').doc(parentId!);
+      final parentDoc = await parentRef.get();
+      if (!parentDoc.exists) continue;
+
+      final currentStatus = parentDoc.data()?['status'] as String? ?? 'draft';
+      final currentIdx = statusOrder.indexOf(currentStatus);
+      // Never regress
+      if (newIdx <= currentIdx) continue;
+
+      await parentRef.update({
+        'status': newStatus,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'statusHistory': FieldValue.arrayUnion([
+          {
+            'status': newStatus,
+            'timestamp': Timestamp.now(),
+            'note': note,
+          }
+        ]),
+      });
+    }
   }
 
   // ─── Offline Proof Queue ───────────────────────────────────────────────────
@@ -552,31 +696,10 @@ class DeliveryService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // 3. Cascade failure back to purchaser procurement request
-    final assignmentDoc = await assignmentRef.get();
-    final assignment = DeliveryAssignment.fromFirestore(assignmentDoc);
-    if (assignment.procurementRequestId != null) {
-      final procRef = _db
-          .collection('procurement_requests')
-          .doc(assignment.procurementRequestId);
-      batch.update(procRef, {'status': 'issue_reported'});
-    }
+    // 3. Procurement stays at in_transit during failure — Purchaser is shielded from
+    //    delivery drama. It will only advance to delivered on Admin verification.
 
-    // 4. Revert linked donation statuses from 'delivered' → 'verified'
-    //    so they don't show as completed when delivery actually failed
-    final data = assignmentDoc.data() ?? {};
-    final donationIds = data['donationIds'] != null
-        ? List<String>.from(data['donationIds'] as List)
-        : <String>[];
-
-    for (final donationId in donationIds) {
-      batch.update(_db.collection('donations').doc(donationId), {
-        'status': 'verified', // Revert to last valid state
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    }
-
-    // Commit atomic failure + revert
+    // Commit atomic failure
     await batch.commit();
 
     // Notify admin
@@ -596,7 +719,71 @@ class DeliveryService {
       familyId: familyId,
       familyName: 'Assignment $assignmentId',
       details:
-          'Reason: ${reason.displayName}. Notes: $notes. ${donationIds.length} donations reverted to verified.',
+          'Reason: ${reason.displayName}. Notes: $notes.',
+    );
+  }
+
+  // ─── Failed Delivery Recovery ──────────────────────────────────────────────
+
+  /// Distributor re-attempts a failed/rejected delivery
+  static Future<void> reattemptDelivery(String assignmentId) async {
+    final doc = await _db.collection(_collection).doc(assignmentId).get();
+    if (!doc.exists) throw Exception('Assignment not found');
+    final data = doc.data()!;
+    final familyId = data['familyId'] as String;
+
+    final batch = _db.batch();
+
+    // 1. Reset assignment status
+    batch.update(_db.collection(_collection).doc(assignmentId), {
+      'status': DeliveryStatus.inTransit.toFirestore(),
+      'failedAt': null,
+      'failureReason': null,
+      'failureNotes': null,
+      'proofPhotoUrl': null, // Clear any rejected proof photo
+      'proofGeoLat': null,
+      'proofGeoLng': null,
+      'proofAddress': null,
+      'proofTimestamp': null,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // 2. Reset family fulfillment status mapping
+    batch.update(_db.collection('families').doc(familyId), {
+      'fulfillmentStatus': 'ready_for_delivery',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    
+    // 3. Procurement stays at in_transit during reattempt — no regression for Purchaser
+
+    // 4. Advance linked donations back to out_for_delivery from verified
+    final donationIds = data['donationIds'] != null
+        ? List<String>.from(data['donationIds'] as List)
+        : <String>[];
+
+    for (final donationId in donationIds) {
+      batch.update(_db.collection('donations').doc(donationId), {
+        'status': 'out_for_delivery',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Update smart parent donations
+    await batch.commit();
+
+    // Also sync parent smart donations properly (it bumps them if needed)
+    await _syncDonationsToStatus(
+      familyId,
+      [DonationStatus.verified.toFirestore()],
+      DonationStatus.outForDelivery.toFirestore(),
+      'Delivery is being re-attempted.',
+    );
+
+    await AuditService.logFamilyAction(
+      action: 'Delivery re-attempted',
+      familyId: familyId,
+      familyName: 'Assignment $assignmentId',
+      details: 'Distributor initiated a re-attempt. Status reverted to in_transit.',
     );
   }
 
@@ -631,27 +818,30 @@ class DeliveryService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // 3. Update linked donations to delivered — all in same batch
-    final donationIds = data['donationIds'] != null
-        ? List<String>.from(data['donationIds'] as List)
-        : <String>[];
-
-    for (final donationId in donationIds) {
-      batch.update(_db.collection('donations').doc(donationId), {
+    // 3. Advance procurement to delivered — ONLY here, after Admin verification
+    final procId = data['procurementRequestId'] as String?;
+    if (procId != null) {
+      batch.update(_db.collection('procurement_requests').doc(procId), {
         'status': 'delivered',
-        'updatedAt': FieldValue.serverTimestamp(),
       });
     }
 
-    // Commit atomically — all updates succeed or none do
+    // Commit atomically — assignment, family, and procurement succeed or none do
     await batch.commit();
+
+    // 3. Update linked donations to delivered (and parent smart donations)
+    await _syncDonationsToStatus(
+      familyId,
+      [DonationStatus.outForDelivery.toFirestore()],
+      DonationStatus.delivered.toFirestore(),
+      'Donation officially verified and delivered.',
+    );
 
     await AuditService.logFamilyAction(
       action: 'Delivery admin verified',
       familyId: familyId,
       familyName: 'Family',
-      details:
-          'Verified by ${user?.email ?? "Admin"}. ${donationIds.length} donations marked delivered.',
+      details: 'Verified by ${user?.email ?? "Admin"}. Donations marked delivered.',
     );
 
     // Notify Distributor
@@ -667,6 +857,10 @@ class DeliveryService {
     }
 
     // Notify Donors
+    final donationIds = data['donationIds'] != null
+        ? List<String>.from(data['donationIds'] as List)
+        : <String>[];
+        
     for (final donationId in donationIds) {
       final donDoc = await _db.collection('donations').doc(donationId).get();
       final donorId = donDoc.data()?['donorId'] as String?;
@@ -680,7 +874,37 @@ class DeliveryService {
         );
       }
     }
+
+    // Also notify donors of Smart Give parent donations linked to this family.
+    // Smart parents are NOT listed in donationIds (which holds direct slice IDs).
+    final parentSliceSnaps = await _db
+        .collection('donations')
+        .where('familyId', isEqualTo: familyId)
+        .where('isSmartSplitSlice', isEqualTo: true)
+        .get();
+    final parentIds = parentSliceSnaps.docs
+        .map((d) => d.data()['parentDonationId'] as String? ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final alreadyNotifiedDonors = <String>{};
+    for (final parentId in parentIds) {
+      final parentDoc = await _db.collection('donations').doc(parentId).get();
+      if (!parentDoc.exists) continue;
+      final donorId = parentDoc.data()?['donorId'] as String? ?? '';
+      if (donorId.isNotEmpty && !alreadyNotifiedDonors.contains(donorId)) {
+        alreadyNotifiedDonors.add(donorId);
+        await NotificationService.sendDonorNotification(
+          userId: donorId,
+          title: 'Smart Donation Delivered! ❤️',
+          message:
+              'Your Smart Give donation has been officially verified and delivered to a family in need. Thank you for your generosity!',
+          actionType: 'delivery_admin_verified',
+          actionId: parentId,
+        );
+      }
+    }
   }
+
 
   /// Admin rejects proof of delivery — ATOMIC via WriteBatch
   static Future<void> adminRejectDelivery(String assignmentId) async {
@@ -713,18 +937,6 @@ class DeliveryService {
     if (procId != null) {
       batch.update(_db.collection('procurement_requests').doc(procId), {
         'status': 'issue_reported'
-      });
-    }
-
-    // 4. Revert linked donations
-    final donationIds = data['donationIds'] != null
-        ? List<String>.from(data['donationIds'] as List)
-        : <String>[];
-
-    for (final donationId in donationIds) {
-      batch.update(_db.collection('donations').doc(donationId), {
-        'status': 'verified',
-        'updatedAt': FieldValue.serverTimestamp(),
       });
     }
 
@@ -847,5 +1059,131 @@ class DeliveryService {
       'completionRate': completionRate,
       'onTimeRate': onTimeRate,
     };
+  }
+
+  // ─── One-Time Data Migration ────────────────────────────────────────────────
+
+  /// Fixes procurement_requests that were incorrectly set to 'issue_reported'
+  /// by old code. Resets them to 'in_transit' if the delivery is still active
+  /// (not yet admin_verified or delivered). Safe to call multiple times.
+  static Future<void> migrateIssueReportedProcurements() async {
+    try {
+      // Find all procurement requests stuck at issue_reported
+      final snap = await _db
+          .collection('procurement_requests')
+          .where('status', isEqualTo: 'issue_reported')
+          .get();
+
+      if (snap.docs.isEmpty) return; // Nothing to fix
+
+      final batch = _db.batch();
+      int fixedCount = 0;
+
+      for (final procDoc in snap.docs) {
+        final procId = procDoc.id;
+
+        // Find the linked delivery assignment for this procurement
+        final assignmentSnap = await _db
+            .collection(_collection)
+            .where('procurementRequestId', isEqualTo: procId)
+            .limit(1)
+            .get();
+
+        if (assignmentSnap.docs.isEmpty) continue;
+
+        final assignmentData = assignmentSnap.docs.first.data();
+        final assignmentStatus = assignmentData['status'] as String? ?? '';
+
+        // Only fix if delivery is NOT yet finished (admin_verified or delivered)
+        // If the delivery is truly done, leave it as-is
+        const finishedStatuses = ['admin_verified', 'delivered'];
+        if (finishedStatuses.contains(assignmentStatus)) continue;
+
+        // Reset to in_transit — pack is physically still out for delivery
+        batch.update(
+          _db.collection('procurement_requests').doc(procId),
+          {'status': 'in_transit'},
+        );
+        fixedCount++;
+      }
+
+      if (fixedCount > 0) {
+        await batch.commit();
+        debugPrint(
+          '[DeliveryService] Migration: Fixed $fixedCount procurement(s) from issue_reported → in_transit',
+        );
+      }
+    } catch (e) {
+      // Non-critical — log and swallow so it never crashes the app
+      debugPrint('[DeliveryService] Migration error (non-fatal): $e');
+    }
+  }
+
+  // REPAIR TOOL — one-time data fix
+  // ───────────────────────────────────────────────────────────────────────
+
+  /// One-time repair: clears warehouse_stock docs that are still stuck at
+  /// 'received' or 'pending_pickup' for families whose delivery has already
+  /// been picked up (status: picked_up, in_transit, delivered, failed, admin_verified).
+  /// Safe to call multiple times — guards against already-fixed docs.
+  static Future<void> repairStuckWarehouseStock() async {
+    try {
+      // Find all delivery assignments that have been picked up or beyond
+      final assignmentsSnap = await _db
+          .collection(_collection)
+          .where('status', whereIn: [
+            'picked_up',
+            'in_transit',
+            'delivered',
+            'failed',
+            'admin_verified',
+          ])
+          .get();
+
+      if (assignmentsSnap.docs.isEmpty) {
+        debugPrint('[DeliveryService] Repair: No picked-up assignments found.');
+        return;
+      }
+
+      int fixedCount = 0;
+      final batch = _db.batch();
+
+      for (final assignmentDoc in assignmentsSnap.docs) {
+        final data = assignmentDoc.data();
+        final familyId = data['familyId'] as String?;
+
+        // Only process deliveries with a valid family
+        if (familyId == null || familyId.isEmpty) continue;
+
+        // Find warehouse_stock still stuck at received/pending_pickup for this family
+        final stockSnaps = await _db
+            .collection('warehouse_stock')
+            .where('familyId', isEqualTo: familyId)
+            .where('status', whereIn: ['received', 'pending_pickup'])
+            .get();
+
+        for (final sDoc in stockSnaps.docs) {
+          batch.update(sDoc.reference, {
+            'status': 'in_transit',
+            'pickedUpAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+          fixedCount++;
+        }
+      }
+
+      if (fixedCount > 0) {
+        await batch.commit();
+        debugPrint(
+          '✅ [DeliveryService] Repair: Fixed $fixedCount stuck warehouse_stock doc(s) → in_transit.',
+        );
+      } else {
+        debugPrint(
+          'ℹ️ [DeliveryService] Repair: No stuck warehouse_stock docs found.',
+        );
+      }
+    } catch (e) {
+      debugPrint('[DeliveryService] Repair error (non-fatal): $e');
+    }
   }
 }

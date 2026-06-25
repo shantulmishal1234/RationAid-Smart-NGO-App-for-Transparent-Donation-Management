@@ -302,6 +302,11 @@ class DonationService {
                 ? 'Your $amountStr $donType donation was rejected. Reason: $rejectionReason'
                 : 'Your $amountStr $donType donation was rejected. Please check the app for details.';
             break;
+          case 'stocked':
+            title = 'Items Arrived at Warehouse! 📦';
+            body =
+                'Your donated items have been collected and are now safely stored in our warehouse. Delivery will be arranged soon.';
+            break;
           case 'in_process':
             title = 'Items Being Purchased! 🛒';
             body =

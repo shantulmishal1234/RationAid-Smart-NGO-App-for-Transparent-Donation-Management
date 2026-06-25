@@ -126,6 +126,48 @@ class _DeliveryDetailBodyState extends State<_DeliveryDetailBody> {
     }
   }
 
+  Future<void> _reattemptDelivery() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Re-Attempt Delivery'),
+        content: const Text(
+          'Are you sure you want to re-attempt this delivery? This will move it back to your active transit list.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.volunteerBlue,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isProcessing = true);
+    try {
+      await DeliveryService.reattemptDelivery(a.id);
+      _snack('🔄 Delivery moved back to In-Transit!', Colors.blue);
+      // Wait a moment and pop back to see it correctly in active list
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) Navigator.pop(context);
+      });
+    } catch (e) {
+      _snack('Error: $e', Colors.red);
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
   void _openProofOfDelivery() {
     Navigator.push(
       context,
@@ -258,7 +300,7 @@ class _DeliveryDetailBodyState extends State<_DeliveryDetailBody> {
 
               // Family info card (masked)
               FrostedPanel(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -267,7 +309,7 @@ class _DeliveryDetailBodyState extends State<_DeliveryDetailBody> {
                       Icons.location_on,
                       'Delivery Location',
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 8),
                     _infoRow(
                       context,
                       'Area',
@@ -282,7 +324,6 @@ class _DeliveryDetailBodyState extends State<_DeliveryDetailBody> {
                     ),
                     if (a.familyPhone != null)
                       _infoRow(context, 'Contact', a.familyPhone!),
-                    _infoRow(context, 'Family Size', '${a.familySize} members'),
                   ],
                 ),
               ),
@@ -290,7 +331,7 @@ class _DeliveryDetailBodyState extends State<_DeliveryDetailBody> {
 
               // Pack & Items
               FrostedPanel(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -299,7 +340,7 @@ class _DeliveryDetailBodyState extends State<_DeliveryDetailBody> {
                       Icons.inventory_2_outlined,
                       'Items to Deliver',
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 8),
                     if (a.assignedPackName != null)
                       _infoRow(context, 'Pack', a.assignedPackName!),
                     const SizedBox(height: 8),
@@ -323,23 +364,23 @@ class _DeliveryDetailBodyState extends State<_DeliveryDetailBody> {
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  e.key,
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                              ),
-                                Text(
-                                  '× ${e.value}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.volunteerBlue,
+                                Expanded(
+                                  child: Text(
+                                    e.key,
+                                    style: const TextStyle(fontSize: 14),
                                   ),
                                 ),
-                              ],
+                                  Text(
+                                    '× ${e.value} ${a.itemUnits[e.key] ?? ""}'.trim(),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.volunteerBlue,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
                     if (a.inKindCoveredItems.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Container(
@@ -478,7 +519,7 @@ class _DeliveryDetailBodyState extends State<_DeliveryDetailBody> {
               ),
 
               // Failure info
-              if (a.isFailed) ...[
+              if (a.isFailed && a.status != DeliveryStatus.reassigned) ...[
                 const SizedBox(height: 14),
                 Container(
                   padding: const EdgeInsets.all(14),
@@ -524,6 +565,14 @@ class _DeliveryDetailBodyState extends State<_DeliveryDetailBody> {
                           'Reported At',
                           fmt.format(a.failedAt!),
                         ),
+                      
+                      const SizedBox(height: 16),
+                      _actionButton(
+                        label: 'Re-Attempt Delivery 🔄',
+                        icon: Icons.refresh,
+                        color: AppColors.volunteerBlue,
+                        onTap: _isProcessing ? null : _reattemptDelivery,
+                      ),
                     ],
                   ),
                 ),

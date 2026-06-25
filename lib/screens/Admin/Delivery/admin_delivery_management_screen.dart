@@ -38,6 +38,8 @@ class _AdminDeliveryManagementScreenState
     super.initState();
     _assignmentsStream = DeliveryService.streamAllAssignments()
         .asBroadcastStream();
+    // One-time fix: reset any orphaned 'issue_reported' procurements → in_transit
+    Future.microtask(DeliveryService.migrateIssueReportedProcurements);
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -438,6 +440,7 @@ class _AdminDeliveryManagementScreenState
                     }
                   : null,
               onVerify: () => _verifyDelivery(a),
+              onReject: showVerifyButton ? () => _rejectDelivery(a) : null,
               onAssign: () => _showAssignDialog(a),
               onReassign: () => _showReassignDialog(a),
             );
@@ -594,6 +597,52 @@ class _AdminDeliveryManagementScreenState
             ),
           );
         }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  Future<void> _rejectDelivery(DeliveryAssignment a) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reject Proof'),
+        content: const Text(
+          'Are you sure you want to reject this delivery proof? The distributor will be forced to resubmit or reattempt the delivery.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Reject Proof'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await DeliveryService.adminRejectDelivery(a.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Delivery proof rejected.'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -1238,6 +1287,7 @@ class _AdminDeliveryCard extends StatelessWidget {
   final bool isSelected;
   final ValueChanged<bool?>? onSelectChanged;
   final VoidCallback onVerify;
+  final VoidCallback? onReject;
   final VoidCallback onAssign;
   final VoidCallback onReassign;
 
@@ -1250,6 +1300,7 @@ class _AdminDeliveryCard extends StatelessWidget {
     this.isSelected = false,
     this.onSelectChanged,
     required this.onVerify,
+    this.onReject,
     required this.onAssign,
     required this.onReassign,
   });
@@ -1377,22 +1428,44 @@ class _AdminDeliveryCard extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      a.proofPhotoUrl!,
-                      height: 60,
-                      width: 80,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
+                  GestureDetector(
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (_) => Dialog(
+                          backgroundColor: Colors.transparent,
+                          child: Stack(
+                            alignment: Alignment.topRight,
+                            children: [
+                              InteractiveViewer(
+                                child: Image.network(a.proofPhotoUrl!),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                                onPressed: () => Navigator.pop(context),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        a.proofPhotoUrl!,
                         height: 60,
                         width: 80,
-                        color: Colors.grey[200],
-                        child: const Center(
-                          child: Icon(
-                            Icons.broken_image,
-                            color: Colors.grey,
-                            size: 20,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          height: 60,
+                          width: 80,
+                          color: Colors.grey[200],
+                          child: const Center(
+                            child: Icon(
+                              Icons.broken_image,
+                              color: Colors.grey,
+                              size: 20,
+                            ),
                           ),
                         ),
                       ),
@@ -1400,39 +1473,57 @@ class _AdminDeliveryCard extends StatelessWidget {
                   ),
                   if (a.proofGeoLat != null) ...[
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                    Builder(
+                      builder: (context) {
+                        double? distanceMeters;
+                        if (a.familyGeoLat != null && a.familyGeoLng != null && a.familyGeoLat != 0.0) {
+                          const r = 6371000.0;
+                          final dLat = (a.proofGeoLat! - a.familyGeoLat!) * math.pi / 180;
+                          final dLon = (a.proofGeoLng! - a.familyGeoLng!) * math.pi / 180;
+                          final f = math.sin(dLat / 2) * math.sin(dLat / 2) +
+                              math.cos(a.familyGeoLat! * math.pi / 180) *
+                                  math.cos(a.proofGeoLat! * math.pi / 180) *
+                                  math.sin(dLon / 2) * math.sin(dLon / 2);
+                          distanceMeters = r * 2 * math.atan2(math.sqrt(f), math.sqrt(1 - f));
+                        }
+
+                        return Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(
-                                Icons.location_on,
-                                size: 12,
-                                color: Colors.green,
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.location_on,
+                                    size: 12,
+                                    color: distanceMeters != null && distanceMeters > 50 ? Colors.orange : Colors.green,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    distanceMeters != null
+                                        ? '${distanceMeters.toStringAsFixed(0)} meters away'
+                                        : 'GPS Locked',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: distanceMeters != null && distanceMeters > 50 ? Colors.orange[800] : Colors.green[700],
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 4),
                               Text(
-                                'GPS Locked',
+                                '${a.proofGeoLat!.toStringAsFixed(4)}, ${a.proofGeoLng!.toStringAsFixed(4)}',
                                 style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.green[700],
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: 10,
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.5,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                          Text(
-                            '${a.proofGeoLat!.toStringAsFixed(4)}, ${a.proofGeoLng!.toStringAsFixed(4)}',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.5,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                        );
+                      }
                     ),
                   ],
                 ],
@@ -1480,7 +1571,24 @@ class _AdminDeliveryCard extends StatelessWidget {
                         minimumSize: const Size(0, 32),
                       ),
                     ),
-                  if (showVerifyButton)
+                  if (showVerifyButton) ...[
+                    TextButton.icon(
+                      onPressed: onReject,
+                      icon: const Icon(Icons.cancel, size: 14),
+                      label: const Text(
+                        'Reject',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 0,
+                        ),
+                        minimumSize: const Size(0, 32),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     FilledButton.icon(
                       onPressed: onVerify,
                       icon: const Icon(Icons.verified, size: 14),
@@ -1497,6 +1605,7 @@ class _AdminDeliveryCard extends StatelessWidget {
                         minimumSize: const Size(0, 32),
                       ),
                     ),
+                  ],
                 ],
               ),
             ],

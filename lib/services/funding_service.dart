@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:ration_aid/models/donation_model.dart';
 import 'package:ration_aid/models/master_ledger_model.dart';
 import 'package:ration_aid/services/allocation_service.dart';
@@ -1095,10 +1096,10 @@ class FundingService {
       if (preDonorId.isNotEmpty) {
         await NotificationService.sendDonorNotification(
           userId: preDonorId,
-          title: 'In-Kind Pickup Order Created ✅',
+          title: 'In-Kind Donation Verified ✅',
           message:
-              'Your in-kind donation has been verified. Our team will coordinate pickup from your registered address.',
-          actionType: 'inkind_pickup_created',
+              'Your in-kind donation has been verified by our admin. Our team will coordinate pickup from your registered address soon.',
+          actionType: 'inkind_verified',
         );
       }
 
@@ -1121,7 +1122,34 @@ class FundingService {
       // Notify Admin that a family's funding is now complete
       await NotificationService.notifyFullyFunded(pId);
     }
+
+    // ── Notify donor: Smart Cash verified ──────────────────────────────────
+    // Fires only for smart cash (has smartSplits + type == cash).
+    // For direct/GRF cash & all in-kind, donation_service.updateDonation handles it.
+    // We do a lightweight post-tx read — the transaction is already committed.
+    final postTxSnap = await donationRef.get();
+    if (postTxSnap.exists) {
+      final postData = postTxSnap.data()!;
+      final postDonationType = postData['donationType'] as String? ?? '';
+      final postSmartSplits = postData['smartSplits'] as List<dynamic>? ?? [];
+      if (postDonationType == 'cash' && postSmartSplits.isNotEmpty) {
+        final donorId = postData['donorId'] as String? ?? '';
+        final donorAmount = postData['effectiveAmount'] ?? postData['amount'] ?? 0;
+        final amtStr = 'PKR ${(num.tryParse(donorAmount.toString()) ?? 0).toStringAsFixed(0)}';
+        if (donorId.isNotEmpty) {
+          await NotificationService.sendDonorNotification(
+            userId: donorId,
+            title: 'Smart Cash Donation Verified ✅',
+            message:
+                'Your $amtStr Smart Cash donation has been verified and split across multiple families. Your impact starts now!',
+            actionType: 'smart_cash_verified',
+            actionId: donationId,
+          );
+        }
+      }
+    }
   }
+
 
   // ─────────────────────────────────────────────────────────────────────────
   // ASSIGN POOL IN-KIND DONATION — Admin action
@@ -1213,22 +1241,6 @@ class FundingService {
         'totalLockedValue': assignedValue,
       });
 
-      // Update donation status only if full batch consumed in one go
-      if (donationId.isNotEmpty) {
-        wsBatch.update(_db.collection('donations').doc(donationId), {
-          'familyId': targetFamilyId, // Point donation to the family
-          'status': 'pool_assigned', // Triggers donor UI complete state
-          'allocationMode': 'pool_assigned',
-          'updatedAt': FieldValue.serverTimestamp(),
-          'statusHistory': FieldValue.arrayUnion([
-            {
-              'status': 'pool_assigned',
-              'timestamp': Timestamp.now(),
-              'note': 'GRF Pool items fully assigned to family.',
-            },
-          ]),
-        });
-      }
     } else {
       // Partial batch consumed -> Split!
 
@@ -1252,8 +1264,85 @@ class FundingService {
       newStockData['createdAt'] = FieldValue.serverTimestamp();
       newStockData['updatedAt'] = FieldValue.serverTimestamp();
       wsBatch.set(newStockRef, newStockData);
+    }
 
-      // We don't mark the original donation as 'pool_assigned' yet because some of it is still in the pool.
+    // 4. Cleanly handle original Donation updates
+    if (donationId.isNotEmpty) {
+      final donSnap = await _db.collection('donations').doc(donationId).get();
+      if (donSnap.exists) {
+        final donData = donSnap.data()!;
+        final smartSplits = List<dynamic>.from(donData['smartSplits'] ?? []);
+        final bool isSmartSplit = stockData['isSmartSplit'] == true;
+
+        if (isSmartSplit && smartSplits.isNotEmpty) {
+          // Resolve Smart Give parent impact without overwriting parent familyId
+          int grfDocIndex = smartSplits.indexWhere((s) {
+            final fid = s['familyId'] as String? ?? '';
+            return fid == 'general_relief_fund' || fid.isEmpty;
+          });
+
+          if (grfDocIndex != -1) {
+             final grfSlice = Map<String, dynamic>.from(smartSplits[grfDocIndex]);
+             final grfItems = Map<String, num>.from(grfSlice['items'] ?? {});
+             
+             final newSlice = Map<String, dynamic>.from(grfSlice);
+             newSlice['familyId'] = targetFamilyId;
+             newSlice['items'] = Map<String, num>.from(assignedItems);
+             newSlice['reason'] = 'Assigned from GRF Pool';
+             
+             assignedItems.forEach((item, qty) {
+                 final current = grfItems[item] ?? 0;
+                 grfItems[item] = current > qty ? current - qty : 0;
+             });
+             grfSlice['items'] = grfItems;
+             
+             bool grfEmpty = grfItems.values.every((v) => (num.tryParse(v.toString()) ?? 0) <= 0);
+             if (grfEmpty) {
+                 smartSplits[grfDocIndex] = newSlice;
+             } else {
+                 smartSplits[grfDocIndex] = grfSlice;
+                 smartSplits.add(newSlice);
+             }
+             
+             bool poolFullyEmpty = smartSplits.every((s) {
+                 final fId = s['familyId'] as String? ?? '';
+                 return fId.isNotEmpty && fId != 'general_relief_fund';
+             });
+             
+             final Map<String, dynamic> donUpdates = {
+                 'smartSplits': smartSplits,
+                 'updatedAt': FieldValue.serverTimestamp(),
+             };
+             
+             if (poolFullyEmpty && remainingItems.isEmpty) {
+                 donUpdates['status'] = 'pool_assigned';
+                 donUpdates['statusHistory'] = FieldValue.arrayUnion([{
+                    'status': 'pool_assigned',
+                    'timestamp': Timestamp.now(),
+                    'note': 'Smart Give GRF Pool items have all been assigned to families.',
+                 }]);
+             }
+             wsBatch.update(_db.collection('donations').doc(donationId), donUpdates);
+          }
+        } else {
+          // Standard direct-to-pool donation
+          if (remainingItems.isEmpty) {
+            wsBatch.update(_db.collection('donations').doc(donationId), {
+              'familyId': targetFamilyId,
+              'status': 'pool_assigned',
+              'allocationMode': 'pool_assigned',
+              'updatedAt': FieldValue.serverTimestamp(),
+              'statusHistory': FieldValue.arrayUnion([
+                {
+                  'status': 'pool_assigned',
+                  'timestamp': Timestamp.now(),
+                  'note': 'GRF Pool items fully assigned to family.',
+                },
+              ]),
+            });
+          }
+        }
+      }
     }
 
     // 4. Update family: decrement needs + increment inKindValue + combinedProgress
@@ -1573,30 +1662,62 @@ class FundingService {
       totalActuallyDisplaced += toDisplace;
       displacedDonationIds.add(donDoc.id);
 
-      // Gap #3 Fix — change familyId to GRF so recalculateFamilyFunding
-      // won't include this donation in future family sums.
-      batch.update(donDoc.reference, {
-        'familyId': 'general_relief_fund',
-        'allocationMode': 'displaced_to_grf',
-        'displacedFromFamilyId': familyId,
-        'displacedAmount': toDisplace,
-        'displacedAt': FieldValue.serverTimestamp(),
-        'displacedReason':
-            'In-kind donation received; physical items cover family needs',
-        'updatedAt': FieldValue.serverTimestamp(),
-        'statusHistory': FieldValue.arrayUnion([
-          {
-            'status': 'displaced_to_grf',
-            'timestamp': Timestamp.now(),
-            'note':
-                'PKR ${toDisplace.toStringAsFixed(0)} redirected to General Relief Fund — '
-                'family needs covered by in-kind donation.',
-          },
-        ]),
-      });
+      final String donorId = dd['donorId'] as String? ?? '';
+      final String displacementNote = 'PKR ${toDisplace.toStringAsFixed(0)} redirected to General Relief Fund — family needs covered by in-kind donation.';
+
+      if (toDisplace < effective) {
+        // ── PARTIAL DISPLACEMENT (Splitting the Document) ──
+        // Leave the remaining portion with the family
+        batch.update(donDoc.reference, {
+          'amount': FieldValue.increment(-toDisplace),
+          'effectiveAmount': FieldValue.increment(-toDisplace),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        // Create a exact clone document for the displaced GRF portion
+        final newDonDocRef = _db.collection('donations').doc();
+        final Map<String, dynamic> splitData = Map.from(dd);
+        splitData['familyId'] = 'general_relief_fund';
+        splitData['allocationMode'] = 'displaced_to_grf';
+        splitData['amount'] = toDisplace;
+        splitData['effectiveAmount'] = toDisplace;
+        splitData['displacedFromFamilyId'] = familyId;
+        splitData['displacedAmount'] = toDisplace;
+        splitData['displacedAt'] = FieldValue.serverTimestamp();
+        splitData['updatedAt'] = FieldValue.serverTimestamp();
+
+        // Maintain history but add the displacement note
+        final List<dynamic> oldHistory = splitData['statusHistory'] as List<dynamic>? ?? [];
+        final List<dynamic> newHistory = List.from(oldHistory);
+        newHistory.add({
+          'status': 'displaced_to_grf',
+          'timestamp': Timestamp.now(),
+          'note': displacementNote,
+        });
+        splitData['statusHistory'] = newHistory;
+
+        batch.set(newDonDocRef, splitData);
+      } else {
+        // ── FULL DISPLACEMENT (Moving the entire document) ──
+        batch.update(donDoc.reference, {
+          'familyId': 'general_relief_fund',
+          'allocationMode': 'displaced_to_grf',
+          'displacedFromFamilyId': familyId,
+          'displacedAmount': toDisplace,
+          'displacedAt': FieldValue.serverTimestamp(),
+          'displacedReason': 'In-kind donation received; physical items cover family needs',
+          'updatedAt': FieldValue.serverTimestamp(),
+          'statusHistory': FieldValue.arrayUnion([
+            {
+              'status': 'displaced_to_grf',
+              'timestamp': Timestamp.now(),
+              'note': displacementNote,
+            },
+          ]),
+        });
+      }
 
       // Gap #4 Fix — Notify the displaced donor
-      final donorId = dd['donorId'] as String? ?? '';
       if (donorId.isNotEmpty) {
         final notifRef = _db.collection('notifications').doc();
         batch.set(notifRef, {
@@ -1605,9 +1726,9 @@ class FundingService {
           'type': 'cash_displaced_to_grf',
           'title': '\u2705 Your donation is helping even more families!',
           'body':
-              'The family you supported received physical groceries from another donor, '
-              'covering their immediate food needs. Your PKR ${toDisplace.toStringAsFixed(0)} '
-              'has been redirected to our General Relief Pool to support even more families. '
+              'The family you supported received physical groceries from another donor. '
+              'Your PKR ${toDisplace.toStringAsFixed(0)} has been seamlessly redirected to '
+              'our General Relief Pool to support even more families waiting in line. '
               'Thank you for your generosity!',
           'donationId': donDoc.id,
           'displacedFromFamilyId': familyId,
@@ -1658,6 +1779,63 @@ class FundingService {
 
   /// **DO NOT call from normal donation flow.**
   /// Use only as admin repair/reconciliation tool to fix data inconsistencies.
+
+  /// One-time fix to sync historically stuck child slices.
+  /// Call this once from an Admin screen to repair existing data, then remove.
+  static Future<void> fixStuckSmartSplitSlices() async {
+    final slicesSnap = await _db
+        .collection('donations')
+        .where('isSmartSplitSlice', isEqualTo: true)
+        .where('status', isEqualTo: 'verified')
+        .get();
+
+    int fixedCount = 0;
+    final batch = _db.batch();
+
+    for (final slice in slicesSnap.docs) {
+      final parentId = slice.data()['parentDonationId'] as String?;
+      if (parentId == null || parentId.isEmpty) continue;
+
+      final parentDoc = await _db.collection('donations').doc(parentId).get();
+      if (!parentDoc.exists) continue;
+
+      final parentStatus = parentDoc.data()?['status'] as String? ?? '';
+
+      // If the parent has advanced past verified
+      const advanceStatuses = [
+        'stocked',
+        'in_process',
+        'out_for_delivery',
+        'delivered',
+        'closed',
+        'pool_assigned'
+      ];
+      
+      if (advanceStatuses.contains(parentStatus)) {
+        batch.update(slice.reference, {
+          'status': 'stocked',
+          'stockedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'statusHistory': FieldValue.arrayUnion([
+            {
+              'status': 'stocked',
+              'timestamp': Timestamp.now(),
+              'note': 'System auto-repair: synced stuck slice to match parent.',
+            },
+          ]),
+        });
+        fixedCount++;
+      }
+    }
+
+    if (fixedCount > 0) {
+      await batch.commit();
+      debugPrint(
+          '✅ Data Repair: Successfully synced $fixedCount stuck smart slices to Stocked.');
+    } else {
+      debugPrint('ℹ️ Data Repair: No stuck smart slices found.');
+    }
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // REVERSE DONATION — ATOMIC (Admin rejection)

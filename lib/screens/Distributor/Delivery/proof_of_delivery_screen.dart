@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
@@ -20,17 +22,44 @@ class ProofOfDeliveryScreen extends StatefulWidget {
 class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
   File? _photo;
   Position? _position;
+  double? _distanceInMeters;
+  StreamSubscription<Position>? _posSub;
   bool _isUploading = false;
   bool _isGettingLocation = false;
+  bool _isOnline = true;
+  StreamSubscription<List<ConnectivityResult>>? _connSub;
   final _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
-    _getLocation();
+    _startLocationStream();
+    _initConnectivity();
   }
 
-  Future<void> _getLocation() async {
+  Future<void> _initConnectivity() async {
+    final result = await Connectivity().checkConnectivity();
+    _updateConnectionStatus(result);
+    _connSub = Connectivity().onConnectivityChanged.listen(
+      _updateConnectionStatus,
+    );
+  }
+
+  void _updateConnectionStatus(List<ConnectivityResult> result) {
+    if (!mounted) return;
+    setState(() {
+      _isOnline = !result.contains(ConnectivityResult.none);
+    });
+  }
+
+  @override
+  void dispose() {
+    _posSub?.cancel();
+    _connSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _startLocationStream() async {
     setState(() => _isGettingLocation = true);
     try {
       LocationPermission perm = await Geolocator.checkPermission();
@@ -40,10 +69,23 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
       if (perm == LocationPermission.deniedForever) {
         throw Exception('Location permission permanently denied');
       }
-      final pos = await Geolocator.getCurrentPosition(
+
+      // Get initial quick position
+      final initPos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
-      if (mounted) setState(() => _position = pos);
+      _updatePosition(initPos);
+
+      // Start stream for live updates (e.g., if they are walking towards the door)
+      _posSub =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 2,
+            ),
+          ).listen((pos) {
+            _updatePosition(pos);
+          });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -58,6 +100,24 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
     }
   }
 
+  void _updatePosition(Position pos) {
+    if (!mounted) return;
+    setState(() {
+      _position = pos;
+      final famLat = widget.assignment.familyGeoLat;
+      final famLng = widget.assignment.familyGeoLng;
+
+      if (famLat != null && famLng != null && famLat != 0.0 && famLng != 0.0) {
+        _distanceInMeters = Geolocator.distanceBetween(
+          pos.latitude,
+          pos.longitude,
+          famLat,
+          famLng,
+        );
+      }
+    });
+  }
+
   Future<void> _takePhoto() async {
     final picked = await _picker.pickImage(
       source: ImageSource.camera,
@@ -68,14 +128,40 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
     if (picked != null) setState(() => _photo = File(picked.path));
   }
 
-  Future<void> _pickFromGallery() async {
-    final picked = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-      maxWidth: 1600,
-      maxHeight: 1600,
-    );
-    if (picked != null) setState(() => _photo = File(picked.path));
+  bool _validateGeoFence() {
+    if (_position == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'GPS Location is strictly required. Please wait for GPS lock.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return false;
+    }
+
+    if (_distanceInMeters == null) {
+      // If distance couldn't be calculated because family coords are missing,
+      // we might allow it, but generally we want to track it.
+      return true;
+    }
+
+    if (_distanceInMeters! > 50.0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '❌ You are ${_distanceInMeters!.toStringAsFixed(0)}m away. You must be within 50m of the family location to deliver.',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return false;
+    }
+
+    return true;
   }
 
   Future<void> _submit() async {
@@ -89,6 +175,8 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
       return;
     }
 
+    if (!_validateGeoFence()) return;
+
     setState(() => _isUploading = true);
 
     try {
@@ -96,9 +184,12 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
       final donorSnap = await FirebaseFirestore.instance
           .collection('donations')
           .where('familyId', isEqualTo: widget.assignment.familyId)
-          .where('status', whereIn: ['verified', 'in_process', 'out_for_delivery'])
+          .where(
+            'status',
+            whereIn: ['verified', 'in_process', 'out_for_delivery'],
+          )
           .get();
-          
+
       final donorIds = donorSnap.docs
           .map((d) => d.data()['donorId'] as String?)
           .whereType<String>()
@@ -112,7 +203,8 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
         proofPhoto: _photo!,
         lat: _position?.latitude,
         lng: _position?.longitude,
-        donorIds: donorIds, // Fix #1: Now donors will actually get the notification!
+        donorIds:
+            donorIds, // Fix #1: Now donors will actually get the notification!
       );
 
       if (mounted) {
@@ -126,12 +218,13 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
       }
     } catch (e) {
       final errStr = e.toString().toLowerCase();
-      final isNetworkError = errStr.contains('socket') || 
-                             errStr.contains('network') || 
-                             errStr.contains('host lookup') ||
-                             errStr.contains('timeout') ||
-                             errStr.contains('offline');
-                             
+      final isNetworkError =
+          errStr.contains('socket') ||
+          errStr.contains('network') ||
+          errStr.contains('host lookup') ||
+          errStr.contains('timeout') ||
+          errStr.contains('offline');
+
       if (isNetworkError) {
         // Save offline ONLY for connectivity/network related failures
         await _saveOffline();
@@ -152,15 +245,20 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
   }
 
   Future<void> _saveOffline() async {
+    if (!_validateGeoFence()) return;
+
     // Attempt to grab donor IDs for offline sync later (fails silently if fully offline)
     List<String> cachedDonorIds = [];
     try {
       final snap = await FirebaseFirestore.instance
           .collection('donations')
           .where('familyId', isEqualTo: widget.assignment.familyId)
-          .where('status', whereIn: ['verified', 'in_process', 'out_for_delivery'])
+          .where(
+            'status',
+            whereIn: ['verified', 'in_process', 'out_for_delivery'],
+          )
           .get(const GetOptions(source: Source.cache));
-          
+
       cachedDonorIds = snap.docs
           .map((d) => d.data()['donorId'] as String?)
           .whereType<String>()
@@ -306,167 +404,224 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
 
             if (_photo != null) ...[
               const SizedBox(height: 10),
-              Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: _takePhoto,
-                    icon: const Icon(Icons.camera_alt, size: 16),
-                    label: const Text('Retake'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.volunteerBlue,
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: _pickFromGallery,
-                    icon: const Icon(Icons.photo_library, size: 16),
-                    label: const Text('Gallery'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.grey[600],
-                    ),
-                  ),
-                ],
+              TextButton.icon(
+                onPressed: _takePhoto,
+                icon: const Icon(Icons.camera_alt, size: 16),
+                label: const Text('Retake Photo'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.volunteerBlue,
+                ),
               ),
             ],
 
             const SizedBox(height: 24),
 
             // GPS Section
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: _position != null
-                    ? Colors.green.withValues(alpha: 0.06)
-                    : Colors.orange.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: _position != null
-                      ? Colors.green.withValues(alpha: 0.3)
-                      : Colors.orange.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    _position != null
-                        ? Icons.gps_fixed
-                        : (_isGettingLocation
-                              ? Icons.gps_not_fixed
-                              : Icons.gps_off),
-                    color: _position != null ? Colors.green : Colors.orange,
-                    size: 20,
+            Builder(
+              builder: (context) {
+                final bool hasFamilyCoords =
+                    widget.assignment.familyGeoLat != null &&
+                    widget.assignment.familyGeoLat != 0.0;
+                final bool isGeoFenceValid =
+                    _distanceInMeters != null && _distanceInMeters! <= 50.0;
+                final bool outOfRangeAndHasCoords =
+                    hasFamilyCoords &&
+                    _distanceInMeters != null &&
+                    _distanceInMeters! > 50.0;
+
+                return Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: _position != null
+                        ? (outOfRangeAndHasCoords
+                              ? Colors.red.withValues(alpha: 0.06)
+                              : Colors.green.withValues(alpha: 0.06))
+                        : Colors.orange.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _position != null
+                          ? (outOfRangeAndHasCoords
+                                ? Colors.red.withValues(alpha: 0.3)
+                                : Colors.green.withValues(alpha: 0.3))
+                          : Colors.orange.withValues(alpha: 0.3),
+                    ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _isGettingLocation
-                        ? const Text(
-                            'Getting GPS location...',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          )
-                        : _position != null
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'GPS Location Captured ✅',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.green,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              Text(
-                                '${_position!.latitude.toStringAsFixed(5)}, ${_position!.longitude.toStringAsFixed(5)}',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
-                          )
-                        : Row(
-                            children: [
-                              const Expanded(
-                                child: Text(
-                                  'GPS not captured — location will not be recorded',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.orange,
+                  child: Row(
+                    children: [
+                      Icon(
+                        _position != null
+                            ? (outOfRangeAndHasCoords
+                                  ? Icons.gps_off
+                                  : Icons.gps_fixed)
+                            : (_isGettingLocation
+                                  ? Icons.gps_not_fixed
+                                  : Icons.gps_off),
+                        color: _position != null
+                            ? (outOfRangeAndHasCoords
+                                  ? Colors.red
+                                  : Colors.green)
+                            : Colors.orange,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _isGettingLocation
+                            ? const Text(
+                                'Getting Live GPS location...',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              )
+                            : _position != null
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (!hasFamilyCoords)
+                                    const Text(
+                                      'GPS Ready (Family coords missing) ✅',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.green,
+                                        fontSize: 13,
+                                      ),
+                                    )
+                                  else if (isGeoFenceValid)
+                                    Text(
+                                      'In Range ✅ (${_distanceInMeters!.toStringAsFixed(0)}m away)',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.green,
+                                        fontSize: 13,
+                                      ),
+                                    )
+                                  else
+                                    Text(
+                                      'Out of Range ❌ (${_distanceInMeters!.toStringAsFixed(0)}m away)',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.red,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    outOfRangeAndHasCoords
+                                        ? 'Move within 50 meters of the family to submit.'
+                                        : '${_position!.latitude.toStringAsFixed(5)}, ${_position!.longitude.toStringAsFixed(5)}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: outOfRangeAndHasCoords
+                                          ? Colors.red.withValues(alpha: 0.8)
+                                          : Colors.grey,
+                                    ),
                                   ),
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: _getLocation,
-                                child: const Text(
-                                  'Retry',
-                                  style: TextStyle(
-                                    color: Colors.orange,
-                                    fontWeight: FontWeight.w700,
+                                ],
+                              )
+                            : Row(
+                                children: [
+                                  const Expanded(
+                                    child: Text(
+                                      'GPS required to enforce 50m delivery limit',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.redAccent,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  TextButton(
+                                    onPressed: _startLocationStream,
+                                    child: const Text(
+                                      'Acquire GPS',
+                                      style: TextStyle(
+                                        color: Colors.orange,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                );
+              },
             ),
 
             const SizedBox(height: 32),
 
-            // Submit button
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton.icon(
-                onPressed: _isUploading ? null : _submit,
-                icon: _isUploading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Colors.white,
+            // Dynamic Submit / Offline button
+            Builder(
+              builder: (context) {
+                final bool hasFamilyCoords =
+                    widget.assignment.familyGeoLat != null &&
+                    widget.assignment.familyGeoLat != 0.0;
+                final bool outOfRangeAndHasCoords =
+                    hasFamilyCoords &&
+                    _distanceInMeters != null &&
+                    _distanceInMeters! > 50.0;
+                final bool canSubmit =
+                    _photo != null && !outOfRangeAndHasCoords && !_isUploading;
+
+                if (_isOnline) {
+                  return SizedBox(
+                    width: double.infinity,
+                    height: 54,
+                    child: ElevatedButton.icon(
+                      onPressed: canSubmit ? _submit : null,
+                      icon: _isUploading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.cloud_upload),
+                      label: Text(
+                        _isUploading
+                            ? 'Submitting...'
+                            : 'Submit Proof of Delivery',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
                         ),
-                      )
-                    : const Icon(Icons.cloud_upload),
-                label: Text(
-                  _isUploading ? 'Submitting...' : 'Submit Proof of Delivery',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  elevation: 0,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // Offline save button
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: OutlinedButton.icon(
-                onPressed: (_photo == null || _isUploading)
-                    ? null
-                    : _saveOffline,
-                icon: const Icon(Icons.save_alt, size: 18),
-                label: const Text('Save Offline (Sync Later)'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.deepOrange,
-                  side: const BorderSide(color: Colors.deepOrange),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-              ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        elevation: 0,
+                      ),
+                    ),
+                  );
+                } else {
+                  return SizedBox(
+                    width: double.infinity,
+                    height: 54,
+                    child: ElevatedButton.icon(
+                      onPressed: canSubmit ? _saveOffline : null,
+                      icon: const Icon(Icons.save_alt),
+                      label: const Text(
+                        'Save Proof Securely (Offline Sync)',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange.shade700,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        elevation: 0,
+                      ),
+                    ),
+                  );
+                }
+              },
             ),
           ],
         ),

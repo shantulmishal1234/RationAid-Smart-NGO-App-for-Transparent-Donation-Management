@@ -2643,13 +2643,25 @@ class _CreateDonationScreenState extends State<CreateDonationScreen>
                 (v == null || v.isEmpty) ? 'Please enter pickup address' : null,
           ),
           const SizedBox(height: 24),
-          Text(
-            '📸 Item Photo Proof',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 16,
-              color: theme.colorScheme.onSurface,
-            ),
+          Row(
+            children: [
+              Text(
+                '📸 Item Photo Proof ',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              const Text(
+                '*',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                  color: Colors.red,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           _buildImageUploadCard(),

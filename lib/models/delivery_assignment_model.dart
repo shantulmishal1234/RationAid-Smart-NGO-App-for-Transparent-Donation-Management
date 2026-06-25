@@ -142,6 +142,7 @@ class DeliveryAssignment {
   final String? assignedPackId;
   final String? assignedPackName;
   final Map<String, num> items; // item name → quantity
+  final Map<String, String> itemUnits; // item name -> unit
 
   // Distributor assignment
   final String? assignedDistributorId;
@@ -201,6 +202,7 @@ class DeliveryAssignment {
     this.assignedPackId,
     this.assignedPackName,
     this.items = const {},
+    this.itemUnits = const {},
     this.assignedDistributorId,
     this.assignedDistributorName,
     this.status = DeliveryStatus.notStarted,
@@ -244,6 +246,7 @@ class DeliveryAssignment {
       assignedPackId: d['assignedPackId'],
       assignedPackName: d['assignedPackName'],
       items: d['items'] != null ? Map<String, num>.from(d['items']) : {},
+      itemUnits: d['itemUnits'] != null ? Map<String, String>.from(d['itemUnits']) : {},
       assignedDistributorId: d['assignedDistributorId'],
       assignedDistributorName: d['assignedDistributorName'],
       status: DeliveryStatus.fromFirestore(d['status'] ?? 'not_started'),
@@ -292,6 +295,7 @@ class DeliveryAssignment {
       'assignedPackId': assignedPackId,
       'assignedPackName': assignedPackName,
       'items': items,
+      'itemUnits': itemUnits,
       'assignedDistributorId': assignedDistributorId,
       'assignedDistributorName': assignedDistributorName,
       'status': status.toFirestore(),

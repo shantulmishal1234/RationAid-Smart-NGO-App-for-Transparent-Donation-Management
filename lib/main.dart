@@ -1,7 +1,11 @@
+import 'dart:async';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/providers/theme_provider.dart';
 import 'package:ration_aid/services/notification_service.dart';
+import 'package:ration_aid/services/delivery_service.dart';
 import 'firebase_options.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'screens/Startup & Authentication/splash_screen.dart';
@@ -30,6 +34,8 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  StreamSubscription<List<ConnectivityResult>>? _connSub;
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +43,25 @@ class _MyAppState extends State<MyApp> {
     themeProvider.addListener(() {
       if (mounted) setState(() {});
     });
+
+    // Subscribes to global network changes to auto-flush offline proof queue
+    _connSub = Connectivity().onConnectivityChanged.listen((result) {
+      if (!result.contains(ConnectivityResult.none)) {
+        DeliveryService.syncOfflineProofs().then((count) {
+          if (count > 0) {
+            debugPrint('Auto-Synced $count offline proofs successfully in background.');
+          }
+        }).catchError((e) {
+          debugPrint('Auto-Sync failed in background: $e');
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _connSub?.cancel();
+    super.dispose();
   }
 
   @override

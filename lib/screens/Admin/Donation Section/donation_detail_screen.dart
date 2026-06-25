@@ -710,7 +710,100 @@ class _DonationDetailScreenState extends State<DonationDetailScreen> {
 
   Widget _buildBeneficiaryInfo(Donation donation) {
     if (donation.familyId == 'general_relief_fund') {
-      return _infoRow('Donation For', 'General Relief Fund');
+      final allocs = donation.grfAllocations ?? [];
+      final totalAllocated = donation.allocatedAmount;
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _infoRow('Donation For', 'General Relief Fund (GRF Pool)'),
+          if (totalAllocated > 0) ...[
+            const SizedBox(height: 8),
+            _infoRow(
+              'Amount in Pool',
+              'PKR ${((donation.effectiveAmount) - totalAllocated).clamp(0.0, double.infinity).toStringAsFixed(0)} remaining',
+            ),
+          ],
+          if (allocs.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Text(
+              'GRF Allocations to Families:',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            ...allocs.reversed.map((alloc) {
+              final famId = alloc['familyId']?.toString() ?? '';
+              final amt = (alloc['amount'] as num?)?.toDouble() ?? 0;
+              final ts = alloc['date'] as Timestamp?;
+              final dateStr = ts != null
+                  ? '${ts.toDate().day}/${ts.toDate().month}/${ts.toDate().year}'
+                  : '';
+              return FutureBuilder<DocumentSnapshot>(
+                future: famId.isNotEmpty
+                    ? FirebaseFirestore.instance
+                        .collection('families')
+                        .doc(famId)
+                        .get()
+                    : null,
+                builder: (context, snap) {
+                  String famLabel = 'Family (${famId.length > 6 ? famId.substring(0, 6) : famId}...)';
+                  if (snap.hasData && snap.data!.exists) {
+                    final fd = snap.data!.data() as Map<String, dynamic>?;
+                    final area = fd?['area']?.toString() ?? '';
+                    final city = fd?['city']?.toString() ?? '';
+                    final name = fd?['husbandName']?.toString() ?? fd?['name']?.toString() ?? '';
+                    famLabel = [name, area, city].where((s) => s.isNotEmpty).join(', ');
+                    if (famLabel.isEmpty) famLabel = 'Family $famId';
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0, left: 4.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: 2.0),
+                          child: Icon(Icons.arrow_forward_ios, size: 12, color: Colors.teal),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                famLabel,
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (dateStr.isNotEmpty)
+                                Text(dateStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'PKR ${amt.toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            color: Colors.teal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            }),
+          ] else ...[
+            const SizedBox(height: 8),
+            Text(
+              'No allocations made yet. Funds remain in the GRF pool awaiting admin assignment.',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600], fontStyle: FontStyle.italic),
+            ),
+          ],
+        ],
+      );
     }
 
     // Handle Unassigned Pool Donations

@@ -86,9 +86,19 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
     return roles.contains('donor');
   }
 
+  /// Check if the current member being edited is an admin
+  bool _isAdmin() {
+    if (widget.initialData == null) return false;
+    final roles = List<String>.from(widget.initialData!['roles'] ?? []);
+    return roles.contains('admin');
+  }
+
   /// Department is auto-derived from role — no manual override needed
-  String get _department =>
-      _mainRole == 'purchaser' ? 'Warehouse' : 'Distribution';
+  String get _department {
+    if (_isAdmin()) return 'Administration';
+    if (_isDonor()) return 'Donors';
+    return _mainRole == 'purchaser' ? 'Warehouse' : 'Distribution';
+  }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -111,7 +121,9 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
 
       // 2. Build roles list
       final roles = <String>[];
-      if (_mainRole == 'purchaser') {
+      if (_isAdmin()) {
+        roles.add('admin');
+      } else if (_mainRole == 'purchaser') {
         roles.add('purchaser');
       } else if (_mainRole == 'distributor') {
         roles.add('distributor');
@@ -380,8 +392,35 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
                       ),
                     ),
 
-                    // Hide designation and organization fields for donors
-                    if (!_isDonor()) ...[
+                    // Hide designation and organization fields for donors and admins
+                    if (_isAdmin()) ...[
+                      const SizedBox(height: 32),
+                      _buildSectionHeader('Administrator Account'),
+                      const SizedBox(height: 16),
+                      FrostedPanel(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            children: [
+                              Icon(Icons.admin_panel_settings,
+                                  color: theme.colorScheme.primary, size: 32),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Text(
+                                  'This is an Administrator account. Organization role and supervisor settings are not applicable.',
+                                  style: TextStyle(
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.8),
+                                    fontSize: 14,
+                                    height: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ] else if (!_isDonor()) ...[
                       const SizedBox(height: 32),
                       _buildSectionHeader('Organization Role'),
                       const SizedBox(height: 16),
@@ -455,8 +494,8 @@ class _AddOrEditMemberScreenState extends State<AddOrEditMemberScreen> {
                       ),
                     ],
 
-                    // isFinalApprover — only shown to admins who are already Final Approvers
-                    if (!_isDonor() && _isCurrentUserFinalApprover) ...[
+                    // isFinalApprover — only shown to admins if the current user is a Final Approver
+                    if (_isAdmin() && _isCurrentUserFinalApprover) ...[
                       const SizedBox(height: 32),
                       _buildSectionHeader('Approval Privileges'),
                       const SizedBox(height: 16),

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:ration_aid/models/procurement_model.dart';
 import 'package:ration_aid/models/family_model.dart';
 import 'package:ration_aid/models/assistance_pack_model.dart';
+import 'package:ration_aid/models/donation_model.dart';
 import 'package:ration_aid/services/audit_service.dart';
 import 'package:ration_aid/services/notification_service.dart';
 import 'package:ration_aid/services/delivery_service.dart';
@@ -116,7 +117,8 @@ class ProcurementService {
 
         // Build a SMART item list — subtract what's already in warehouse
         final List<ProcurementItem> smartItems = [];
-        final List<String> coveredItems = []; // Fully covered by in-kind donations
+        final List<String> coveredItems =
+            []; // Fully covered by in-kind donations
         double smartBudget = 0.0;
 
         for (final item in pack.items) {
@@ -165,8 +167,10 @@ class ProcurementService {
 
           // Build item map for assignment
           final itemsMap = <String, num>{};
+          final itemUnitsMap = <String, String>{};
           for (final item in pack.items) {
             itemsMap[item.name] = item.quantityNum;
+            itemUnitsMap[item.name] = item.unit;
           }
 
           // 1. Create Delivery Assignment
@@ -183,6 +187,7 @@ class ProcurementService {
             assignedPackId: pack.id,
             assignedPackName: pack.name,
             items: itemsMap,
+            itemUnits: itemUnitsMap,
             batch: batch,
           );
 
@@ -193,6 +198,9 @@ class ProcurementService {
           });
 
           await batch.commit();
+
+          // 3. Sync donations to in_process
+          await ProcurementService._syncVerifiedDonationsToInProcess(familyId);
 
           await AuditService.logFamilyAction(
             action: 'Auto-Stocked (100% In-Kind)',
@@ -227,6 +235,9 @@ class ProcurementService {
         'fulfillmentStatus': 'ready_for_purchase',
       });
 
+      // Sync donations to in_process
+      await ProcurementService._syncVerifiedDonationsToInProcess(familyId);
+
       // Notify all purchasers
       await NotificationService.notifyAllPurchasers(
         title: isMedicine
@@ -241,6 +252,129 @@ class ProcurementService {
     } catch (e) {
       debugPrint('Error generating procurement request: $e');
       rethrow;
+    }
+  }
+
+  static Future<void> _syncVerifiedDonationsToInProcess(String familyId) async {
+    await _syncDonationsToInProcess(
+      familyId,
+      fromStatuses: ['verified'], // FIX: Removed 'stocked' to prevent UI timeline regression for In-Kind donations
+      note: 'Items are currently being purchased or prepared for delivery.',
+    );
+  }
+
+  /// Generic helper to push donations from one or more statuses to `in_process`.
+  static Future<void> _syncDonationsToInProcess(
+    String familyId, {
+    required List<String> fromStatuses,
+    required String note,
+  }) async {
+    final snaps = await _firestore
+        .collection('donations')
+        .where('familyId', isEqualTo: familyId)
+        .where('status', whereIn: fromStatuses)
+        .get();
+
+    if (snaps.docs.isEmpty) {
+      await ProcurementService._syncParentSmartDonations(
+        familyId,
+        DonationStatus.inProcess.toFirestore(),
+        note,
+      );
+      return;
+    }
+
+    final batch = _firestore.batch();
+    for (final doc in snaps.docs) {
+      final data = doc.data();
+      
+      // FIX: Never mutate In-Kind donations into `in_process`.
+      // Procurement service is meant for processing Cash into goods.
+      // In-Kind items bypass the shopping phase and simply wait as 'verified' or 'stocked'.
+      if (data['donationType'] == 'inKind') continue;
+
+      batch.update(doc.reference, {
+        'status': DonationStatus.inProcess.toFirestore(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'statusHistory': FieldValue.arrayUnion([
+          {
+            'status': DonationStatus.inProcess.toFirestore(),
+            'timestamp': Timestamp.now(),
+            'note': note,
+          },
+        ]),
+      });
+    }
+    await batch.commit();
+
+    await ProcurementService._syncParentSmartDonations(
+      familyId,
+      DonationStatus.inProcess.toFirestore(),
+      note,
+    );
+  }
+
+
+
+  /// Updates parent Smart Give donation when a family's slices advance.
+  /// Only ever increases status — never regresses.
+  static Future<void> _syncParentSmartDonations(
+    String familyId,
+    String newStatus,
+    String note,
+  ) async {
+    const statusOrder = [
+      'draft',
+      'pending',
+      'under_verification',
+      'verified',
+      'stocked',
+      'in_process',
+      'out_for_delivery',
+      'delivered',
+      'closed',
+    ];
+    final newIdx = statusOrder.indexOf(newStatus);
+    if (newIdx < 0) return;
+
+    // Find smart-split slices for this family
+    final sliceSnaps = await _firestore
+        .collection('donations')
+        .where('familyId', isEqualTo: familyId)
+        .where('isSmartSplitSlice', isEqualTo: true)
+        .get();
+    if (sliceSnaps.docs.isEmpty) return;
+
+    final parentIds = sliceSnaps.docs
+        .map((d) => d.data()['parentDonationId'] as String?)
+        .where((id) => id != null && id.isNotEmpty)
+        .toSet();
+    if (parentIds.isEmpty) return;
+
+    for (final parentId in parentIds) {
+      final parentRef = _firestore.collection('donations').doc(parentId!);
+      final parentDoc = await parentRef.get();
+      if (!parentDoc.exists) continue;
+
+      final currentStatus = parentDoc.data()?['status'] as String? ?? 'draft';
+      final type = parentDoc.data()?['donationType'] as String?;
+
+      // Ultimate safety firewall: Never arbitrarily drag In-Kind Smart Parents into "Purchasing/In Process"
+      if (newStatus == 'in_process' && type == 'inKind') {
+        continue;
+      }
+
+      final currentIdx = statusOrder.indexOf(currentStatus);
+      // Never regress
+      if (newIdx <= currentIdx) continue;
+
+      await parentRef.update({
+        'status': newStatus,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'statusHistory': FieldValue.arrayUnion([
+          {'status': newStatus, 'timestamp': Timestamp.now(), 'note': note},
+        ]),
+      });
     }
   }
 
@@ -281,7 +415,7 @@ class ProcurementService {
         .where('status', whereIn: ['pending_pickup', 'received'])
         .where('createdAt', isLessThan: Timestamp.fromDate(sevenDaysAgo))
         .get();
-    
+
     if (snap.docs.isNotEmpty) {
       await NotificationService.sendAdminNotification(
         title: 'Stale Warehouse Stock Alert ⚠️',
@@ -438,6 +572,7 @@ class ProcurementService {
       if (reqDoc.exists) {
         final familyArea = reqDoc.data()?['familyAddress'] ?? '';
         final packName = reqDoc.data()?['packName'] ?? '';
+        final familyId = reqDoc.data()?['familyId'] as String?;
         await NotificationService.sendAdminNotification(
           title: 'Purchase Order Claimed 👤',
           message:
@@ -445,6 +580,14 @@ class ProcurementService {
           type: 'order_claimed',
           relatedId: requestId,
         );
+        // Fix #1: Purchaser claiming order → advance cash donations to in_process
+        if (familyId != null && familyId.isNotEmpty) {
+          await ProcurementService._syncDonationsToInProcess(
+            familyId,
+            fromStatuses: ['verified'],
+            note: 'A purchaser is now procuring your ration pack items.',
+          );
+        }
       }
 
       return true;
@@ -525,7 +668,8 @@ class ProcurementService {
       if (!doc.exists) throw Exception('Purchase request not found');
 
       final requestData = doc.data() as Map<String, dynamic>;
-      final budgetLimit = (requestData['budgetLimit'] as num?)?.toDouble() ?? 0.0;
+      final budgetLimit =
+          (requestData['budgetLimit'] as num?)?.toDouble() ?? 0.0;
       final maxAllowed = budgetLimit * 1.10;
 
       if (totalSpent > maxAllowed) {
@@ -593,9 +737,11 @@ class ProcurementService {
       // ProcurementItem.quantity remains a string for now, but we'll parse it cleanly
       // (ProcurementItem is separate from PackItem, we'll extract the number)
       final itemsMap = <String, num>{};
+      final itemUnitsMap = <String, String>{};
       for (final item in request.items) {
         final qtyStr = RegExp(r'[\d.]+').stringMatch(item.quantity) ?? '1';
         itemsMap[item.name] = double.tryParse(qtyStr) ?? 1.0;
+        itemUnitsMap[item.name] = item.unit;
       }
 
       // 4. Auto-create DeliveryAssignment (links purchaser → distributor pipeline)
@@ -612,6 +758,7 @@ class ProcurementService {
         assignedPackId: request.packId,
         assignedPackName: request.packName,
         items: itemsMap,
+        itemUnits: itemUnitsMap,
         inKindCoveredItems: request.inKindCoveredItems,
         procurementRequestId: requestId,
         batch: batch,
@@ -627,11 +774,10 @@ class ProcurementService {
       // 6. Central GRF Financial Reconciliation & Ledger Entry
       final variance = request.budgetLimit - request.totalSpent;
       if (variance != 0) {
-        final grfRef =
-            _firestore.collection('families').doc('general_relief_fund');
-        batch.update(grfRef, {
-          'raisedAmount': FieldValue.increment(variance),
-        });
+        final grfRef = _firestore
+            .collection('families')
+            .doc('general_relief_fund');
+        batch.update(grfRef, {'raisedAmount': FieldValue.increment(variance)});
 
         // Generate official GRF Audit transaction record
         final ledgerRef = _firestore.collection('donations').doc();
@@ -641,14 +787,14 @@ class ProcurementService {
           'familyId': variance > 0 ? 'general_relief_fund' : request.familyId,
           'isGrfAllocation': variance < 0,
           'status': 'verified',
-          'donorName':
-              variance > 0 ? 'Savings from ${request.packName}' : 'System',
+          'donorName': variance > 0
+              ? 'Savings from ${request.packName}'
+              : 'System',
           'donorEmail': 'system@rationaid.com',
           'allocatedByUid': 'system_reconciliation', // Represents System
-          'donationNote':
-              variance > 0
-                  ? 'Surplus Recovery'
-                  : 'Inflation Subsidy for ${request.packName}',
+          'donationNote': variance > 0
+              ? 'Surplus Recovery'
+              : 'Inflation Subsidy for ${request.packName}',
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -656,6 +802,14 @@ class ProcurementService {
 
       // Commit the batch to ensure total atomicity
       await batch.commit();
+
+      // Fix #2: adminVerifyPurchase → keep cash donations as 'in_process' until delivery
+      // (We intentionally exclude 'stocked' here to protect the In-Kind donations from regressing)
+      await ProcurementService._syncDonationsToInProcess(
+        request.familyId,
+        fromStatuses: ['verified', 'in_process'],
+        note: 'Items successfully procured and queued for delivery to your family.',
+      );
 
       // Send the GRF Audit notification if variance applies
       if (variance != 0) {

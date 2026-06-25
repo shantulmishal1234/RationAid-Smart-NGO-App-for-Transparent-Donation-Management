@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/models/donation_model.dart';
@@ -23,8 +24,6 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
   String _searchQuery = '';
 
   // P6 Fix — Single cached stream subscription drives both stats panel and list.
-  // Previously two separate StreamBuilders queried the same Firestore path,
-  // doubling read cost and connection overhead.
   List<Donation> _cachedDonations = [];
   bool _isLoading = true;
   String? _streamError;
@@ -33,9 +32,15 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
   // P2 Fix — Debounce timer: setState fires 300ms after user stops typing.
   Timer? _searchDebounce;
 
+  // Smart Give Badge Resolution — batch-resolved once after donations load.
+  // Stores the actual worst-performing-slice status per parent donation ID.
+  Map<String, DonationStatus> _resolvedStatuses = {};
+  bool _isResolvingStatuses = false;
+
   @override
   void initState() {
     super.initState();
+
     final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
     if (userId.isNotEmpty) {
       _donationsSubscription = _donationService
@@ -43,11 +48,20 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
           .listen(
             (donations) {
               if (mounted) {
+                // Filter out GRF allocation pseudo-docs — these are internal
+                // ledger records (donorId='grf_allocation') that should never
+                // appear in the donor's personal donation list. The original
+                // GRF donation card already shows allocation details inline.
+                final filtered = donations
+                    .where((d) => d.donorId != 'grf_allocation')
+                    .toList();
                 setState(() {
-                  _cachedDonations = donations;
+                  _cachedDonations = filtered;
                   _isLoading = false;
                   _streamError = null;
                 });
+                // Batch-resolve smart donation statuses after list updates
+                _batchResolveSmartStatuses(filtered);
               }
             },
             onError: (Object error) {
@@ -62,6 +76,119 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
     } else {
       _isLoading = false;
     }
+  }
+
+  /// Batch-fetches ALL child slice statuses for ALL smart donations in one
+  /// Firestore `whereIn` query (max 29 per chunk). Computes the worst-rank
+  /// (earliest lifecycle) status per parent and caches in [_resolvedStatuses].
+  Future<void> _batchResolveSmartStatuses(List<Donation> donations) async {
+    if (_isResolvingStatuses) return;
+
+    final smartDonations = donations
+        .where(
+          (d) =>
+              d.allocationMode == 'smart' && (d.smartSplits?.length ?? 0) > 1,
+        )
+        .toList();
+
+    if (smartDonations.isEmpty) return;
+
+    _isResolvingStatuses = true;
+
+    const order = [
+      'draft',
+      'pending',
+      'under_verification',
+      'verified',
+      'stocked',
+      'in_process',
+      'out_for_delivery',
+      'delivered',
+      'closed',
+    ];
+
+    final Map<String, DonationStatus> resolved = {};
+    final parentIds = smartDonations.map((d) => d.id).toList();
+
+    try {
+      // Firestore whereIn supports max 30 values — process in chunks of 29
+      for (int i = 0; i < parentIds.length; i += 29) {
+        final chunk = parentIds.sublist(
+          i,
+          (i + 29) > parentIds.length ? parentIds.length : i + 29,
+        );
+
+        final snap = await FirebaseFirestore.instance
+            .collection('donations')
+            .where('parentDonationId', whereIn: chunk)
+            .get();
+
+        // Group slice statuses by parent ID
+        final Map<String, List<String>> slicesByParent = {};
+        for (final doc in snap.docs) {
+          final parentId = doc.data()['parentDonationId'] as String? ?? '';
+          final status = doc.data()['status'] as String? ?? 'verified';
+          if (parentId.isNotEmpty) {
+            slicesByParent.putIfAbsent(parentId, () => []).add(status);
+          }
+        }
+
+        // ── Two-Tier Algorithm per parent donation ──────────────────────────
+        // 'Delivered' only when ALL slices are terminal (delivered/closed).
+        // Otherwise: most advanced NON-terminal state wins.
+        for (final parentDonation in smartDonations) {
+          final parentId = parentDonation.id;
+          if (!chunk.contains(parentId)) continue;
+
+          final statuses = slicesByParent[parentId] ?? [];
+          if (statuses.isEmpty) continue;
+
+          const terminalStatuses = {'delivered', 'closed'};
+          final parentStatusStr = parentDonation.status.toFirestore();
+          final parentRank = order.indexOf(parentStatusStr);
+
+          // Apply parent floor to each slice status.
+          // For Cash donations, 'stocked' is normalized to 'verified' since
+          // cash has no warehouse step in its lifecycle.
+          final isCash = parentDonation.donationType == DonationType.cash;
+          final floored = statuses.map((st) {
+            final normalized = (isCash && st == 'stocked') ? 'verified' : st;
+            final r = order.indexOf(normalized);
+            return (r >= 0 && r < parentRank) ? parentStatusStr : normalized;
+          }).toList();
+
+          final allTerminal = floored.every((s) => terminalStatuses.contains(s));
+          String resolvedStr;
+
+          if (allTerminal) {
+            resolvedStr = 'delivered';
+          } else {
+            int bestRank = parentRank >= 0 ? parentRank : 0;
+            String bestStatus = parentStatusStr;
+            for (final st in floored) {
+              if (terminalStatuses.contains(st)) continue;
+              final r = order.indexOf(st);
+              if (r > bestRank) {
+                bestRank = r;
+                bestStatus = st;
+              }
+            }
+            resolvedStr = bestStatus;
+          }
+
+          resolved[parentId] = DonationStatus.values.firstWhere(
+            (e) => e.toFirestore() == resolvedStr,
+            orElse: () => parentDonation.status,
+          );
+        }
+      }
+    } catch (_) {
+      // Non-critical — cards fall back to parent donation.status
+    } finally {
+      _isResolvingStatuses = false;
+    }
+
+    if (mounted) setState(() => _resolvedStatuses = resolved);
   }
 
   @override
@@ -89,12 +216,45 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
     final filteredByStatus = _selectedFilter == DonationFilter.all
         ? donations
         : donations.where((d) {
-            final targetStatus = _getDonationStatus(_selectedFilter);
-            if (targetStatus == DonationStatus.verified) {
-              return d.status == DonationStatus.verified ||
-                  d.status == DonationStatus.pendingAssignment;
+            switch (_selectedFilter) {
+              case DonationFilter.all:
+                return true;
+
+              case DonationFilter.draft:
+                return d.status == DonationStatus.draft;
+
+              case DonationFilter.pending:
+                return d.status == DonationStatus.pending;
+
+              case DonationFilter.underVerification:
+                return d.status == DonationStatus.underVerification;
+
+              case DonationFilter.verified:
+                // Verified bucket: admin approved but items not yet on their way.
+                // Includes pendingAssignment (GRF pool awaiting assignment).
+                // Excludes stocked — that belongs in the inWarehouse bucket.
+                return d.status == DonationStatus.verified ||
+                    d.status == DonationStatus.pendingAssignment;
+
+              case DonationFilter.inWarehouse:
+                // In-Kind items physically received at warehouse.
+                // Cash donations should never appear here (stocked is
+                // remapped to verified for cash in the UI, but the raw
+                // Firestore status could still be stocked).
+                return d.status == DonationStatus.stocked ||
+                    d.status == DonationStatus.inProcess;
+
+              case DonationFilter.outForDelivery:
+                return d.status == DonationStatus.outForDelivery;
+
+              case DonationFilter.delivered:
+                // Delivered + closed are both terminal success states.
+                return d.status == DonationStatus.delivered ||
+                    d.status == DonationStatus.closed;
+
+              case DonationFilter.rejected:
+                return d.status == DonationStatus.rejected;
             }
-            return d.status.toFirestore() == targetStatus.toFirestore();
           }).toList();
     final filteredDonations = _searchQuery.isEmpty
         ? filteredByStatus
@@ -377,9 +537,14 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
                     padding: const EdgeInsets.only(bottom: 100),
                     itemCount: filteredDonations.length,
                     itemBuilder: (context, index) {
+                      final d = filteredDonations[index];
                       return _DonationCard(
-                        donation: filteredDonations[index],
+                        donation: d,
                         serialNumber: index + 1,
+                        // Pass batch-resolved status for Smart Give donations
+                        resolvedStatus: d.allocationMode == 'smart'
+                            ? _resolvedStatuses[d.id]
+                            : null,
                       );
                     },
                   ),
@@ -389,28 +554,8 @@ class _MyDonationsSectionState extends State<MyDonationsSection> {
     );
   }
 
-  DonationStatus _getDonationStatus(DonationFilter filter) {
-    switch (filter) {
-      case DonationFilter.all:
-        return DonationStatus.draft;
-      case DonationFilter.draft:
-        return DonationStatus.draft;
-      case DonationFilter.pending:
-        return DonationStatus.pending;
-      case DonationFilter.underVerification:
-        return DonationStatus.underVerification;
-      case DonationFilter.verified:
-        return DonationStatus.verified;
-      case DonationFilter.inProcess:
-        return DonationStatus.inProcess;
-      case DonationFilter.outForDelivery:
-        return DonationStatus.outForDelivery;
-      case DonationFilter.delivered:
-        return DonationStatus.delivered;
-      case DonationFilter.rejected:
-        return DonationStatus.rejected;
-    }
-  }
+
+
 
   /// Stat item with colored dot matching admin design
   Widget _statItem(String label, String value, Color color) {
@@ -470,7 +615,15 @@ class _DonationCard extends StatelessWidget {
   final Donation donation;
   final int serialNumber;
 
-  const _DonationCard({required this.donation, required this.serialNumber});
+  /// Pre-resolved worst-slice status for Smart Give donations.
+  /// Null for non-smart donations (uses donation.status directly).
+  final DonationStatus? resolvedStatus;
+
+  const _DonationCard({
+    required this.donation,
+    required this.serialNumber,
+    this.resolvedStatus,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -583,32 +736,75 @@ class _DonationCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 3),
-                    // Date
-                    Text(
-                      'Created: ${_formatDate(donation.createdAt)}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontSize: 11,
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.6,
+                    // Family Area
+                    if (donation.familyId == 'general_relief_fund' || donation.allocationMode == 'general')
+                      Text(
+                        'General Relief Fund',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 11,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                          fontWeight: FontWeight.w500,
                         ),
+                      )
+                    else if (donation.allocationMode == 'smart')
+                      Text(
+                        'Smart Give Portfolio',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 11,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      )
+                    else
+                      FutureBuilder<DocumentSnapshot>(
+                        future: FirebaseFirestore.instance.collection('families').doc(donation.familyId).get(const GetOptions(source: Source.cache)).catchError((_) => FirebaseFirestore.instance.collection('families').doc(donation.familyId).get()),
+                        builder: (context, snapshot) {
+                          String displayArea = 'Loading Area...';
+                          if (snapshot.hasData && snapshot.data!.exists) {
+                            final data = snapshot.data!.data() as Map<String, dynamic>?;
+                            if (data != null && data['area'] != null) {
+                              displayArea = data['city'] != null ? '${data['area']}, ${data['city']}' : data['area'];
+                            } else {
+                              displayArea = 'Unknown Area';
+                            }
+                          } else if (snapshot.hasError) {
+                            displayArea = 'Unknown Area';
+                          }
+
+                          return Text(
+                            displayArea,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontSize: 11,
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          );
+                        },
                       ),
-                    ),
+                    // Smart Give progress subtitle
+                    if (donation.allocationMode == 'smart' &&
+                        (donation.smartSplits?.length ?? 0) > 0) ...[
+                      const SizedBox(height: 4),
+                      _SmartSplitSubtitle(donation: donation),
+                    ],
                   ],
                 ),
               ),
               const SizedBox(width: 8),
 
-              // Status Badge
+              // Status Badge — uses resolvedStatus for Smart Give donations
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: _getStatusBadgeColor(
-                    donation.status,
+                    resolvedStatus ?? donation.status,
                   ).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: _getStatusBadgeColor(
-                      donation.status,
+                      resolvedStatus ?? donation.status,
                     ).withValues(alpha: 0.3),
                   ),
                 ),
@@ -618,7 +814,9 @@ class _DonationCard extends StatelessWidget {
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.5,
-                    color: _getStatusBadgeColor(donation.status),
+                    color: _getStatusBadgeColor(
+                      resolvedStatus ?? donation.status,
+                    ),
                   ),
                 ),
               ),
@@ -638,16 +836,19 @@ class _DonationCard extends StatelessWidget {
   }
 
   String _getDisplayStatus(Donation d) {
+    final effectiveStatus = resolvedStatus ?? d.status;
     if ((d.familyId == 'general_relief_fund' ||
             d.allocationMode == 'general') &&
-        d.status == DonationStatus.verified) {
+        effectiveStatus == DonationStatus.verified) {
       return 'AWAITING ALLOCATION';
     }
-    return d.status.displayName.toUpperCase();
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+    // Show "..." while batch resolution is in-flight for smart donations
+    if (d.allocationMode == 'smart' &&
+        resolvedStatus == null &&
+        (d.smartSplits?.length ?? 0) > 1) {
+      return d.status.displayName.toUpperCase(); // Show raw as placeholder
+    }
+    return effectiveStatus.displayName.toUpperCase();
   }
 
   Color _getStatusBadgeColor(DonationStatus status) {
@@ -671,5 +872,257 @@ class _DonationCard extends StatelessWidget {
       case DonationStatus.rejected:
         return Colors.red[600]!;
     }
+  }
+}
+
+/// Live smart-split progress subtitle shown below the date on donation cards.
+/// Queries slice documents once and summarises how many families are at each
+/// life-cycle milestone.  Renders a mini colour-coded bar + text label.
+class _SmartSplitSubtitle extends StatelessWidget {
+  final Donation donation;
+  const _SmartSplitSubtitle({required this.donation});
+
+  // Status rank — higher = more advanced.
+  static const _order = [
+    'draft',
+    'pending',
+    'under_verification',
+    'verified',
+    'stocked',
+    'in_process',
+    'out_for_delivery',
+    'delivered',
+    'closed',
+  ];
+
+  static Color _colorFor(String s) {
+    switch (s) {
+      case 'delivered':
+      case 'closed':
+        return Colors.green;
+      case 'out_for_delivery':
+        return Colors.purple;
+      case 'in_process':
+        return Colors.indigo;
+      case 'stocked':
+        return Colors.teal;
+      case 'verified':
+        return Colors.blue;
+      case 'under_verification':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  static String _labelFor(String s, int count, int total) {
+    switch (s) {
+      case 'delivered':
+      case 'closed':
+        return '$count/$total delivered';
+      case 'out_for_delivery':
+        return '$count/$total out for delivery';
+      case 'in_process':
+        return '$count/$total in process';
+      case 'stocked':
+        return '$count/$total in warehouse';
+      case 'verified':
+        return '$count/$total verified';
+      default:
+        return '$count/$total pending';
+    }
+  }
+
+  Future<Map<String, int>> _fetchSliceStatusCounts() async {
+    final Map<String, int> counts = {};
+    final parentStatusStr = donation.status.toFirestore();
+    final parentRank = _order.indexOf(parentStatusStr);
+    final isCash = donation.donationType == DonationType.cash;
+
+    /// Applies the parent floor and cash-type normalization:
+    /// 1. If a slice status is earlier than the parent, elevate to parent's status.
+    /// 2. For Cash donations, 'stocked' is not a valid lifecycle step — map to 'verified'.
+    String applyFloor(String st) {
+      // Fix for legacy corrupted data: In-Kind slices should never be in_process
+      if (!isCash && st == 'in_process') {
+        st = 'stocked';
+      }
+      // Cash donations never go to warehouse — normalize stocked → verified
+      final normalized = (isCash && st == 'stocked') ? 'verified' : st;
+      final rank = _order.indexOf(normalized);
+      if (rank < 0 || rank >= parentRank) return normalized;
+      return parentStatusStr;
+    }
+
+    // Primary: query slices tagged with parentDonationId
+    var snap = await FirebaseFirestore.instance
+        .collection('donations')
+        .where('parentDonationId', isEqualTo: donation.id)
+        .get();
+
+    // Fallback: use smartSplits list + familyId queries if no slices found
+    if (snap.docs.isEmpty && (donation.smartSplits?.isNotEmpty ?? false)) {
+      final donorId = FirebaseAuth.instance.currentUser?.uid ?? '';
+      final familyIds = donation.smartSplits!
+          .map((s) => s['familyId'] as String? ?? '')
+          .where((id) => id.isNotEmpty && id != 'general_relief_fund')
+          .toSet();
+      for (final fid in familyIds) {
+        final fSnap = await FirebaseFirestore.instance
+            .collection('donations')
+            .where('familyId', isEqualTo: fid)
+            .where('isSmartSplitSlice', isEqualTo: true)
+            .where('donorId', isEqualTo: donorId)
+            .limit(1)
+            .get();
+        if (fSnap.docs.isNotEmpty) {
+          final raw = fSnap.docs.first.data()['status'] as String? ?? parentStatusStr;
+          final st = applyFloor(raw);
+          counts[st] = (counts[st] ?? 0) + 1;
+        }
+      }
+      return counts;
+    }
+
+    for (final doc in snap.docs) {
+      final raw = doc.data()['status'] as String? ?? parentStatusStr;
+      final st = applyFloor(raw);
+      counts[st] = (counts[st] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total =
+        donation.smartSplits
+            ?.where(
+              (s) =>
+                  (s['familyId'] as String? ?? '').isNotEmpty &&
+                  s['familyId'] != 'general_relief_fund',
+            )
+            .length ??
+        0;
+    if (total == 0) return const SizedBox.shrink();
+
+    return FutureBuilder<Map<String, int>>(
+      future: _fetchSliceStatusCounts(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.auto_awesome,
+                    size: 10,
+                    color: AppColors.donorGreen,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Smart Give • $total families',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.donorGreen,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: 0,
+                  backgroundColor: AppColors.donorGreen.withValues(alpha: 0.1),
+                  color: AppColors.donorGreen.withValues(alpha: 0.3),
+                  minHeight: 4,
+                ),
+              ),
+            ],
+          );
+        }
+
+        final counts = snapshot.data!;
+
+        // ── Two-Tier Algorithm for progress label ───────────────────────────
+        // Rule 1: Show 'X/N delivered' ONLY when ALL real-family slices are
+        //         at a terminal state (delivered or closed).
+        // Rule 2: Otherwise show the most advanced NON-terminal milestone.
+        // ─────────────────────────────────────────────────────────────────────────
+        const terminalStatuses = {'delivered', 'closed'};
+        final totalTerminal = counts.entries
+            .where((e) => terminalStatuses.contains(e.key))
+            .fold(0, (acc, e) => acc + e.value);
+        final totalSlices = counts.values.fold(0, (acc, v) => acc + v);
+
+        String bestStatus;
+        int bestCount;
+
+        if (totalTerminal == totalSlices && totalSlices > 0) {
+          // All slices are terminal — mission complete
+          bestStatus = 'delivered';
+          bestCount = totalTerminal;
+        } else {
+          // Most advanced NON-terminal status, seeded from parent status floor
+          bestStatus = donation.status.toFirestore();
+          int bestRank = _order.indexOf(bestStatus);
+          for (final entry in counts.entries) {
+            if (terminalStatuses.contains(entry.key)) continue;
+            final rank = _order.indexOf(entry.key);
+            if (rank > bestRank) {
+              bestRank = rank;
+              bestStatus = entry.key;
+            }
+          }
+          bestCount = counts[bestStatus] ?? 0;
+          // If bestCount is 0, all non-terminal slices were floored to parentStatus
+          if (bestCount == 0) bestCount = totalSlices - totalTerminal;
+        }
+        final labelText = _labelFor(bestStatus, bestCount, total);
+        final barColor = _colorFor(bestStatus);
+        final progress = bestCount / total;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.auto_awesome,
+                  size: 10,
+                  color: AppColors.donorGreen,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Smart Give • $labelText',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: barColor,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                backgroundColor: barColor.withValues(alpha: 0.2),
+                color: barColor,
+                minHeight: 4,
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 }

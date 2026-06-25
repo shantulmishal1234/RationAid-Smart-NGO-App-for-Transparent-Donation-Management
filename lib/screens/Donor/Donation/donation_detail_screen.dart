@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:ration_aid/models/donation_model.dart';
@@ -859,24 +861,58 @@ class _GrfPoolInfoCard extends StatelessWidget {
 }
 
 /// Smart Give Impact Breakdown Card
-class _ImpactBreakdownCard extends StatelessWidget {
+class _ImpactBreakdownCard extends StatefulWidget {
   final Donation donation;
 
   const _ImpactBreakdownCard({required this.donation});
 
   @override
+  State<_ImpactBreakdownCard> createState() => _ImpactBreakdownCardState();
+}
+
+class _ImpactBreakdownCardState extends State<_ImpactBreakdownCard> {
+  late Future<QuerySnapshot> _fetchSlicesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchSlicesFuture = FirebaseFirestore.instance
+        .collection('donations')
+        .where('parentDonationId', isEqualTo: widget.donation.id)
+        .get();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (donation.smartSplits == null || donation.smartSplits!.isEmpty) {
+    if (widget.donation.smartSplits == null || widget.donation.smartSplits!.isEmpty) {
       return const SizedBox.shrink();
     }
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      child: FutureBuilder<QuerySnapshot>(
+        future: _fetchSlicesFuture,
+        builder: (context, parentSnap) {
+          if (parentSnap.connectionState == ConnectionState.waiting) {
+            return const Padding(
+              padding: EdgeInsets.all(48.0),
+              child: Center(
+                child: SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            );
+          }
+
+          final primarySlices = parentSnap.data?.docs ?? [];
+
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             Text(
               'Impact Breakdown',
               style: TextStyle(
@@ -886,13 +922,23 @@ class _ImpactBreakdownCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            ...donation.smartSplits!.map((split) {
+            ...widget.donation.smartSplits!.asMap().entries.map((entry) {
+              final int index = entry.key;
+              final split = entry.value;
               final String fId = split['familyId']?.toString() ?? '';
               final String shortId = fId.length > 5 ? fId.substring(0, 5) : fId;
               final bool isGrf = fId == 'general_relief_fund' || fId.isEmpty;
 
+              int occurrenceIndex = 0;
+              for (int i = 0; i < index; i++) {
+                final Map<String, dynamic> prevSplit = widget.donation.smartSplits![i];
+                if ((prevSplit['familyId']?.toString() ?? '') == fId) {
+                  occurrenceIndex++;
+                }
+              }
+
               String displayValue;
-              if (donation.donationType == DonationType.cash) {
+              if (widget.donation.donationType == DonationType.cash) {
                 final double amt = (split['amount'] as num?)?.toDouble() ?? 0.0;
                 displayValue = 'PKR ${amt.toStringAsFixed(0)}';
               } else {
@@ -986,17 +1032,28 @@ class _ImpactBreakdownCard extends StatelessWidget {
                               ).colorScheme.onSurface.withValues(alpha: 0.7),
                             ),
                           ),
+                          const SizedBox(height: 6),
+                          _SliceStatusBadge(
+                            parentId: widget.donation.id,
+                            familyId: fId,
+                            isGrf: isGrf,
+                            fallbackStatus: widget.donation.status,
+                            familyOccurrenceIndex: occurrenceIndex,
+                            primarySlices: primarySlices,
+                          ),
                         ],
                       ),
                     ),
                   ],
                 ),
               );
-            }),
+            }).toList(),
           ],
         ),
-      ),
-    );
+      );
+     },
+    ),
+   );
   }
 }
 
@@ -1082,5 +1139,167 @@ class _DisplacedToGrfCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _SliceStatusBadge extends StatefulWidget {
+  final String parentId;
+  final String familyId;
+  final bool isGrf;
+  final DonationStatus fallbackStatus;
+  final int familyOccurrenceIndex;
+  final List<DocumentSnapshot> primarySlices;
+
+  const _SliceStatusBadge({
+    required this.parentId,
+    required this.familyId,
+    required this.isGrf,
+    required this.fallbackStatus,
+    required this.familyOccurrenceIndex,
+    required this.primarySlices,
+  });
+
+  @override
+  State<_SliceStatusBadge> createState() => _SliceStatusBadgeState();
+}
+
+class _SliceStatusBadgeState extends State<_SliceStatusBadge> {
+  // Cached legacy future — set once in initState, never recreated on rebuild.
+  Future<String?>? _legacyFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    // Only set up async query if synchronous resolution won't work
+    if (!widget.isGrf && _resolveSync() == null) {
+      _legacyFuture = _fetchStatusLegacy();
+    }
+  }
+
+  /// Clamps corrupted legacy states back to their rightful boundaries
+  String _applyFloor(String st) {
+    if (widget.fallbackStatus == DonationStatus.stocked && st == 'in_process') {
+      return 'stocked';
+    }
+    return st;
+  }
+
+  /// Resolves status SYNCHRONOUSLY from pre-loaded [primarySlices].
+  /// Returns null only for legacy donations without parentDonationId.
+  String? _resolveSync() {
+    final matches = widget.primarySlices.where((d) {
+      final data = d.data() as Map<String, dynamic>?;
+      return data != null && data['familyId'] == widget.familyId;
+    }).toList();
+    if (matches.length > widget.familyOccurrenceIndex) {
+      final raw = (matches[widget.familyOccurrenceIndex].data()
+              as Map<String, dynamic>)['status'] as String?;
+      return raw != null ? _applyFloor(raw) : null;
+    }
+    return null;
+  }
+
+  /// Async fallback for legacy donations — cached in initState.
+  Future<String?> _fetchStatusLegacy() async {
+    final donorId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (donorId.isEmpty) return null;
+    final snap = await FirebaseFirestore.instance
+        .collection('donations')
+        .where('familyId', isEqualTo: widget.familyId)
+        .where('isSmartSplitSlice', isEqualTo: true)
+        .where('donorId', isEqualTo: donorId)
+        .get();
+    if (snap.docs.length > widget.familyOccurrenceIndex) {
+      final raw = snap.docs[widget.familyOccurrenceIndex].data()['status'] as String?;
+      return raw != null ? _applyFloor(raw) : null;
+    }
+    return null;
+  }
+
+  Widget _buildBadge(DonationStatus status) {
+    final color = _colorFor(status);
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        status.displayName.toUpperCase(),
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  static Color _colorFor(DonationStatus s) {
+    switch (s) {
+      case DonationStatus.draft:
+      case DonationStatus.pending:
+        return Colors.grey;
+      case DonationStatus.underVerification:
+        return Colors.orange;
+      case DonationStatus.verified:
+        return Colors.blue;
+      case DonationStatus.stocked:
+        return Colors.teal;
+      case DonationStatus.inProcess:
+        return Colors.indigo;
+      case DonationStatus.outForDelivery:
+        return Colors.purple;
+      case DonationStatus.delivered:
+      case DonationStatus.closed:
+        return Colors.green;
+      case DonationStatus.rejected:
+        return Colors.red;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.isGrf) return const SizedBox.shrink();
+
+    // 1. Synchronous resolution from pre-loaded primarySlices — instant, no flash
+    final syncStatus = _resolveSync();
+    if (syncStatus != null) {
+      return _buildBadge(
+        DonationStatus.values.firstWhere(
+          (e) => e.toFirestore() == syncStatus,
+          orElse: () => widget.fallbackStatus,
+        ),
+      );
+    }
+
+    // 2. Legacy async fallback for old donations without parentDonationId
+    if (_legacyFuture != null) {
+      return FutureBuilder<String?>(
+        future: _legacyFuture,
+        builder: (context, snapshot) {
+          // Suppress only during WAITING (avoids wrong-status flash)
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const SizedBox.shrink();
+          }
+          // Resolution complete: use real status, or fallback if nothing found
+          final status = (snapshot.data != null)
+              ? DonationStatus.values.firstWhere(
+                  (e) => e.toFirestore() == snapshot.data!,
+                  orElse: () => widget.fallbackStatus,
+                )
+              : widget.fallbackStatus;
+          return _buildBadge(status);
+        },
+      );
+    }
+
+    // 3. Absolute fallback — sync had no match and no legacy future needed
+    return _buildBadge(widget.fallbackStatus);
   }
 }

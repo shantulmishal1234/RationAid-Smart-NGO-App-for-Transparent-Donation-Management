@@ -5,9 +5,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:ration_aid/models/delivery_assignment_model.dart';
 import 'package:ration_aid/theme/app_colors.dart';
+
+class NavStep {
+  final String instruction; // "Turn left onto XYZ"
+  final double distance; // distance segment
+  final LatLng location; // where the maneuver starts
+  final String modifier; // "left", "right", "straight", etc.
+  final String type;
+
+  NavStep({
+    required this.instruction,
+    required this.distance,
+    required this.location,
+    required this.modifier,
+    required this.type,
+  });
+}
 
 /// Full-screen OSM map for delivery navigation.
 ///
@@ -32,6 +49,18 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen>
   StreamSubscription<Position>? _positionSub;
   bool _centeredOnFamily = true;
   double? _distanceMeters;
+
+  // Routing State
+  List<LatLng> _routePoints = [];
+  bool _isNavigating = false;
+  double? _drivingDistanceMeters;
+  double? _drivingDurationSeconds;
+  bool _isFetchingRoute = false;
+  DateTime _lastRouteFetch = DateTime.now().subtract(const Duration(hours: 1));
+
+  // Advanced Navigation State
+  List<NavStep> _turnSteps = [];
+  NavStep? _currentStep;
 
   DeliveryAssignment get a => widget.assignment;
 
@@ -94,17 +123,66 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen>
         Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
-            distanceFilter: 10, // update every 10 metres
+            distanceFilter: 3, // Very frequent for smooth nav
           ),
         ).listen((pos) {
           if (!mounted) return;
           final myLatLng = LatLng(pos.latitude, pos.longitude);
+          final heading = pos.heading;
+
           setState(() {
             _myPosition = myLatLng;
             if (_familyLatLng != null) {
               _distanceMeters = _haversine(myLatLng, _familyLatLng!);
             }
+
+            // Advance turn steps based on location
+            if (_turnSteps.isNotEmpty && _currentStep != null) {
+              final distToStep = _haversine(myLatLng, _currentStep!.location);
+              if (distToStep < 30) {
+                // close enough to the step maneuvers
+                int idx = _turnSteps.indexOf(_currentStep!);
+                if (idx >= 0 && idx < _turnSteps.length - 1) {
+                  _currentStep = _turnSteps[idx + 1];
+                }
+              }
+            }
           });
+
+          if (_isNavigating) {
+            // Immersive Nav View: Center on user, high zoom, rotate map
+            _mapController.move(myLatLng, 17.5);
+            if (heading >= 0) {
+              _mapController.rotate(heading);
+            }
+
+            // Off-route recalculation
+            if (_routePoints.isNotEmpty) {
+              double minDist = double.infinity;
+              for (final pt in _routePoints) {
+                final d = _haversine(myLatLng, pt);
+                if (d < minDist) minDist = d;
+              }
+              if (minDist > 100) {
+                // 100m off path threshold
+                if (DateTime.now().difference(_lastRouteFetch).inSeconds > 10) {
+                  debugPrint(
+                    '[Nav] Off route! Recalculating... diff: $minDist',
+                  );
+                  _lastRouteFetch = DateTime.now();
+                  _fetchRoute();
+                }
+              }
+            }
+          } else if (_centeredOnFamily == false) {
+            // Normal tracking without rotation
+            _mapController.move(myLatLng, 17);
+          }
+
+          if (!_isNavigating && _routePoints.isEmpty) {
+            _lastRouteFetch = DateTime.now();
+            _fetchRoute();
+          }
         });
   }
 
@@ -128,118 +206,204 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen>
     return '${(meters / 1000).toStringAsFixed(2)} km';
   }
 
+  String _formatDuration(double seconds) {
+    if (seconds < 60) return '${seconds.toStringAsFixed(0)} sec';
+    final mins = (seconds / 60).round();
+    if (mins < 60) return '$mins min';
+    final hrs = mins ~/ 60;
+    final rMins = mins % 60;
+    return '${hrs}h ${rMins}m';
+  }
+
+  Future<void> _fetchRoute() async {
+    if (_myPosition == null || _familyLatLng == null) return;
+    if (_isFetchingRoute) return;
+
+    setState(() => _isFetchingRoute = true);
+
+    try {
+      final start = '${_myPosition!.longitude},${_myPosition!.latitude}';
+      final end = '${_familyLatLng!.longitude},${_familyLatLng!.latitude}';
+      final url = Uri.parse(
+        'http://router.project-osrm.org/route/v1/driving/$start;$end?overview=full&geometries=geojson&steps=true&annotations=true',
+      );
+
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final routes = data['routes'] as List?;
+        if (routes != null && routes.isNotEmpty) {
+          final route = routes.first;
+          final newDistance = (route['distance'] as num?)?.toDouble();
+          final newDuration = (route['duration'] as num?)?.toDouble();
+
+          final geometry = route['geometry'];
+          final coords = geometry['coordinates'] as List?;
+          List<LatLng> newRoutePoints = [];
+
+          if (coords != null) {
+            newRoutePoints = coords
+                .map((c) => LatLng(c[1] as double, c[0] as double))
+                .toList();
+          }
+
+          // Parsing Turn-by-Turn Steps
+          List<NavStep> stepsList = [];
+          final legs = route['legs'] as List?;
+          if (legs != null && legs.isNotEmpty) {
+            final steps = legs.first['steps'] as List?;
+            if (steps != null) {
+              for (var s in steps) {
+                final man = s['maneuver'];
+                if (man != null) {
+                  final loc = man['location'] as List?;
+                  final dist = (s['distance'] as num?)?.toDouble() ?? 0.0;
+                  final type = man['type'] as String? ?? '';
+                  final modifier = man['modifier'] as String? ?? '';
+                  final name = s['name'] as String? ?? '';
+
+                  String instr = type;
+                  if (type == 'turn') {
+                    instr =
+                        'Turn $modifier${name.isNotEmpty ? ' onto $name' : ''}';
+                  } else if (type == 'arrive') {
+                    instr = 'Arrive at destination';
+                  } else if (type == 'depart') {
+                    instr =
+                        'Head $modifier${name.isNotEmpty ? ' onto $name' : ''}';
+                  } else {
+                    instr =
+                        '$type $modifier${name.isNotEmpty ? ' onto $name' : ''}';
+                  }
+
+                  if (loc != null && loc.length >= 2) {
+                    stepsList.add(
+                      NavStep(
+                        instruction: instr,
+                        distance: dist,
+                        location: LatLng(loc[1] as double, loc[0] as double),
+                        modifier: modifier,
+                        type: type,
+                      ),
+                    );
+                  }
+                }
+              }
+            }
+          }
+
+          if (mounted) {
+            setState(() {
+              _drivingDistanceMeters = newDistance;
+              _drivingDurationSeconds = newDuration;
+              _routePoints = newRoutePoints;
+              _turnSteps = stepsList;
+              _currentStep = stepsList.isNotEmpty ? stepsList.first : null;
+            });
+
+            // Auto fit bounds on first fetch if not navigating yet
+            if (!_isNavigating && newRoutePoints.isNotEmpty) {
+              _fitBoundsSafely();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Routing error: $e');
+    } finally {
+      if (mounted) setState(() => _isFetchingRoute = false);
+    }
+  }
+
+  void _fitBoundsSafely() {
+    if (_myPosition == null || _familyLatLng == null) return;
+    try {
+      final bounds = LatLngBounds.fromPoints([_myPosition!, _familyLatLng!]);
+      _mapController.fitCamera(
+        CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(60)),
+      );
+    } catch (e) {
+      debugPrint('Bound fit error: $e');
+    }
+  }
+
   void _centerOnFamily() {
     if (_familyLatLng != null) {
+      _centeredOnFamily = true;
+      _isNavigating = false;
+      _mapController.rotate(0);
       _mapController.move(_familyLatLng!, 16);
-      setState(() => _centeredOnFamily = true);
+      setState(() {});
     }
   }
 
   void _centerOnMe() {
     if (_myPosition != null) {
+      _centeredOnFamily = false;
+      _mapController.rotate(0);
       _mapController.move(_myPosition!, 16);
-      setState(() => _centeredOnFamily = false);
+      setState(() {});
     }
   }
 
-  void _showNavigateSheet() {
-    if (_familyLatLng == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No GPS coordinates recorded for this family yet.'),
-        ),
-      );
-      return;
+  Widget _buildTurnBanner(bool isDark) {
+    IconData turnIcon = Icons.turn_right;
+    Color turnColor = Colors.white;
+    final mod = _currentStep!.modifier;
+
+    if (mod.contains('left')) {
+      turnIcon = Icons.turn_left;
+    } else if (mod.contains('right')) {
+      turnIcon = Icons.turn_right;
+    } else if (mod.contains('u-turn')) {
+      turnIcon = Icons.u_turn_left;
+    } else if (_currentStep!.type == 'arrive') {
+      turnIcon = Icons.flag;
+      turnColor = Colors.greenAccent;
+    } else {
+      turnIcon = Icons.straight;
     }
 
-    final lat = _familyLatLng!.latitude;
-    final lng = _familyLatLng!.longitude;
+    double distToTurn = 0.0;
+    if (_myPosition != null) {
+      distToTurn = _haversine(_myPosition!, _currentStep!.location);
+    }
 
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Navigate To Delivery Location',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '${a.familyArea}, ${a.familyCity}',
-                  style: const TextStyle(color: Colors.grey, fontSize: 13),
-                ),
-                const SizedBox(height: 20),
-                _navButton(
-                  icon: Icons.map,
-                  label: 'Google Maps',
-                  color: const Color(0xFF4285F4),
-                  url:
-                      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
-                ),
-                const SizedBox(height: 10),
-                _navButton(
-                  icon: Icons.navigation,
-                  label: 'Waze',
-                  color: const Color(0xFF33CCFF),
-                  url: 'https://www.waze.com/ul?ll=$lat,$lng&navigate=yes',
-                ),
-                const SizedBox(height: 10),
-                _navButton(
-                  icon: Icons.language,
-                  label: 'OpenStreetMap (Browser)',
-                  color: const Color(0xFF7EBC6F),
-                  url:
-                      'https://www.openstreetmap.org/?mlat=$lat&mlon=$lng&zoom=16',
-                ),
-              ],
+    return Container(
+      color: Colors.green[800],
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: SafeArea(
+        bottom: false,
+        child: Row(
+          children: [
+            Icon(turnIcon, color: turnColor, size: 40),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _formatDistance(distToTurn),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    _currentStep!.instruction,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
             ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _navButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required String url,
-  }) {
-    return SizedBox(
-      width: double.infinity,
-      height: 50,
-      child: ElevatedButton.icon(
-        onPressed: () async {
-          Navigator.pop(context);
-          final uri = Uri.parse(url);
-          if (await canLaunchUrl(uri)) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-          } else {
-            if (mounted) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('Cannot open $label')));
-            }
-          }
-        },
-        icon: Icon(icon, size: 20),
-        label: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          elevation: 0,
+          ],
         ),
       ),
     );
@@ -254,41 +418,37 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen>
         familyLatLng ?? const LatLng(30.3753, 69.3451); // Pakistan center
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          '${a.familyArea} — Navigation',
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        backgroundColor: Colors.transparent,
-        flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: isDark
-                  ? [
-                      AppColors.volunteerBlue.withValues(alpha: 0.1),
-                      AppColors.volunteerBlue.withValues(alpha: 0.05),
-                    ]
-                  : [AppColors.volunteerBlue, Colors.blueAccent],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
+      appBar: (_isNavigating && _currentStep != null)
+          ? null
+          : AppBar(
+              title: Text(
+                '${a.familyArea} — Navigation',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              backgroundColor: Colors.transparent,
+              flexibleSpace: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: isDark
+                        ? [
+                            AppColors.volunteerBlue.withValues(alpha: 0.1),
+                            AppColors.volunteerBlue.withValues(alpha: 0.05),
+                          ]
+                        : [AppColors.volunteerBlue, Colors.blueAccent],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                ),
+              ),
+              foregroundColor: Colors.white,
+              elevation: 0,
             ),
-          ),
-        ),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          if (familyLatLng != null)
-            IconButton(
-              icon: const Icon(Icons.navigation),
-              tooltip: 'Navigate',
-              onPressed: _showNavigateSheet,
-            ),
-        ],
-      ),
       body: Column(
         children: [
           // ── Distance banner ────────────────────────────────────────────
-          if (familyLatLng != null)
+          if (_isNavigating && _currentStep != null)
+            _buildTurnBanner(isDark)
+          else if (familyLatLng != null)
             Container(
               color: isDark ? const Color(0xFF1A1A2E) : const Color(0xFFE8F4FD),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -335,26 +495,54 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen>
                     ),
                   ),
                   const Spacer(),
-                  if (_distanceMeters != null) ...[
+                  if (_drivingDistanceMeters != null) ...[
                     const Icon(
-                      Icons.straighten,
+                      Icons.directions_car,
                       size: 16,
                       color: AppColors.volunteerBlue,
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      _formatDistance(_distanceMeters!),
+                      _formatDistance(_drivingDistanceMeters!),
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         color: AppColors.volunteerBlue,
                         fontSize: 14,
                       ),
                     ),
-                    const SizedBox(width: 4),
-                    const Text(
-                      'away',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    if (_drivingDurationSeconds != null) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '(${_formatDuration(_drivingDurationSeconds!)})',
+                        style: const TextStyle(
+                          color: AppColors.volunteerBlue,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ] else if (_distanceMeters != null) ...[
+                    const Icon(Icons.straighten, size: 16, color: Colors.grey),
+                    const SizedBox(width: 6),
+                    Text(
+                      _formatDistance(_distanceMeters!),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Colors.grey,
+                        fontSize: 14,
+                      ),
                     ),
+                    if (_isFetchingRoute) ...[
+                      const SizedBox(width: 6),
+                      const SizedBox(
+                        height: 12,
+                        width: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.volunteerBlue,
+                        ),
+                      ),
+                    ],
                   ] else
                     const Text(
                       'Getting your location…',
@@ -430,6 +618,22 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen>
                                 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                             userAgentPackageName: 'com.rationaid.app',
                           ),
+
+                          // Route line (Polyline)
+                          if (_routePoints.isNotEmpty)
+                            PolylineLayer(
+                              polylines: [
+                                Polyline(
+                                  points: _routePoints,
+                                  strokeWidth: 5.0,
+                                  color: Colors.blueAccent.withValues(
+                                    alpha: 0.8,
+                                  ),
+                                  borderStrokeWidth: 2.0,
+                                  borderColor: AppColors.volunteerBlue,
+                                ),
+                              ],
+                            ),
 
                           // Markers layer
                           MarkerLayer(
@@ -562,17 +766,36 @@ class _DeliveryMapScreenState extends State<DeliveryMapScreen>
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _showNavigateSheet,
-                    icon: const Icon(Icons.navigation, size: 18),
-                    label: const Text(
-                      'Navigate',
-                      style: TextStyle(
+                    onPressed: () {
+                      if (_myPosition == null) return;
+                      setState(() {
+                        _isNavigating = !_isNavigating;
+                        if (_isNavigating) {
+                          _centeredOnFamily = false;
+                          _lastRouteFetch = DateTime.now();
+                          _fetchRoute();
+                        } else {
+                          _centeredOnFamily = true;
+                          _centerOnFamily();
+                          _fitBoundsSafely();
+                        }
+                      });
+                    },
+                    icon: Icon(
+                      _isNavigating ? Icons.stop : Icons.navigation,
+                      size: 18,
+                    ),
+                    label: Text(
+                      _isNavigating ? 'Stop Navigation' : 'Start Route',
+                      style: const TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 15,
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.volunteerBlue,
+                      backgroundColor: _isNavigating
+                          ? Colors.red[600]
+                          : AppColors.volunteerBlue,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(

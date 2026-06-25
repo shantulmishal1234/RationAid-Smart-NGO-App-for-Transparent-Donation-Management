@@ -17,7 +17,7 @@ enum DonationFilter {
   pending,
   underVerification,
   verified,
-  inProcess,
+  inWarehouse,
   outForDelivery,
   delivered,
   rejected;
@@ -34,8 +34,8 @@ enum DonationFilter {
         return 'Under Verification';
       case DonationFilter.verified:
         return 'Verified';
-      case DonationFilter.inProcess:
-        return 'In Process';
+      case DonationFilter.inWarehouse:
+        return 'In Warehouse';
       case DonationFilter.outForDelivery:
         return 'Out for Delivery';
       case DonationFilter.delivered:

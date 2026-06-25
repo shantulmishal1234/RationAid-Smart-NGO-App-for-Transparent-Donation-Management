@@ -489,6 +489,16 @@ class _DonationsSectionState extends State<DonationsSection> {
                   return t1.compareTo(t2);
                 });
 
+                // Hide GRF allocation pseudo-docs — these are system-generated
+                // ledger records created when admin assigns GRF pool funds to a
+                // family. They should NOT appear as separate donation cards;
+                // the information is displayed on the original donor's GRF card.
+                docs = docs
+                    .where(
+                      (doc) => doc.data()['isGrfAllocation'] != true,
+                    )
+                    .toList();
+
                 // Client-side Type Filter (to avoid complex composite indexes)
                 if (_typeFilter != DonationTypeFilter.all) {
                   docs = docs.where((doc) {

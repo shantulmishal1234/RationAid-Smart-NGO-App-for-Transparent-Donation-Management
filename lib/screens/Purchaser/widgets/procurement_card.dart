@@ -62,8 +62,8 @@ class ProcurementCard extends StatelessWidget {
         statusLabel = 'In Stock';
         break;
       case ProcurementStatus.in_transit:
-        statusColor = Colors.indigo;
-        statusLabel = 'In Transit';
+        statusColor = Colors.orange;
+        statusLabel = 'Out for Delivery 🚚';
         break;
       case ProcurementStatus.delivered:
         statusColor = Colors.purple;
@@ -171,6 +171,37 @@ class ProcurementCard extends StatelessWidget {
                                               ?.copyWith(
                                                 fontWeight: FontWeight.w700,
                                                 fontSize: 15,
+                                              ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.person_outline,
+                                        size: 13,
+                                        color: theme.iconTheme.color
+                                            ?.withValues(alpha: 0.5),
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Expanded(
+                                        child: Text(
+                                          request.claimedByName?.isNotEmpty == true
+                                              ? request.claimedByName!
+                                              : 'Unassigned',
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: theme
+                                                    .textTheme
+                                                    .bodySmall
+                                                    ?.color
+                                                    ?.withValues(alpha: 0.7),
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
                                               ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,

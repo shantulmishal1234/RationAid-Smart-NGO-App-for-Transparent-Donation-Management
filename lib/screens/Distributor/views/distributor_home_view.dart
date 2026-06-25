@@ -122,20 +122,13 @@ class DistributorHomeView extends StatelessWidget {
               }
 
               final allDeliveries = snapshot.data!;
-              final now = DateTime.now();
-              
-              // Filter deliveries to only include the current calendar month
-              final currentMonthDeliveries = allDeliveries.where((a) {
-                final d = a.createdAt;
-                return d.year == now.year && d.month == now.month;
-              }).toList();
 
-              final completed = currentMonthDeliveries
+              final completed = allDeliveries
                   .where((a) => a.isCompleted)
                   .length;
-              final active = currentMonthDeliveries.where((a) => a.isActive).length;
-              final failed = currentMonthDeliveries.where((a) => a.isFailed).length;
-              final total = currentMonthDeliveries.length;
+              final active = allDeliveries.where((a) => a.isActive).length;
+              final failed = allDeliveries.where((a) => a.isFailed).length;
+              final total = allDeliveries.length;
               final successRate = total > 0 ? (completed / total * 100) : 0.0;
 
               return Column(

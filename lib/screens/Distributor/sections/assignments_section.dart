@@ -627,7 +627,7 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
               children: [
                 Icon(Icons.check_circle, color: Colors.white, size: 18),
                 SizedBox(width: 8),
-                Text('Delivery claimed! Go to My Deliveries to start.'),
+                Expanded(child: Text('Delivery claimed! Go to My Deliveries to start.')),
               ],
             ),
             backgroundColor: Colors.green,
@@ -645,7 +645,7 @@ class _AssignmentsSectionState extends State<AssignmentsSection>
               children: [
                 Icon(Icons.info_outline, color: Colors.white, size: 18),
                 SizedBox(width: 8),
-                Text('Just claimed by another distributor. Pick another!'),
+                Expanded(child: Text('Just claimed by another distributor. Pick another!')),
               ],
             ),
             backgroundColor: Colors.orange,

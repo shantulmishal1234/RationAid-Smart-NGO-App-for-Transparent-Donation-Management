@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:ration_aid/models/inbound_pickup_model.dart';
 import 'package:ration_aid/services/cloudinary_service.dart';
 import 'package:ration_aid/services/funding_service.dart';
+import 'package:ration_aid/services/notification_service.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -224,6 +225,13 @@ class _InboundPickupDetailScreenState extends State<InboundPickupDetailScreen> {
         final bool isGrfPool = _pickup.isSmartSplit
             ? false // Smart splits are stocked into per-family reserved stock
             : _pickup.familyId == 'general_relief_fund';
+
+        final stockedNote = _pickup.isSmartSplit
+            ? 'Items collected by $collectorName and split into per-family warehouse stock.'
+            : (isGrfPool
+                  ? 'Items collected by $collectorName and stored in GRF warehouse. Awaiting admin assignment to family.'
+                  : 'Items collected by $collectorName and stored in warehouse.');
+
         batch.update(donationRef, {
           'status': 'stocked',
           'stockedAt': FieldValue.serverTimestamp(),
@@ -233,14 +241,39 @@ class _InboundPickupDetailScreenState extends State<InboundPickupDetailScreen> {
             {
               'status': 'stocked',
               'timestamp': Timestamp.now(),
-              'note': _pickup.isSmartSplit
-                  ? 'Items collected by $collectorName and split into per-family warehouse stock.'
-                  : (isGrfPool
-                        ? 'Items collected by $collectorName and stored in GRF warehouse. Awaiting admin assignment to family.'
-                        : 'Items collected by $collectorName and stored in warehouse.'),
+              'note': stockedNote,
             },
           ]),
         });
+
+        // Smart Split Fix: Slices get stuck on 'Verified' because only the parent is marked 'Stocked'.
+        // We must sync the stocked status to all child slices representing this donation run.
+        if (_pickup.isSmartSplit) {
+          final slicesSnap = await _db
+              .collection('donations')
+              .where('parentDonationId', isEqualTo: _pickup.donationId)
+              .get();
+
+          for (final slice in slicesSnap.docs) {
+            // Only update if it hasn't progressed further (to avoid race conditions)
+            final currentStatus = slice.data()['status'] as String? ?? '';
+            if (currentStatus == 'verified' || currentStatus == 'under_verification' || currentStatus == 'pending') {
+              batch.update(slice.reference, {
+                'status': 'stocked',
+                'stockedAt': FieldValue.serverTimestamp(),
+                'collectedBy': collectorUid,
+                'updatedAt': FieldValue.serverTimestamp(),
+                'statusHistory': FieldValue.arrayUnion([
+                  {
+                    'status': 'stocked',
+                    'timestamp': Timestamp.now(),
+                    'note': stockedNote,
+                  },
+                ]),
+              });
+            }
+          }
+        }
       }
 
       // G4 Fix — Write admin notification to Firestore
@@ -261,7 +294,37 @@ class _InboundPickupDetailScreenState extends State<InboundPickupDetailScreen> {
 
       await batch.commit();
 
-      // ── Post-commit: Apply family funding ─────────────────────────────────
+      // Notify donor: items collected and stocked in warehouse
+      if (_pickup.donorId.isNotEmpty) {
+        final String stockedTitle;
+        final String stockedMsg;
+        if (_pickup.isSmartSplit) {
+          stockedTitle = 'Smart Donation Items Collected! 📦';
+          stockedMsg =
+              'Your donated items have been collected by our team and split into per-family reserved stock. Deliveries will be arranged for each family soon.';
+        } else if (_pickup.familyId == 'general_relief_fund') {
+          stockedTitle = 'GRF Donation In Warehouse 🏠';
+          stockedMsg =
+              'Your donated items have been collected and stored in the GRF warehouse. An admin will assign them to a family in need.';
+        } else {
+          stockedTitle = 'Items Arrived at Warehouse! 📦';
+          stockedMsg =
+              'Your donated items have been collected and safely stored in our warehouse. Delivery will be arranged shortly.';
+        }
+        try {
+          await NotificationService.sendDonorNotification(
+            userId: _pickup.donorId,
+            title: stockedTitle,
+            message: stockedMsg,
+            actionType: 'inkind_stocked',
+            actionId: _pickup.donationId,
+          );
+        } catch (e) {
+          debugPrint('[Notification] Failed to notify donor of stocked status: $e');
+        }
+      }
+
+      // Post-commit: Apply family funding
       // For smart splits: use the values returned by processSmartSplitCollectionToWarehouse
       // (avoids a Firestore re-query and composite index requirement).
       // For direct family: recalculate from all donations.

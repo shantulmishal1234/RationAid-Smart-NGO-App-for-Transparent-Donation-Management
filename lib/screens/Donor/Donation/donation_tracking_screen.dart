@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:ration_aid/models/donation_model.dart';
 import 'package:ration_aid/models/family_model.dart';
@@ -21,15 +23,49 @@ class DonationTrackingScreen extends StatefulWidget {
 
 class _DonationTrackingScreenState extends State<DonationTrackingScreen> {
   final DonationService _donationService = DonationService();
-  late Stream<Donation?> _donationStream;
+
+  // State-based live data — eliminates nested FutureBuilder/StreamBuilder.
+  // _resolvedDonation is set in initState before the first frame, so there
+  // is no frame where the wrong (raw parent) status is ever displayed.
+  StreamSubscription<Donation?>? _donationSub;
+  late Donation _rawDonation;
+  Donation? _resolvedDonation;
+  bool _resolving = false;
+  DateTime? _lastResolvedAt; // Guards against redundant re-resolutions
 
   @override
   void initState() {
     super.initState();
-    _donationStream = _donationService.streamDonation(widget.donation.id);
+    _rawDonation = widget.donation;
+    // Resolve immediately — first build will use _resolvedDonation, not raw
+    _resolveAndStore(widget.donation);
+    // Subscribe to live Firestore updates
+    _donationSub = _donationService.streamDonation(widget.donation.id).listen((
+      donation,
+    ) {
+      if (donation != null && mounted) {
+        setState(() => _rawDonation = donation);
+        _resolveAndStore(donation);
+      }
+    });
   }
 
-  String _getDynamicTitle(DonationStatus status) {
+  /// Resolves the worst-case slice status and stores it in [_resolvedDonation].
+  /// Guards prevent concurrent or redundant calls.
+  Future<void> _resolveAndStore(Donation raw) async {
+    if (_resolving) return;
+    if (_lastResolvedAt != null && raw.updatedAt == _lastResolvedAt) return;
+    _resolving = true;
+    _lastResolvedAt = raw.updatedAt;
+    try {
+      final resolved = await _resolveDisplayDonation(raw);
+      if (mounted) setState(() => _resolvedDonation = resolved);
+    } finally {
+      _resolving = false;
+    }
+  }
+
+  String _getDynamicTitle(DonationStatus status, DonationType donationType) {
     switch (status) {
       case DonationStatus.draft:
         return 'Complete Your Donation';
@@ -43,7 +79,8 @@ class _DonationTrackingScreenState extends State<DonationTrackingScreen> {
       case DonationStatus.outForDelivery:
         return 'Track Your Donation';
       case DonationStatus.stocked:
-        return 'Items In Warehouse';
+        if (donationType == DonationType.cash) return 'Track Your Donation';
+        return 'Ready for Distribution';
       case DonationStatus.delivered:
       case DonationStatus.closed:
         return 'Donation Receipt';
@@ -52,56 +89,164 @@ class _DonationTrackingScreenState extends State<DonationTrackingScreen> {
     }
   }
 
+  // Future that resolves the actual display status for Smart Splits
+  Future<Donation> _resolveDisplayDonation(Donation raw) async {
+    if (raw.allocationMode != 'smart' || (raw.smartSplits?.length ?? 0) <= 1) {
+      return raw;
+    }
+
+    // Do not attempt to resolve slices if the parent donation has not even been verified yet
+    if (raw.status == DonationStatus.draft || 
+        raw.status == DonationStatus.pending || 
+        raw.status == DonationStatus.underVerification) {
+      return raw;
+    }
+
+    // Status rank — earlier index = earlier in lifecycle.
+    const order = [
+      'draft', 'pending', 'under_verification', 'verified',
+      'stocked', 'in_process', 'out_for_delivery', 'delivered', 'closed',
+    ];
+    const terminalStatuses = {'delivered', 'closed'};
+
+    // The parent's own status rank is the authoritative FLOOR.
+    // A slice display status can NEVER go earlier than the parent's confirmed status.
+    final parentStatusStr = raw.status.toFirestore();
+    final parentRank = order.indexOf(parentStatusStr);
+    final isCash = raw.donationType == DonationType.cash;
+
+    /// Applies the parent floor and cash-type normalization:
+    /// 1. For Cash donations, 'stocked' is mapped to 'verified' — cash has no warehouse step.
+    /// 2. A slice status can never be earlier than the parent's confirmed status.
+    String applyFloor(String st) {
+      // Fix for legacy corrupted data: In-Kind slices should never be in_process
+      if (!isCash && st == 'in_process') {
+        st = 'stocked';
+      }
+      final normalized = (isCash && st == 'stocked') ? 'verified' : st;
+      final r = order.indexOf(normalized);
+      return (r >= 0 && r < parentRank) ? parentStatusStr : normalized;
+    }
+
+    // 1. Check direct child slices via parentDonationId
+    var snap = await FirebaseFirestore.instance
+        .collection('donations')
+        .where('parentDonationId', isEqualTo: raw.id)
+        .get();
+
+    // 2. Fallback: query by familyId for legacy donations without parentDonationId
+    List<String> flooredStatuses = [];
+    if (snap.docs.isEmpty) {
+      final donorId = FirebaseAuth.instance.currentUser?.uid ?? '';
+      final familyIds = raw.smartSplits!
+          .map((s) => s['familyId'] as String? ?? '')
+          .where((id) => id.isNotEmpty && id != 'general_relief_fund')
+          .toSet();
+      for (final fid in familyIds) {
+        final fSnap = await FirebaseFirestore.instance
+            .collection('donations')
+            .where('familyId', isEqualTo: fid)
+            .where('isSmartSplitSlice', isEqualTo: true)
+            .where('donorId', isEqualTo: donorId)
+            .limit(1)
+            .get();
+        if (fSnap.docs.isNotEmpty) {
+          final raw2 = fSnap.docs.first.data()['status'] as String? ?? parentStatusStr;
+          flooredStatuses.add(applyFloor(raw2));
+        }
+      }
+    } else {
+      for (final doc in snap.docs) {
+        final raw2 = doc.data()['status'] as String? ?? parentStatusStr;
+        flooredStatuses.add(applyFloor(raw2));
+      }
+    }
+
+    // No slices found — return parent as-is
+    if (flooredStatuses.isEmpty) return raw;
+
+    // ── Two-Tier Algorithm ────────────────────────────────────────────────────
+    // Rule 1: 'Delivered' is ONLY shown when ALL slices are at a terminal state.
+    // Rule 2: Otherwise show the most advanced NON-terminal state.
+    //         This ensures a delivered family doesn't mask in-progress ones.
+    // ─────────────────────────────────────────────────────────────────────────
+    final allTerminal = flooredStatuses.every((s) => terminalStatuses.contains(s));
+
+    String resolvedStr;
+    if (allTerminal) {
+      resolvedStr = 'delivered'; // All missions complete
+    } else {
+      // Most advanced non-terminal status (with parent floor as minimum)
+      int bestRank = parentRank >= 0 ? parentRank : 0;
+      String bestStatus = parentStatusStr;
+      for (final st in flooredStatuses) {
+        if (terminalStatuses.contains(st)) continue; // skip delivered slices
+        final r = order.indexOf(st);
+        if (r > bestRank) {
+          bestRank = r;
+          bestStatus = st;
+        }
+      }
+      resolvedStr = bestStatus;
+    }
+
+    final resolvedEnum = DonationStatus.values.firstWhere(
+      (e) => e.toFirestore() == resolvedStr,
+      orElse: () => raw.status,
+    );
+
+    return resolvedEnum != raw.status ? raw.copyWith(status: resolvedEnum) : raw;
+  }
+
+  @override
+  void dispose() {
+    _donationSub?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<Donation?>(
-      stream: _donationStream,
-      initialData: widget.donation,
-      builder: (context, snapshot) {
-        // If data is null (document deleted?), fallback to initial or show error
-        final donation = snapshot.data ?? widget.donation;
+    // Pure state-based build — no StreamBuilder or FutureBuilder in the tree.
+    // _resolvedDonation is populated in initState before the first frame.
+    final donation = _resolvedDonation ?? _rawDonation;
 
-        return DonorScaffold(
-          title: _getDynamicTitle(donation.status),
-          showBackButton: true,
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                // Current Status Header
-                _CurrentStatusHeader(donation: donation),
-                const SizedBox(height: 20),
+    return DonorScaffold(
+      title: _getDynamicTitle(donation.status, donation.donationType),
+      showBackButton: true,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Current Status Header
+            _CurrentStatusHeader(donation: donation),
+            const SizedBox(height: 20),
 
-                // Status Timeline vs Micro-Ledger Tracker
-                if (donation.familyId == 'general_relief_fund' &&
-                    donation.status == DonationStatus.verified)
-                  _MicroLedgerTracker(donation: donation)
-                else
-                  _StatusTimeline(donation: donation),
-                const SizedBox(height: 20),
+            // Status Timeline vs Micro-Ledger Tracker
+            if (donation.familyId == 'general_relief_fund' &&
+                donation.status == DonationStatus.verified)
+              _MicroLedgerTracker(donation: donation)
+            else
+              _StatusTimeline(donation: donation),
+            const SizedBox(height: 20),
 
-                // Live Status Card (dynamic based on current status)
-                _LiveStatusCard(donation: donation),
-                const SizedBox(height: 20),
+            // Live Status Card (dynamic based on current status)
+            _LiveStatusCard(donation: donation),
+            const SizedBox(height: 20),
 
-                // Donation Details
-                _DonationDetailsCard(donation: donation),
-                const SizedBox(height: 20),
+            // Donation Details
+            _DonationDetailsCard(donation: donation),
+            const SizedBox(height: 20),
 
-                // Update History removed and merged into StatusTimeline
+            // Action Buttons for drafts
+            if (donation.isEditable || donation.isDeletable) ...[
+              const SizedBox(height: 20),
+              _ActionButtons(donation: donation),
+            ],
 
-                // Action Buttons for drafts
-                if (donation.isEditable || donation.isDeletable) ...[
-                  const SizedBox(height: 20),
-                  _ActionButtons(donation: donation),
-                ],
-
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
-        );
-      },
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -263,6 +408,22 @@ class _StatusTimeline extends StatelessWidget {
       ];
     }
 
+    // For In-kind donations, we DO want to show 'Stocked' in the pipeline if it has reached it
+    if (donation.donationType == DonationType.inKind) {
+      final bool hasStockedState = donation.statusHistory.any((e) => e.status == DonationStatus.stocked) || donation.status == DonationStatus.stocked;
+
+      if (hasStockedState) {
+        return [
+          DonationStatus.draft,
+          DonationStatus.underVerification,
+          DonationStatus.verified,
+          DonationStatus.stocked,
+          DonationStatus.outForDelivery,
+          DonationStatus.delivered,
+        ];
+      }
+    }
+
     return [
       DonationStatus.draft,
       DonationStatus.underVerification,
@@ -286,6 +447,11 @@ class _StatusTimeline extends StatelessWidget {
       if (currentIndex == -1) {
         // Handle intermediate states mapping
         if (donation.status == DonationStatus.pending) currentIndex = 0;
+        if (donation.status == DonationStatus.stocked && donation.donationType == DonationType.cash) {
+          currentIndex = 2; // Map to Verified
+        } else if (donation.status == DonationStatus.stocked) {
+          currentIndex = 3; // Fallback if not injected in steps somehow
+        }
         if (donation.status == DonationStatus.inProcess) {
           currentIndex = 2; // Map to Verified
         }
@@ -606,6 +772,11 @@ class _LiveStatusCard extends StatelessWidget {
       case DonationStatus.verified:
       case DonationStatus.pendingAssignment:
         return _buildVerifiedCard(context);
+      case DonationStatus.stocked:
+        if (donation.donationType == DonationType.cash) {
+          return _buildVerifiedCard(context);
+        }
+        return _buildStockedCard(context);
       case DonationStatus.inProcess:
         return _buildInProcessCard(context);
       case DonationStatus.outForDelivery:
@@ -654,6 +825,15 @@ class _LiveStatusCard extends StatelessWidget {
       message: isGrf
           ? 'Your contribution is secured in the General Relief Fund vault. It will be dispatched dynamically to close emergency gaps.'
           : 'Your donation has been approved and is ready for processing.',
+    );
+  }
+
+  Widget _buildStockedCard(BuildContext context) {
+    return _StatusCard(
+      icon: Icons.warehouse_outlined,
+      iconColor: const Color(0xFF009688), // Teal
+      title: 'Items In Warehouse',
+      message: 'Your in-kind items have been safely received at our warehouse and are awaiting a volunteer distributor.',
     );
   }
 
@@ -1201,6 +1381,27 @@ class _DonationDetailsCard extends StatelessWidget {
           const Divider(height: 24),
           Row(
             children: [
+              Icon(
+                Icons.calendar_today,
+                size: 20,
+                color: theme.colorScheme.onSurface,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Created: ${donation.createdAt.day}/${donation.createdAt.month}/${donation.createdAt.year}',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
               Icon(Icons.people, size: 20, color: theme.colorScheme.onSurface),
               const SizedBox(width: 8),
               Expanded(
@@ -1295,6 +1496,62 @@ class _DonationDetailsCard extends StatelessWidget {
           ],
           if (donation.smartSplits != null &&
               donation.smartSplits!.isNotEmpty) ...[
+            _ImpactBreakdownList(donation: donation),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// Update History Card intentionally removed.
+// Admin notes and status changes have been strictly integrated directly into
+// the `_StatusTimeline` vertical tracking tree to vastly improve UX efficiency and reduce height.
+
+class _ImpactBreakdownList extends StatefulWidget {
+  final Donation donation;
+  const _ImpactBreakdownList({required this.donation});
+
+  @override
+  State<_ImpactBreakdownList> createState() => _ImpactBreakdownListState();
+}
+
+class _ImpactBreakdownListState extends State<_ImpactBreakdownList> {
+  late Future<QuerySnapshot> _fetchSlicesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchSlicesFuture = FirebaseFirestore.instance
+        .collection('donations')
+        .where('parentDonationId', isEqualTo: widget.donation.id)
+        .get();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return FutureBuilder<QuerySnapshot>(
+      future: _fetchSlicesFuture,
+      builder: (context, parentSnap) {
+        if (parentSnap.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: Center(
+              child: SizedBox(
+                height: 24,
+                width: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
+        }
+
+        final primarySlices = parentSnap.data?.docs ?? [];
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             const SizedBox(height: 16),
             const Divider(),
             const SizedBox(height: 12),
@@ -1317,8 +1574,20 @@ class _DonationDetailsCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            ...donation.smartSplits!.map((split) {
+            ...widget.donation.smartSplits!.asMap().entries.map((entry) {
+              final int index = entry.key;
+              final split = entry.value;
               final String familyId = split['familyId'] as String? ?? '';
+
+              int occurrenceIndex = 0;
+              for (int i = 0; i < index; i++) {
+                final Map<String, dynamic> prevSplit =
+                    widget.donation.smartSplits![i];
+                if ((prevSplit['familyId'] as String? ?? '') == familyId) {
+                  occurrenceIndex++;
+                }
+              }
+
               final bool isPool =
                   familyId.isEmpty || familyId == 'general_relief_fund';
 
@@ -1331,15 +1600,19 @@ class _DonationDetailsCard extends StatelessWidget {
               } else {
                 final familyData = split['family'] as Map<String, dynamic>?;
                 final String area = familyData?['area'] as String? ?? '';
-                final String shortId = familyId.length > 5 ? familyId.substring(0, 5) : familyId;
-                
+                final String shortId = familyId.length > 5
+                    ? familyId.substring(0, 5)
+                    : familyId;
+
                 if (area.isNotEmpty) {
                   familyLabelWidget = Text(
                     '$area Family',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   );
                 } else {
-                  // Fallback: Fetch from database dynamically
                   familyLabelWidget = FutureBuilder<Family?>(
                     future: FamilyService().getFamilyById(familyId),
                     builder: (context, snapshot) {
@@ -1349,19 +1622,27 @@ class _DonationDetailsCard extends StatelessWidget {
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
-                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.5),
                           ),
                         );
                       }
                       if (snapshot.hasData && snapshot.data != null) {
                         return Text(
                           '${snapshot.data!.area} Family',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         );
                       }
                       return Text(
                         'Family $shortId...',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       );
                     },
                   );
@@ -1369,7 +1650,7 @@ class _DonationDetailsCard extends StatelessWidget {
               }
 
               String displayValue;
-              if (donation.donationType == DonationType.cash) {
+              if (widget.donation.donationType == DonationType.cash) {
                 final double amt = (split['amount'] as num?)?.toDouble() ?? 0.0;
                 displayValue = 'PKR ${amt.toStringAsFixed(0)}';
               } else {
@@ -1407,6 +1688,14 @@ class _DonationDetailsCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    _SliceStatusBadge(
+                      parentId: widget.donation.id,
+                      familyId: familyId,
+                      isGrf: isPool,
+                      fallbackStatus: widget.donation.status,
+                      familyOccurrenceIndex: occurrenceIndex,
+                      primarySlices: primarySlices,
+                    ),
                     if (split['reason'] != null) ...[
                       const SizedBox(height: 4),
                       Text(
@@ -1423,17 +1712,13 @@ class _DonationDetailsCard extends StatelessWidget {
                   ],
                 ),
               );
-            }),
+            }).toList(),
           ],
-        ],
-      ),
+        );
+      },
     );
   }
 }
-
-// Update History Card intentionally removed.
-// Admin notes and status changes have been strictly integrated directly into
-// the `_StatusTimeline` vertical tracking tree to vastly improve UX efficiency and reduce height.
 
 /// Action Buttons Widget - Edit and Delete for drafts
 class _ActionButtons extends StatefulWidget {
@@ -1758,64 +2043,77 @@ class _MicroLedgerTracker extends StatelessWidget {
                       const SizedBox(height: 12),
                       ...donation.grfAllocations!.reversed.map((alloc) {
                         final fId = alloc['familyId'].toString();
-                        final shortId = fId.length > 6
-                            ? fId.substring(0, 6)
-                            : fId;
                         final amt = (alloc['amount'] as num).toDouble();
                         final ts = alloc['date'] as Timestamp;
                         final dt = ts.toDate();
                         final dateStr =
                             '${dt.day}/${dt.month} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
 
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12.0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.withValues(alpha: 0.1),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.check,
-                                  size: 14,
-                                  color: Colors.green,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Family Need Fulfilled',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: theme.colorScheme.onSurface,
-                                      ),
+                        return FutureBuilder<DocumentSnapshot>(
+                          future: FirebaseFirestore.instance.collection('families').doc(fId).get(),
+                          builder: (context, snapshot) {
+                            String title = 'Family Need Fulfilled';
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              title = 'Loading family...';
+                            } else if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
+                              final data = snapshot.data!.data() as Map<String, dynamic>?;
+                              final area = data?['area']?.toString() ?? '';
+                              if (area.isNotEmpty) {
+                                title = '$area Family Supported';
+                              }
+                            }
+
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12.0),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.withValues(alpha: 0.1),
+                                      shape: BoxShape.circle,
                                     ),
-                                    Text(
-                                      'ID: $shortId... • $dateStr',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: theme.colorScheme.onSurface
-                                            .withValues(alpha: 0.6),
-                                      ),
+                                    child: const Icon(
+                                      Icons.check,
+                                      size: 14,
+                                      color: Colors.green,
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          title,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            color: theme.colorScheme.onSurface,
+                                          ),
+                                        ),
+                                        Text(
+                                          dateStr,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: theme.colorScheme.onSurface
+                                                .withValues(alpha: 0.6),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Text(
+                                    'PKR ${amt.toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              Text(
-                                'PKR ${amt.toStringAsFixed(0)}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green,
-                                ),
-                              ),
-                            ],
-                          ),
+                            );
+                          },
                         );
                       }),
                     ],
@@ -1824,5 +2122,186 @@ class _MicroLedgerTracker extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Slice status badge for Smart Give impact breakdowns.
+/// Resolves the status SYNCHRONOUSLY from pre-loaded [primarySlices] on the
+/// first frame — eliminating the fallbackStatus flash entirely.
+/// Only falls back to an async query for legacy donations that predate
+/// the parentDonationId architecture; during that wait it shows nothing
+/// (not the wrong parent status).
+class _SliceStatusBadge extends StatefulWidget {
+  final String parentId;
+  final String familyId;
+  final bool isGrf;
+  final DonationStatus fallbackStatus;
+  final int familyOccurrenceIndex;
+  final List<DocumentSnapshot> primarySlices;
+
+  const _SliceStatusBadge({
+    required this.parentId,
+    required this.familyId,
+    required this.isGrf,
+    required this.fallbackStatus,
+    required this.familyOccurrenceIndex,
+    required this.primarySlices,
+  });
+
+  @override
+  State<_SliceStatusBadge> createState() => _SliceStatusBadgeState();
+}
+
+class _SliceStatusBadgeState extends State<_SliceStatusBadge> {
+  // Cached legacy future — set once in initState, never recreated.
+  Future<String?>? _legacyFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    // Only set up async query if sync resolution won't work (legacy donations)
+    if (!widget.isGrf && _resolveSync() == null) {
+      _legacyFuture = _fetchStatusLegacy();
+    }
+  }
+
+  /// Resolves status synchronously from pre-loaded [primarySlices].
+  /// Returns null only when primarySlices is empty (legacy donations).
+  /// Always applies the parent floor: result can never be earlier than [widget.fallbackStatus].
+  String? _resolveSync() {
+    final matches = widget.primarySlices.where((d) {
+      final data = d.data() as Map<String, dynamic>?;
+      return data != null && data['familyId'] == widget.familyId;
+    }).toList();
+    if (matches.length > widget.familyOccurrenceIndex) {
+      final raw = (matches[widget.familyOccurrenceIndex].data()
+              as Map<String, dynamic>)['status'] as String?;
+      return raw != null ? _applyFloor(raw) : null;
+    }
+    return null;
+  }
+
+  /// Applies the parent-status floor: if the slice's raw status is earlier
+  /// in the pipeline than the parent, return the parent's status instead.
+  String _applyFloor(String sliceStatus) {
+    // Ultimate clamp for legacy data corruption where In-Kind items were logged as in_process
+    if (widget.fallbackStatus == DonationStatus.stocked && sliceStatus == 'in_process') {
+      return 'stocked';
+    }
+
+    const order = [
+      'draft', 'pending', 'under_verification', 'verified',
+      'stocked', 'in_process', 'out_for_delivery', 'delivered', 'closed',
+    ];
+    final parentStr = widget.fallbackStatus.toFirestore();
+    final parentRank = order.indexOf(parentStr);
+    final sliceRank = order.indexOf(sliceStatus);
+    if (sliceRank >= 0 && sliceRank < parentRank) return parentStr;
+    return sliceStatus;
+  }
+
+  /// Async fallback for legacy donations lacking parentDonationId.
+  /// Cached in initState so it is never recreated on rebuild.
+  Future<String?> _fetchStatusLegacy() async {
+    final donorId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (donorId.isEmpty) return null;
+    final snap = await FirebaseFirestore.instance
+        .collection('donations')
+        .where('familyId', isEqualTo: widget.familyId)
+        .where('isSmartSplitSlice', isEqualTo: true)
+        .where('donorId', isEqualTo: donorId)
+        .get();
+    if (snap.docs.length > widget.familyOccurrenceIndex) {
+      final raw = snap.docs[widget.familyOccurrenceIndex].data()['status'] as String?;
+      return raw != null ? _applyFloor(raw) : null;
+    }
+    return null;
+  }
+
+  Widget _buildBadge(DonationStatus status) {
+    final color = _colorFor(status);
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Text(
+        status.displayName.toUpperCase(),
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  static Color _colorFor(DonationStatus s) {
+    switch (s) {
+      case DonationStatus.draft:
+      case DonationStatus.pending:
+        return Colors.grey;
+      case DonationStatus.underVerification:
+        return Colors.orange;
+      case DonationStatus.verified:
+        return Colors.blue;
+      case DonationStatus.stocked:
+        return Colors.teal;
+      case DonationStatus.inProcess:
+        return Colors.indigo;
+      case DonationStatus.outForDelivery:
+        return Colors.purple;
+      case DonationStatus.delivered:
+      case DonationStatus.closed:
+        return Colors.green;
+      case DonationStatus.rejected:
+        return Colors.red;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.isGrf) return const SizedBox.shrink();
+
+    // 1. Synchronous resolution from pre-loaded primarySlices — instant, no flash
+    final syncStatus = _resolveSync();
+    if (syncStatus != null) {
+      return _buildBadge(
+        DonationStatus.values.firstWhere(
+          (e) => e.toFirestore() == syncStatus,
+          orElse: () => widget.fallbackStatus,
+        ),
+      );
+    }
+
+    // 2. Legacy async fallback for old donations without parentDonationId
+    if (_legacyFuture != null) {
+      return FutureBuilder<String?>(
+        future: _legacyFuture,
+        builder: (context, snapshot) {
+          // Only suppress during the WAITING phase (avoids wrong-status flash)
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const SizedBox.shrink();
+          }
+          // Resolution complete: use real status, or fallback if nothing found
+          final status = (snapshot.data != null)
+              ? DonationStatus.values.firstWhere(
+                  (e) => e.toFirestore() == snapshot.data!,
+                  orElse: () => widget.fallbackStatus,
+                )
+              : widget.fallbackStatus;
+          return _buildBadge(status);
+        },
+      );
+    }
+
+    // 3. Absolute fallback — sync had no match and no legacy future was needed
+    return _buildBadge(widget.fallbackStatus);
   }
 }

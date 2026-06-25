@@ -54,6 +54,7 @@ class _HistoryViewState extends State<HistoryView> {
     _allHistoryRequests = allRequests.where((r) {
       return r.status == ProcurementStatus.verified ||
           r.status == ProcurementStatus.stocked ||
+          r.status == ProcurementStatus.in_transit ||
           r.status == ProcurementStatus.delivered ||
           r.status == ProcurementStatus.rejected ||
           r.status == ProcurementStatus.issue_reported ||
@@ -70,7 +71,8 @@ class _HistoryViewState extends State<HistoryView> {
         .where(
           (r) =>
               r.status == ProcurementStatus.verified ||
-              r.status == ProcurementStatus.stocked,
+              r.status == ProcurementStatus.stocked ||
+              r.status == ProcurementStatus.in_transit,
         )
         .length;
     _deliveredCountAllTime = _allHistoryRequests
@@ -89,6 +91,7 @@ class _HistoryViewState extends State<HistoryView> {
         if (_filterStatus == 'Active') {
           return r.status == ProcurementStatus.verified ||
               r.status == ProcurementStatus.stocked ||
+              r.status == ProcurementStatus.in_transit ||
               r.status == ProcurementStatus.issue_reported;
         }
         if (_filterStatus == 'Delivered') {
@@ -896,9 +899,9 @@ class _HistoryViewState extends State<HistoryView> {
       case ProcurementStatus.stocked:
         return 'In Stock';
       case ProcurementStatus.in_transit:
-        return 'In Transit';
+        return 'Out for Delivery 🚚';
       case ProcurementStatus.delivered:
-        return 'Delivered';
+        return 'Delivered ✅';
       case ProcurementStatus.rejected:
         return 'Rejected';
       case ProcurementStatus.issue_reported:
