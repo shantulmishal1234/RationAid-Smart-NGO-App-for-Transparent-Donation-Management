@@ -141,10 +141,29 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
       return false;
     }
 
+    // FIX 1: Block mock/fake GPS submissions.
+    // On Android, developers can spoof location via Developer Options.
+    // Position.isMocked is true whenever the OS is reporting a mock location.
+    if (_position!.isMocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            '❌ Fake/Mock GPS detected. Submission blocked for security.',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
+        ),
+      );
+      return false;
+    }
+
+    // FIX 2: When family GPS is missing, allow submission but set a flag so
+    // the caller can write geoSkippedReason to Firestore. Admin will see a
+    // "No Family GPS" yellow badge on the card instead of no context at all.
+    // (The distributor cannot be blamed for missing admin data.)
     if (_distanceInMeters == null) {
-      // If distance couldn't be calculated because family coords are missing,
-      // we might allow it, but generally we want to track it.
-      return true;
+      return true; // geofence skipped — caller reads _distanceInMeters == null
     }
 
     if (_distanceInMeters! > 50.0) {
@@ -162,6 +181,18 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
     }
 
     return true;
+  }
+
+  /// FIX 2: Returns the geoSkippedReason string to be persisted in Firestore
+  /// when the geofence was bypassed due to missing family coordinates.
+  /// Returns null when the geofence ran normally.
+  String? _geoSkippedReason() {
+    final famLat = widget.assignment.familyGeoLat;
+    final famLng = widget.assignment.familyGeoLng;
+    final missingCoords =
+        famLat == null || famLng == null || famLat == 0.0 || famLng == 0.0;
+    if (missingCoords) return 'family_coords_missing';
+    return null;
   }
 
   Future<void> _submit() async {
@@ -197,14 +228,16 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
           .toList();
 
       // 2. Submit the proof
+      // FIX 2: Pass geoSkippedReason when family coords were missing so admin
+      // can see a "No Family GPS" yellow badge instead of silent no-context.
       await DeliveryService.submitProofOfDelivery(
         assignmentId: widget.assignment.id,
         familyId: widget.assignment.familyId,
         proofPhoto: _photo!,
         lat: _position?.latitude,
         lng: _position?.longitude,
-        donorIds:
-            donorIds, // Fix #1: Now donors will actually get the notification!
+        donorIds: donorIds,
+        geoSkippedReason: _geoSkippedReason(), // FIX 2
       );
 
       if (mounted) {
@@ -268,6 +301,8 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
       // Ignore if cache read fails
     }
 
+    // FIX 2 + FIX 3: Pass geoSkippedReason so the sync job can forward it
+    // to Firestore; capturedAt is set inside saveProofOffline automatically.
     await DeliveryService.saveProofOffline(
       assignmentId: widget.assignment.id,
       familyId: widget.assignment.familyId,
@@ -275,6 +310,7 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
       lat: _position?.latitude,
       lng: _position?.longitude,
       donorIds: cachedDonorIds,
+      geoSkippedReason: _geoSkippedReason(), // FIX 2
     );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

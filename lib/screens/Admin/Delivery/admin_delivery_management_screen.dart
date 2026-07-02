@@ -482,7 +482,10 @@ class _AdminDeliveryManagementScreenState
         a.proofGeoLat!,
         a.proofGeoLng!,
       );
-      if (distanceMeters > 500) {
+      // FIX 5: Align admin warning threshold with distributor 50m fence.
+      // Previously 500m — now 50m so any GPS drift above the allowed limit
+      // is immediately flagged to admin, not silently ignored.
+      if (distanceMeters > 50) {
         hasLocationWarning = true;
       }
     } else {
@@ -1487,26 +1490,48 @@ class _AdminDeliveryCard extends StatelessWidget {
                           distanceMeters = r * 2 * math.atan2(math.sqrt(f), math.sqrt(1 - f));
                         }
 
+                        // FIX 5B: 3-tier GPS badge colour:
+                        //   ✅ green  ≤ 50m  (in-range — geofence passed normally)
+                        //   ⚠️ orange 51–200m (edge case, worth noting)
+                        //   ❌ red    > 200m  (clearly out-of-range, high-risk)
+                        Color gpsColor;
+                        String gpsLabel;
+                        IconData gpsIcon;
+                        if (distanceMeters == null) {
+                          gpsColor = Colors.grey;
+                          gpsLabel = 'GPS Locked';
+                          gpsIcon = Icons.gps_fixed;
+                        } else if (distanceMeters <= 50) {
+                          gpsColor = Colors.green;
+                          gpsLabel = '✅ ${distanceMeters.toStringAsFixed(0)}m (In Range)';
+                          gpsIcon = Icons.gps_fixed;
+                        } else if (distanceMeters <= 200) {
+                          gpsColor = Colors.orange[800]!;
+                          gpsLabel = '⚠️ ${distanceMeters.toStringAsFixed(0)}m (Edge)';
+                          gpsIcon = Icons.gps_not_fixed;
+                        } else {
+                          gpsColor = Colors.red;
+                          gpsLabel = '❌ ${distanceMeters.toStringAsFixed(0)}m (Out of Range)';
+                          gpsIcon = Icons.gps_off;
+                        }
+
                         return Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
-                                  Icon(
-                                    Icons.location_on,
-                                    size: 12,
-                                    color: distanceMeters != null && distanceMeters > 50 ? Colors.orange : Colors.green,
-                                  ),
+                                  Icon(gpsIcon, size: 12, color: gpsColor),
                                   const SizedBox(width: 4),
-                                  Text(
-                                    distanceMeters != null
-                                        ? '${distanceMeters.toStringAsFixed(0)} meters away'
-                                        : 'GPS Locked',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: distanceMeters != null && distanceMeters > 50 ? Colors.orange[800] : Colors.green[700],
-                                      fontWeight: FontWeight.w600,
+                                  Flexible(
+                                    child: Text(
+                                      gpsLabel,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: gpsColor,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 ],

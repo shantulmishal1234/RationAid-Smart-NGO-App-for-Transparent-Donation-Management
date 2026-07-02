@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:ration_aid/screens/Admin/dev/test_data_seeder_screen.dart';
 import 'package:ration_aid/theme/app_colors.dart';
 import 'package:ration_aid/screens/Admin/models/admin_enums.dart';
 
@@ -89,6 +91,21 @@ class AdminMoreSection extends StatelessWidget {
           },
         ],
       },
+      // ── DEBUG ONLY — invisible in release builds ──────────────────────────
+      if (kDebugMode)
+        {
+          'title': '🧪 Developer Tools',
+          'items': [
+            {
+              'icon': Icons.science_outlined,
+              'label': 'Test Data Seeder',
+              'color': Colors.deepPurple,
+              'desc': 'Seed delivery test data',
+              'isDevTool': true,
+            },
+          ],
+        },
+      // ── End Dev Tools ──────────────────────────────────────────────────────
     ];
 
     return Scaffold(
@@ -211,12 +228,22 @@ class AdminMoreSection extends StatelessWidget {
     final IconData icon = item['icon'];
     final String label = item['label'];
     final String desc = item['desc'];
-    final AdminSection section = item['section'];
+    final AdminSection? section = item['section'];
+    final bool isDevTool = item['isDevTool'] ?? false;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => onSectionChanged(section),
+        onTap: () {
+          if (isDevTool) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const TestDataSeederScreen()),
+            );
+          } else if (section != null) {
+            onSectionChanged(section);
+          }
+        },
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

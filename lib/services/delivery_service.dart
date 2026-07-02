@@ -407,6 +407,10 @@ class DeliveryService {
   // ─── Proof of Delivery ─────────────────────────────────────────────────────
 
   /// Submit proof of delivery: upload photo + save GPS
+  ///
+  /// [capturedAt] — the actual moment the proof was captured (critical for
+  /// offline sync: pass the savedAt time from the offline queue so Firestore
+  /// records the TRUE delivery time, not the upload/sync time).
   static Future<void> submitProofOfDelivery({
     required String assignmentId,
     required String familyId,
@@ -415,6 +419,12 @@ class DeliveryService {
     double? lng,
     String? reverseGeocodedAddress,
     List<String> donorIds = const [],
+    // FIX 3: Use actual capture time instead of upload time for offline proofs.
+    // When null (online submissions), defaults to now — identical to old behaviour.
+    DateTime? capturedAt,
+    // FIX 2: Reason the geofence was skipped (e.g. 'family_coords_missing').
+    // Stored in Firestore so admin card can display a yellow "No Family GPS" badge.
+    String? geoSkippedReason,
   }) async {
     // 1. Upload photo to Cloudinary
     final response = await CloudinaryService.uploadImage(proofPhoto);
@@ -428,18 +438,21 @@ class DeliveryService {
     final assignmentDoc = await assignmentRef.get();
     final assignment = DeliveryAssignment.fromFirestore(assignmentDoc);
 
-    final now = DateTime.now();
+    // FIX 3: Use the actual capture timestamp if provided (offline sync case).
+    // Online submissions pass null so this falls back to now — no behaviour change.
+    final proofTime = capturedAt ?? DateTime.now();
     final batch = _db.batch();
 
     // 2. Update delivery assignment
     batch.update(assignmentRef, {
       'status': DeliveryStatus.delivered.toFirestore(),
-      'deliveredAt': Timestamp.fromDate(now),
+      'deliveredAt': Timestamp.fromDate(proofTime),
       'proofPhotoUrl': photoUrl,
       'proofGeoLat': lat,
       'proofGeoLng': lng,
-      'proofTimestamp': Timestamp.fromDate(now),
+      'proofTimestamp': Timestamp.fromDate(proofTime),
       'proofAddress': reverseGeocodedAddress,
+      if (geoSkippedReason != null) 'geoSkippedReason': geoSkippedReason,
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
@@ -447,7 +460,7 @@ class DeliveryService {
     final familyRef = _db.collection('families').doc(familyId);
     batch.update(familyRef, {
       'fulfillmentStatus': 'delivered',
-      'deliveredAt': Timestamp.fromDate(now),
+      'deliveredAt': Timestamp.fromDate(proofTime),
       'deliveryProof': photoUrl,
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -585,7 +598,12 @@ class DeliveryService {
 
   // ─── Offline Proof Queue ───────────────────────────────────────────────────
 
-  /// Save proof locally when offline
+  /// Save proof locally when offline.
+  ///
+  /// FIX 3: We now persist [capturedAt] — the exact moment the distributor
+  /// captured the proof at the family's door. This timestamp is passed to
+  /// [submitProofOfDelivery] on sync so Firestore records the TRUE delivery
+  /// time rather than the (potentially hours-later) upload time.
   static Future<void> saveProofOffline({
     required String assignmentId,
     required String familyId,
@@ -594,6 +612,7 @@ class DeliveryService {
     double? lng,
     String? reverseGeocodedAddress,
     List<String> donorIds = const [],
+    String? geoSkippedReason,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final existing = prefs.getStringList(_offlineKey) ?? [];
@@ -606,7 +625,10 @@ class DeliveryService {
       'lng': lng,
       'reverseGeocodedAddress': reverseGeocodedAddress,
       'donorIds': donorIds,
+      // FIX 3: Store actual capture time — used as proofTimestamp on sync.
+      'capturedAt': DateTime.now().toIso8601String(),
       'savedAt': DateTime.now().toIso8601String(),
+      if (geoSkippedReason != null) 'geoSkippedReason': geoSkippedReason,
     });
 
     existing.add(entry);
@@ -632,6 +654,16 @@ class DeliveryService {
           continue;
         }
 
+        // FIX 3: Parse the actual capture time saved offline.
+        // If capturedAt is missing from an older queue entry, fall back to
+        // savedAt, then to null (which defaults to now inside submitProofOfDelivery).
+        DateTime? capturedAt;
+        final capturedAtRaw =
+            data['capturedAt'] as String? ?? data['savedAt'] as String?;
+        if (capturedAtRaw != null) {
+          capturedAt = DateTime.tryParse(capturedAtRaw);
+        }
+
         await submitProofOfDelivery(
           assignmentId: data['assignmentId'] as String,
           familyId: data['familyId'] as String,
@@ -642,6 +674,8 @@ class DeliveryService {
           donorIds: data['donorIds'] != null
               ? List<String>.from(data['donorIds'] as List)
               : [],
+          capturedAt: capturedAt, // FIX 3: Pass actual capture time
+          geoSkippedReason: data['geoSkippedReason'] as String?,
         );
         synced++;
 
@@ -917,12 +951,22 @@ class DeliveryService {
 
     final batch = _db.batch();
 
-    // 1. Update assignment status to failed
+    // 1. Update assignment status to failed.
+    // FIX 4: Also clear ALL proof fields so the stale rejected photo/GPS
+    // cannot linger on the record and confuse future admin reviews or
+    // accidentally get re-verified after the distributor reattempts.
     batch.update(_db.collection(_collection).doc(assignmentId), {
       'status': DeliveryStatus.failed.toFirestore(),
       'failedAt': FieldValue.serverTimestamp(),
       'failureReason': DeliveryFailureReason.other.toFirestore(),
       'failureNotes': 'Proof rejected by Administrator (${user?.email ?? "Admin"}).',
+      // FIX 4: Wipe stale proof data on rejection
+      'proofPhotoUrl': null,
+      'proofGeoLat': null,
+      'proofGeoLng': null,
+      'proofTimestamp': null,
+      'proofAddress': null,
+      'geoSkippedReason': null,
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
@@ -946,7 +990,7 @@ class DeliveryService {
       action: 'Delivery proof rejected',
       familyId: familyId,
       familyName: 'Family',
-      details: 'Proof rejected by ${user?.email ?? "Admin"}.',
+      details: 'Proof rejected by ${user?.email ?? "Admin"}. All proof fields cleared.',
     );
 
     // Notify Distributor
@@ -955,7 +999,7 @@ class DeliveryService {
       await NotificationService.sendDistributorNotification(
         userId: distributorId,
         title: 'Delivery Proof Rejected ❌',
-        message: 'Admin rejected your submitted proof of delivery.',
+        message: 'Admin rejected your submitted proof of delivery. Please reattempt and submit a new photo.',
         actionType: 'delivery_admin_rejected',
         actionId: assignmentId,
       );
