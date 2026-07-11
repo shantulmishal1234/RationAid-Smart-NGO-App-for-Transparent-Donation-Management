@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:integration_test/integration_test.dart';
+
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,11 +14,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late MockFirebaseAuth mockAuth;
+
   late FakeFirebaseFirestore mockFirestore;
 
   setUp(() {
-    mockAuth = MockFirebaseAuth();
+
     mockFirestore = FakeFirebaseFirestore();
     SharedPreferences.setMockInitialValues({'hasSeenOnboarding': true});
   });

@@ -584,8 +584,8 @@ class _ReportsViewState extends State<ReportsView> {
 }
 
 // Helper Widget
-class constSpacer extends StatelessWidget {
-  const constSpacer({super.key});
+class ConstSpacer extends StatelessWidget {
+  const ConstSpacer({super.key});
   @override
   Widget build(BuildContext context) => const Spacer();
 }

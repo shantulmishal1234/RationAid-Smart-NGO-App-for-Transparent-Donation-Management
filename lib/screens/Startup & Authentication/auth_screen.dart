@@ -321,9 +321,11 @@ class _AuthScreenState extends State<AuthScreen>
                               'Connecting help with need',
                               style: TextStyle(
                                 fontSize: 14,
-                                color: Theme.of(
-                                  context,
-                                ).textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.color
+                                    ?.withValues(alpha: 0.7),
                               ),
                             ),
                             const SizedBox(height: 24),
@@ -613,7 +615,9 @@ class _AuthScreenState extends State<AuthScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? Colors.green[900]!.withValues(alpha: 0.3) : Colors.green[50],
+        color: isDark
+            ? Colors.green[900]!.withValues(alpha: 0.3)
+            : Colors.green[50],
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDark ? Colors.green[800]! : Colors.green[200]!,

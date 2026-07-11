@@ -581,7 +581,7 @@ class _SimpleTrendBars extends StatelessWidget {
     final effectiveMax = maxVal > 0 ? maxVal : 1;
 
     return SizedBox(
-      height: 120,
+      height: 130,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: sorted.map((entry) {
