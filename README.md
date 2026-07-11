@@ -631,6 +631,7 @@ This project is developed as an academic Final Year Project. All rights reserved
 ## 👤 Author
 
 **Uzair Ahmad**  
+**Shantul Mishal** 
 Final Year Project — Computer Science
 
 ---
