@@ -510,15 +510,103 @@ Donor              Admin             Purchaser        Distributor
 
 ---
 
-## 📸 App Screens Overview
+## 📸 Screenshots
 
-| Module | Key Screens |
-|---|---|
-| **Auth** | Splash Screen, Onboarding (3 slides), Login/Signup with password strength meter |
-| **Donor** | Profile Setup, Family Browser, Create Donation Wizard, Donation Tracker (live timeline) |
-| **Admin** | Dashboard Hub, Family Registry, Add/Edit Family, Quorum Review Board, Final Approver Gate, Pack Management, Delivery Oversight, Procurement Approval, Reports (4 types), Audit Trail, HRM |
-| **Distributor** | Delivery Queue, GPS Map View, Proof of Delivery Camera, Failure Report |
-| **Purchaser** | Purchase Entry Form, Inbound Pickup Management |
+### 🔐 Authentication
+<p align="center">
+  <img src="assets/screenshots/Splash Screen.jpeg" width="220" alt="Splash Screen"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/Authentication.jpeg" width="220" alt="Authentication"/>
+</p>
+<p align="center">
+  <em>Splash Screen &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Login & Sign Up</em>
+</p>
+
+---
+
+### 🎁 Donor Portal
+<p align="center">
+  <img src="assets/screenshots/Donor Dashboard.jpeg" width="220" alt="Donor Dashboard"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/Donor Explore Families.jpeg" width="220" alt="Explore Families"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/Donor Create Donations.jpeg" width="220" alt="Create Donation"/>
+</p>
+<p align="center">
+  <em>Donor Dashboard &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Explore Families &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Create Donation</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/Donor Donation Details.jpeg" width="220" alt="Donation Details"/>
+</p>
+<p align="center">
+  <em>Donation Details & Tracking</em>
+</p>
+
+---
+
+### 🛡️ Admin Portal
+<p align="center">
+  <img src="assets/screenshots/Admin Dashbaord.jpeg" width="220" alt="Admin Dashboard"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/Admin Household.jpeg" width="220" alt="Admin Household"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/Admin HRM.jpeg" width="220" alt="Admin HRM"/>
+</p>
+<p align="center">
+  <em>Admin Dashboard &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Household Management &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; HRM</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/Admin Donation Verification.jpeg" width="220" alt="Donation Verification"/>
+</p>
+<p align="center">
+  <em>Donation Verification</em>
+</p>
+
+---
+
+### 🚚 Distributor Portal
+<p align="center">
+  <img src="assets/screenshots/Delivery Dashboard.jpeg" width="220" alt="Delivery Dashboard"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/Delivery Details.jpeg" width="220" alt="Delivery Details"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/Delivery Map.jpeg" width="220" alt="Delivery Map"/>
+</p>
+<p align="center">
+  <em>Delivery Dashboard &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Delivery Details &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; GPS Delivery Map</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/Delivery Proof.jpeg" width="220" alt="Proof of Delivery"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/Delivery pool.jpeg" width="220" alt="Delivery Pool"/>
+</p>
+<p align="center">
+  <em>Proof of Delivery &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Delivery Pool</em>
+</p>
+
+---
+
+### 🛒 Purchaser Portal
+<p align="center">
+  <img src="assets/screenshots/Purchaser Dashboard.jpeg" width="220" alt="Purchaser Dashboard"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/Purchaser procurement.jpeg" width="220" alt="Procurement"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/Purchaser Inventory.jpeg" width="220" alt="Inventory"/>
+</p>
+<p align="center">
+  <em>Purchaser Dashboard &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Procurement &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Inventory</em>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/Purchaser Reports.jpeg" width="220" alt="Reports"/>
+</p>
+<p align="center">
+  <em>Reports & Analytics</em>
+</p>
 
 ---
 
